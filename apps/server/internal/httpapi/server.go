@@ -21,7 +21,9 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
+	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // MaxCommandBody — максимальный размер тела команды.
@@ -103,6 +105,30 @@ func NewRouter(d Deps) http.Handler {
 			items, err := changes.ListOperations(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id, int32(after))
 			respond(w, r, d, map[string]any{"items": items}, err)
 		})
+		r.Get("/changesets/{id}/review", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			rv, err := workflow.GetReview(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
+			respond(w, r, d, rv, err)
+		})
+		r.Get("/publications", func(w http.ResponseWriter, r *http.Request) {
+			var env *string
+			if s := r.URL.Query().Get("environment"); s != "" {
+				env = &s
+			}
+			items, err := publishing.ListPublications(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, env)
+			respond(w, r, d, map[string]any{"items": items}, err)
+		})
+		r.Get("/publications/{id}", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			pub, err := publishing.GetPublication(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
+			respond(w, r, d, pub, err)
+		})
 		r.Get("/documents/{id}", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.DesignRead); err != nil {
@@ -111,6 +137,11 @@ func NewRouter(d Deps) http.Handler {
 			}
 			id, ok := uuidParam(w, r, d, "id")
 			if !ok {
+				return
+			}
+			if env := r.URL.Query().Get("environment"); env != "" {
+				doc, err := publishing.GetPublishedDocument(r.Context(), store.New(d.Pool), actor.ProjectID, id, env)
+				respond(w, r, d, doc, err)
 				return
 			}
 			var cs *uuid.UUID

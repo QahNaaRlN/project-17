@@ -34,6 +34,18 @@ type ApiToken struct {
 	CreatedAt    time.Time  `json:"createdAt"`
 }
 
+type Approval struct {
+	ID            uuid.UUID  `json:"id"`
+	ChangesetID   uuid.UUID  `json:"changesetId"`
+	ApproverID    uuid.UUID  `json:"approverId"`
+	Decision      string     `json:"decision"`
+	ContentHash   []byte     `json:"contentHash"`
+	Environment   string     `json:"environment"`
+	Comment       *string    `json:"comment"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	InvalidatedAt *time.Time `json:"invalidatedAt"`
+}
+
 type Changeset struct {
 	ID           uuid.UUID  `json:"id"`
 	ProjectID    uuid.UUID  `json:"projectId"`
@@ -58,6 +70,20 @@ type ChangesetObject struct {
 	ObjectID         uuid.UUID  `json:"objectId"`
 	BaseVersionID    *uuid.UUID `json:"baseVersionId"`
 	WorkingVersionID uuid.UUID  `json:"workingVersionId"`
+}
+
+type Check struct {
+	ID          uuid.UUID  `json:"id"`
+	ChangesetID uuid.UUID  `json:"changesetId"`
+	ContentHash []byte     `json:"contentHash"`
+	Environment string     `json:"environment"`
+	Stage       string     `json:"stage"`
+	Status      string     `json:"status"`
+	Blocking    bool       `json:"blocking"`
+	Details     []byte     `json:"details"`
+	Artifacts   []byte     `json:"artifacts"`
+	StartedAt   *time.Time `json:"startedAt"`
+	FinishedAt  *time.Time `json:"finishedAt"`
 }
 
 type Environment struct {
@@ -138,6 +164,32 @@ type Project struct {
 	Name      string    `json:"name"`
 	Settings  []byte    `json:"settings"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type Publication struct {
+	ID                  uuid.UUID  `json:"id"`
+	ProjectID           uuid.UUID  `json:"projectId"`
+	EnvironmentID       uuid.UUID  `json:"environmentId"`
+	ChangesetID         *uuid.UUID `json:"changesetId"`
+	Kind                string     `json:"kind"`
+	SourcePublicationID *uuid.UUID `json:"sourcePublicationId"`
+	ActorID             uuid.UUID  `json:"actorId"`
+	Reason              *string    `json:"reason"`
+	CreatedAt           time.Time  `json:"createdAt"`
+}
+
+type PublicationItem struct {
+	PublicationID     uuid.UUID  `json:"publicationId"`
+	ObjectID          uuid.UUID  `json:"objectId"`
+	PreviousVersionID *uuid.UUID `json:"previousVersionId"`
+	CurrentVersionID  *uuid.UUID `json:"currentVersionId"`
+}
+
+type PublishedPointer struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	ObjectID      uuid.UUID `json:"objectId"`
+	VersionID     uuid.UUID `json:"versionId"`
+	PublicationID uuid.UUID `json:"publicationId"`
 }
 
 type Role struct {
