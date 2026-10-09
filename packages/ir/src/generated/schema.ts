@@ -325,27 +325,20 @@ export const irSchema = {
       "additionalProperties": false
     },
     "binding": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/path"
-        },
-        {
+      "if": {
+        "type": "string"
+      },
+      "then": {
+        "$ref": "#/$defs/path"
+      },
+      "else": {
+        "if": {
           "type": "object",
           "required": [
-            "expr"
-          ],
-          "properties": {
-            "expr": {
-              "$ref": "#/$defs/path"
-            },
-            "format": {
-              "$ref": "#/$defs/format"
-            },
-            "default": {}
-          },
-          "additionalProperties": false
+            "template"
+          ]
         },
-        {
+        "then": {
           "type": "object",
           "required": [
             "template",
@@ -387,8 +380,24 @@ export const irSchema = {
             }
           },
           "additionalProperties": false
+        },
+        "else": {
+          "type": "object",
+          "required": [
+            "expr"
+          ],
+          "properties": {
+            "expr": {
+              "$ref": "#/$defs/path"
+            },
+            "format": {
+              "$ref": "#/$defs/format"
+            },
+            "default": {}
+          },
+          "additionalProperties": false
         }
-      ]
+      }
     },
     "predicate": {
       "type": "object",
@@ -613,35 +622,40 @@ export const irSchema = {
       "additionalProperties": false
     },
     "scalarDesignValue": {
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9:/._-]*$"
-        },
-        {
-          "type": "number"
-        },
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/rawValue"
-              }
-            ]
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "$ref": "#/$defs/rawValue"
+      },
+      "else": {
+        "oneOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9:/._-]*$"
           },
-          "maxItems": 12
-        },
-        {
-          "$ref": "#/$defs/rawValue"
-        }
-      ]
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/rawValue"
+                }
+              ]
+            },
+            "maxItems": 12
+          }
+        ]
+      }
     },
     "responsiveValue": {
       "type": "object",

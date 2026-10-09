@@ -16,23 +16,25 @@ export type Uuid = string;
  */
 export type Binding =
   | Path
-  | {
-      expr: Path;
-      format?: Format;
-      default?: unknown;
-    }
-  | {
-      template: string;
-      vars: {
-        [k: string]:
-          | Path
-          | {
-              expr: Path;
-              format?: Format;
-              default?: unknown;
-            };
-      };
-    };
+  | (
+      | {
+          template: string;
+          vars: {
+            [k: string]:
+              | Path
+              | {
+                  expr: Path;
+                  format?: Format;
+                  default?: unknown;
+                };
+          };
+        }
+      | {
+          expr: Path;
+          format?: Format;
+          default?: unknown;
+        }
+    );
 /**
  * This interface was referenced by `IrDocument`'s JSON-Schema
  * via the `definition` "path".
@@ -42,7 +44,7 @@ export type Path = string;
  * This interface was referenced by `IrDocument`'s JSON-Schema
  * via the `definition` "scalarDesignValue".
  */
-export type ScalarDesignValue = string | number | boolean | (string | RawValue)[] | RawValue;
+export type ScalarDesignValue = RawValue | (string | number | boolean | (string | RawValue)[]);
 /**
  * This interface was referenced by `IrDocument`'s JSON-Schema
  * via the `definition` "designValue".
