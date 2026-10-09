@@ -90,7 +90,7 @@ cms/
     └── spec/
 ```
 
-Менеджер пакетов JS — pnpm workspaces; оркестрация задач — Turborepo. Go-типы IR генерируются из `packages/ir/schema` в `apps/server/internal/composition/irtypes` командой `make gen`.
+Менеджер пакетов JS — pnpm workspaces; оркестрация задач — Turborepo. Go-типы IR генерируются из `packages/ir/schema` в `apps/server/internal/composition/ir` (`types_gen.go`, схема для `go:embed`) командой `pnpm gen` (`go generate`). Go-модуль подключён к pnpm и Turborepo через `apps/server/package.json`, поэтому `pnpm check` проверяет TS и Go вместе.
 
 ## 3. Безопасность
 

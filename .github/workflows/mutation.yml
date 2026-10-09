@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   stryker:
-    name: Stryker
+    name: Stryker + Gremlins
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -20,9 +20,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm -r --if-present test:mutation
+      # По одному пакету: параллельный запуск вызывает ложные тайм-ауты Gremlins.
+      - run: pnpm -r --workspace-concurrency=1 --if-present test:mutation
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4

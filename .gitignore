@@ -6,3 +6,4 @@ coverage/
 .DS_Store
 reports/
 .stryker-tmp/
+coverage.out
