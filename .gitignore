@@ -4,3 +4,5 @@ coverage/
 .turbo/
 *.tsbuildinfo
 .DS_Store
+reports/
+.stryker-tmp/

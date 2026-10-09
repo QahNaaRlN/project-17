@@ -20,13 +20,18 @@
     "gen": "node scripts/generate-types.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --coverage",
+    "test:mutation": "stryker run"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "ajv-i18n": "^4.2.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@vitest/coverage-v8": "4.1.11",
+    "fast-check": "^4.10.2",
     "json-schema-to-typescript": "^15.0.4"
   }
 }
