@@ -42,11 +42,22 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/apply-operations` | Пакет операций над документами (атомарно, с `expectedSeq`) |
 | `POST` | `/api/v1/commands/undo` | Отмена последней операции Change Set |
 | `POST` | `/api/v1/commands/abandon-changeset` | Закрыть Change Set без слияния |
+| `POST` | `/api/v1/commands/submit-changeset` | Подать на проверку: проверки, риск, переход в `in_review`/`approved`/`failed` |
+| `POST` | `/api/v1/commands/approve-changeset` | Согласовать (только человек, не автор) |
+| `POST` | `/api/v1/commands/request-changes` | Запросить изменения (комментарий обязателен) |
+| `POST` | `/api/v1/commands/reopen-changeset` | Вернуть в работу, сбросив согласования |
+| `POST` | `/api/v1/commands/set-approval-policy` | Число согласований по риску |
+| `POST` | `/api/v1/commands/publish` | Опубликовать согласованный Change Set в окружение |
+| `POST` | `/api/v1/commands/rollback` | Откатить публикацию |
 | `GET` | `/api/v1/environments` | Окружения |
 | `GET` | `/api/v1/changesets?state=` | Change Set'ы проекта |
 | `GET` | `/api/v1/changesets/{id}` | Change Set и изменённые объекты |
 | `GET` | `/api/v1/changesets/{id}/operations?afterSeq=` | Журнал операций |
+| `GET` | `/api/v1/changesets/{id}/review` | Проверки, риск и согласования |
+| `GET` | `/api/v1/publications?environment=` | История публикаций |
+| `GET` | `/api/v1/publications/{id}` | Публикация с перемещёнными указателями |
 | `GET` | `/api/v1/documents/{id}?changesetId=` | Документ: рабочая версия в Change Set или head |
+| `GET` | `/api/v1/documents/{id}?environment=` | Опубликованная в окружении версия документа |
 
 Пример пакета операций:
 
@@ -76,6 +87,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `internal/httpapi` | Маршруты, ошибки `application/problem+json`, журнал запросов |
 | `internal/projects` | Проекты, окружения, команда `create-environment`, bootstrap |
 | `internal/changes` | Change Set, рабочие версии, журнал операций, undo |
+| `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований |
+| `internal/publishing` | Публикация в окружение, head и опубликованные указатели, откат |
 | `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |
 | `internal/store` | Запросы sqlc (сгенерировано из `db/queries`) |

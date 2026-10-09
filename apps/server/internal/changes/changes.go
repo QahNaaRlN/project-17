@@ -51,6 +51,9 @@ type Changeset struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+// ToChangeset — представление Change Set для ответов API.
+func ToChangeset(c store.Changeset) Changeset { return toChangeset(c) }
+
 func toChangeset(c store.Changeset) Changeset {
 	return Changeset{ID: c.ID, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
 		State: c.State, Seq: c.Seq, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
@@ -122,26 +125,55 @@ type changesetRef struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
 }
 
-// lockOpen блокирует Change Set и проверяет, что он открыт и принадлежит актору (CHG-030).
-func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID) (store.Changeset, error) {
-	cs, err := q.LockChangeset(ctx, store.LockChangesetParams{ID: id, ProjectID: actor.ProjectID})
+// Lock блокирует Change Set проекта до конца транзакции.
+func Lock(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (store.Changeset, error) {
+	cs, err := q.LockChangeset(ctx, store.LockChangesetParams{ID: id, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return cs, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Change Set не найден",
 			fmt.Sprintf("Change Set %s не найден в проекте", id))
 	}
+	return cs, err
+}
+
+// RequireOwner — изменять Change Set может только его владелец.
+func RequireOwner(cs store.Changeset, actor auth.Actor) error {
+	if cs.OwnerID != actor.ID {
+		return commandbus.NewError(http.StatusForbidden, "CHANGESET_NOT_OWNER", "Чужой Change Set",
+			"Изменять Change Set может только его владелец")
+	}
+	return nil
+}
+
+// RequireState — Change Set должен быть в одном из состояний.
+func RequireState(cs store.Changeset, action string, states ...string) error {
+	for _, s := range states {
+		if cs.State == s {
+			return nil
+		}
+	}
+	return commandbus.NewError(http.StatusConflict, "CHANGESET_STATE_INVALID", "Недопустимое состояние Change Set",
+		fmt.Sprintf("%s: допустимо в состояниях %v; текущее состояние %s", action, states, cs.State)).
+		WithParams(map[string]any{"state": cs.State, "allowed": states})
+}
+
+// lockOpen блокирует Change Set и проверяет, что он открыт и принадлежит актору (CHG-030).
+func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID) (store.Changeset, error) {
+	cs, err := Lock(ctx, q, actor.ProjectID, id)
 	if err != nil {
 		return cs, err
 	}
-	if cs.OwnerID != actor.ID {
-		return cs, commandbus.NewError(http.StatusForbidden, "CHANGESET_NOT_OWNER", "Чужой Change Set",
-			"Изменять Change Set может только его владелец")
+	if err := RequireOwner(cs, actor); err != nil {
+		return cs, err
 	}
-	if cs.State != "open" {
-		return cs, commandbus.NewError(http.StatusConflict, "CHANGESET_STATE_INVALID", "Change Set не открыт",
-			fmt.Sprintf("Операции принимаются только в состоянии open; текущее состояние %s", cs.State)).
-			WithParams(map[string]any{"state": cs.State})
+	return cs, RequireState(cs, "Операции", "open")
+}
+
+// OperationRight — право, необходимое для операции данного типа.
+func OperationRight(opType string) (auth.Right, bool) {
+	if opType == DocumentCreate {
+		return auth.DesignCompose, true
 	}
-	return cs, nil
+	return ops.Right(opType)
 }
 
 func checkSeq(cs store.Changeset, expected int32) error {
@@ -187,13 +219,9 @@ type ApplyResult struct {
 
 func authorizeApply(actor auth.Actor, p applyPayload) error {
 	for _, op := range p.Operations {
-		right := auth.DesignCompose
-		if op.Type != DocumentCreate {
-			r, ok := ops.Right(op.Type)
-			if !ok {
-				continue // неизвестный тип отклонит Validate
-			}
-			right = r
+		right, ok := OperationRight(op.Type)
+		if !ok {
+			continue // неизвестный тип отклонит Validate
 		}
 		if err := commandbus.Require(actor, right); err != nil {
 			return err
@@ -208,7 +236,7 @@ func validateApply(p applyPayload) error {
 	}
 	for i, op := range p.Operations {
 		field := fmt.Sprintf("operations[%d]", i)
-		if _, ok := ops.Right(op.Type); !ok && op.Type != DocumentCreate {
+		if _, ok := OperationRight(op.Type); !ok {
 			return commandbus.Validation(map[string]string{field + ".type": "неизвестный тип операции " + op.Type})
 		}
 		if (op.Type == DocumentCreate) != (op.Target == nil) {

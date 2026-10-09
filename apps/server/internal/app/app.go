@@ -18,6 +18,8 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
+	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // Version подставляется при сборке: -ldflags "-X .../internal/app.Version=…".
@@ -87,6 +89,8 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	bus := commandbus.New(pool)
 	projects.Register(bus)
 	changes.Register(bus)
+	workflow.Register(bus)
+	publishing.Register(bus)
 
 	srv := &http.Server{
 		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version}),

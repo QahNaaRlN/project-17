@@ -265,7 +265,7 @@ CREATE TABLE checks (
   id            uuid PRIMARY KEY,
   changeset_id  uuid NOT NULL REFERENCES changesets(id),
   content_hash  bytea NOT NULL,
-  environment   text NOT NULL,
+  environment   text NOT NULL DEFAULT '',                    -- пусто: проверка не зависит от окружения
   stage         text NOT NULL,                               -- schema, ir, bindings, a11y_static, policy, …
   status        text NOT NULL CHECK (status IN ('queued', 'running', 'passed', 'failed', 'warning', 'skipped')),
   blocking      boolean NOT NULL,
@@ -282,7 +282,7 @@ CREATE TABLE approvals (
   approver_id     uuid NOT NULL REFERENCES actors(id),
   decision        text NOT NULL CHECK (decision IN ('approve', 'request_changes')),
   content_hash    bytea NOT NULL,
-  environment     text NOT NULL,
+  environment     text NOT NULL DEFAULT '',
   comment         text,
   created_at      timestamptz NOT NULL DEFAULT now(),
   invalidated_at  timestamptz
@@ -297,6 +297,7 @@ CREATE TABLE publications (
   kind                   text NOT NULL CHECK (kind IN ('publish', 'promote', 'rollback', 'unpublish')),
   source_publication_id  uuid REFERENCES publications(id),   -- для promote и rollback
   actor_id               uuid NOT NULL REFERENCES actors(id),
+  reason                 text,                                -- причина из конверта команды (API-011)
   created_at             timestamptz NOT NULL DEFAULT now()
 );
 

@@ -20,7 +20,9 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
+	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 func TestMain(m *testing.M) { pgtest.Main(m) }
@@ -44,6 +46,8 @@ func setup(t *testing.T) env {
 	bus := commandbus.New(pool)
 	projects.Register(bus)
 	changes.Register(bus)
+	workflow.Register(bus)
+	publishing.Register(bus)
 	commandbus.Register(bus, commandbus.Command[panicPayload, string]{
 		Name: "test-panic", Right: auth.ContentRead,
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
@@ -250,6 +254,8 @@ func TestRouteParamErrors(t *testing.T) {
 		"/api/v1/changesets/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11/operations?afterSeq=x",
 		"/api/v1/documents/not-a-uuid",
 		"/api/v1/documents/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11?changesetId=x",
+		"/api/v1/changesets/not-a-uuid/review",
+		"/api/v1/publications/not-a-uuid",
 	} {
 		resp, body := e.do(t, "GET", path, "", e.authed(nil))
 		expectProblem(t, resp, body, 400, "PARAM_INVALID")
@@ -266,4 +272,44 @@ func TestDocumentsRequireDesignRead(t *testing.T) {
 	}
 	resp, body := e.do(t, "GET", "/api/v1/documents/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", e.authed(nil))
 	expectProblem(t, resp, body, 403, "FORBIDDEN")
+}
+
+func TestReviewAndPublicationRoutes(t *testing.T) {
+	e := setup(t)
+	e.command(t, "set-approval-policy", `{"low":0,"medium":0,"high":0}`)
+	cs := e.command(t, "create-changeset", `{"title":"HTTP"}`)["id"].(string)
+	res := e.command(t, "apply-operations", `{"changesetId":"`+cs+`","expectedSeq":0,"operations":[{"type":"document.create","payload":{"kind":"page","root":{"id":"n_root","type":"Box"}}}]}`)
+	doc := res["operations"].([]any)[0].(map[string]any)["target"].(string)
+	e.command(t, "submit-changeset", `{"changesetId":"`+cs+`","expectedSeq":1}`)
+
+	resp, body := e.do(t, "GET", "/api/v1/changesets/"+cs+"/review", "", e.authed(nil))
+	if resp.StatusCode != 200 || body["changeset"].(map[string]any)["state"] != "approved" || len(body["checks"].([]any)) != 2 {
+		t.Errorf("review: %d %v", resp.StatusCode, body)
+	}
+	pub := e.command(t, "publish", `{"changesetId":"`+cs+`","environment":"staging"}`)["id"].(string)
+
+	resp, body = e.do(t, "GET", "/api/v1/publications?environment=staging", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 1 {
+		t.Errorf("публикации staging: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/publications?environment=production", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 0 {
+		t.Errorf("публикации production: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/publications", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 1 {
+		t.Errorf("все публикации: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/publications/"+pub, "", e.authed(nil))
+	if resp.StatusCode != 200 || body["reason"] != "http" || len(body["items"].([]any)) != 1 {
+		t.Errorf("публикация: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/documents/"+doc+"?environment=staging", "", e.authed(nil))
+	if resp.StatusCode != 200 || body["state"] != "committed" {
+		t.Errorf("опубликованный документ: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/documents/"+doc+"?environment=production", "", e.authed(nil))
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
+	resp, body = e.do(t, "GET", "/api/v1/publications/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", e.authed(nil))
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
 }

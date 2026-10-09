@@ -1,0 +1,321 @@
+// Package publishing — публикация Change Set в окружение и откат публикации
+// (docs/spec/06-changes-publishing.md §7).
+//
+// Публикация фиксирует рабочие версии, сдвигает head и указатели published окружения в одной
+// транзакции (PUB-020). Откат только переключает указатели и не создаёт версий (PUB-030).
+package publishing
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
+	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/store"
+)
+
+// Item — изменение указателя объекта в публикации.
+type Item struct {
+	ObjectID          uuid.UUID  `json:"objectId"`
+	PreviousVersionID *uuid.UUID `json:"previousVersionId"`
+	CurrentVersionID  *uuid.UUID `json:"currentVersionId"`
+}
+
+// Publication — публикация в ответах API.
+type Publication struct {
+	ID                  uuid.UUID  `json:"id"`
+	Environment         string     `json:"environment"`
+	Kind                string     `json:"kind"`
+	ChangesetID         *uuid.UUID `json:"changesetId"`
+	SourcePublicationID *uuid.UUID `json:"sourcePublicationId"`
+	ActorID             uuid.UUID  `json:"actorId"`
+	Reason              *string    `json:"reason"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	Items               []Item     `json:"items,omitempty"`
+}
+
+// Register регистрирует команды модуля.
+func Register(bus *commandbus.Bus) {
+	commandbus.Register(bus, commandbus.Command[publishPayload, Publication]{
+		Name:   "publish",
+		Right:  auth.ContentPublish,
+		Handle: handlePublish,
+	})
+	commandbus.Register(bus, commandbus.Command[rollbackPayload, Publication]{
+		Name:   "rollback",
+		Right:  auth.ContentPublish,
+		Handle: handleRollback,
+	})
+}
+
+type publishPayload struct {
+	ChangesetID uuid.UUID `json:"changesetId"`
+	Environment string    `json:"environment"`
+}
+
+func reasonPtr(ctx context.Context) *string {
+	if r := commandbus.ReasonFrom(ctx); r != "" {
+		return &r
+	}
+	return nil
+}
+
+// environment находит окружение, в которое можно публиковать (MF-031: не preview).
+func environment(ctx context.Context, q *store.Queries, projectID uuid.UUID, name string) (store.Environment, error) {
+	env, err := q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: projectID, Name: name})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return env, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Окружение не найдено",
+			fmt.Sprintf("Окружение %q не найдено", name))
+	}
+	if err != nil {
+		return env, err
+	}
+	if env.Kind != "standard" {
+		return env, commandbus.NewError(http.StatusUnprocessableEntity, "ENVIRONMENT_NOT_PUBLISHABLE", "В окружение нельзя публиковать",
+			fmt.Sprintf("Окружение %q вида %s служит только для preview (MF-031)", name, env.Kind))
+	}
+	return env, nil
+}
+
+func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPayload) (Publication, error) {
+	q := store.New(tx)
+	env, err := environment(ctx, q, actor.ProjectID, p.Environment)
+	if err != nil {
+		return Publication{}, err
+	}
+	cs, err := changes.Lock(ctx, q, actor.ProjectID, p.ChangesetID)
+	if err != nil {
+		return Publication{}, err
+	}
+	if err := changes.RequireState(cs, "Публикация", "approved"); err != nil {
+		return Publication{}, err
+	}
+	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID) // упорядочены по ID объекта
+	if err != nil {
+		return Publication{}, err
+	}
+
+	// Блокируем объекты в порядке ID (§7.1) и проверяем, что head не сдвинулся.
+	var stale []uuid.UUID
+	for _, v := range versions {
+		obj, err := q.LockObject(ctx, v.ObjectID)
+		if err != nil {
+			return Publication{}, err
+		}
+		if !sameID(obj.HeadVersionID, v.BaseVersionID) {
+			stale = append(stale, v.ObjectID)
+		}
+	}
+	if len(stale) > 0 {
+		return Publication{}, commandbus.NewError(http.StatusConflict, "REBASE_REQUIRED", "Требуется rebase",
+			"Head объектов изменился после начала работы над Change Set").WithParams(map[string]any{"objects": stale})
+	}
+
+	pub, err := q.CreatePublication(ctx, store.CreatePublicationParams{
+		ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, EnvironmentID: env.ID, ChangesetID: &cs.ID,
+		Kind: "publish", ActorID: actor.ID, Reason: reasonPtr(ctx),
+	})
+	if err != nil {
+		return Publication{}, err
+	}
+	items := make([]Item, 0, len(versions))
+	for _, v := range versions {
+		number, err := q.NextVersionNumber(ctx, v.ObjectID)
+		if err != nil {
+			return Publication{}, err
+		}
+		if err := q.CommitVersion(ctx, store.CommitVersionParams{ID: v.VersionID, Number: &number}); err != nil {
+			return Publication{}, err
+		}
+		if err := q.SetHead(ctx, store.SetHeadParams{ID: v.ObjectID, HeadVersionID: &v.VersionID}); err != nil {
+			return Publication{}, err
+		}
+		previous, err := pointer(ctx, q, env.ID, v.ObjectID)
+		if err != nil {
+			return Publication{}, err
+		}
+		item := Item{ObjectID: v.ObjectID, PreviousVersionID: previous, CurrentVersionID: &v.VersionID}
+		if err := movePointer(ctx, q, env.ID, pub.ID, item); err != nil {
+			return Publication{}, err
+		}
+		items = append(items, item)
+	}
+	if err := q.MergeChangeset(ctx, cs.ID); err != nil {
+		return Publication{}, err
+	}
+	return toPublication(pub, env.Name, items), nil
+}
+
+func sameID(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// pointer — текущая опубликованная версия объекта в окружении (nil — не опубликован).
+func pointer(ctx context.Context, q *store.Queries, envID, objectID uuid.UUID) (*uuid.UUID, error) {
+	pp, err := q.GetPublishedPointer(ctx, store.GetPublishedPointerParams{EnvironmentID: envID, ObjectID: objectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &pp.VersionID, nil
+}
+
+// movePointer устанавливает published[env] = item.Current (nil — снять с публикации)
+// и записывает элемент публикации.
+func movePointer(ctx context.Context, q *store.Queries, envID, publicationID uuid.UUID, item Item) error {
+	var err error
+	if item.CurrentVersionID == nil {
+		err = q.DeletePublishedPointer(ctx, store.DeletePublishedPointerParams{EnvironmentID: envID, ObjectID: item.ObjectID})
+	} else {
+		err = q.UpsertPublishedPointer(ctx, store.UpsertPublishedPointerParams{
+			EnvironmentID: envID, ObjectID: item.ObjectID, VersionID: *item.CurrentVersionID, PublicationID: publicationID,
+		})
+	}
+	if err != nil {
+		return err
+	}
+	return q.AddPublicationItem(ctx, store.AddPublicationItemParams{
+		PublicationID: publicationID, ObjectID: item.ObjectID,
+		PreviousVersionID: item.PreviousVersionID, CurrentVersionID: item.CurrentVersionID,
+	})
+}
+
+// --- rollback ------------------------------------------------------------------------
+
+type rollbackPayload struct {
+	PublicationID uuid.UUID `json:"publicationId"`
+	// ResetHead — вернуть и head, если после публикации его никто не сдвигал (§7.3). По умолчанию true.
+	ResetHead *bool `json:"resetHead"`
+}
+
+func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollbackPayload) (Publication, error) {
+	q := store.New(tx)
+	src, err := q.GetPublication(ctx, store.GetPublicationParams{ID: p.PublicationID, ProjectID: actor.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Publication{}, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Публикация не найдена",
+			fmt.Sprintf("Публикация %s не найдена", p.PublicationID))
+	}
+	if err != nil {
+		return Publication{}, err
+	}
+	items, err := q.ListPublicationItems(ctx, src.ID) // упорядочены по ID объекта
+	if err != nil {
+		return Publication{}, err
+	}
+
+	// Откатывать можно, только если указатели всё ещё указывают на результат этой публикации.
+	var superseded []uuid.UUID
+	heads := make(map[uuid.UUID]*uuid.UUID, len(items)) // head не изменится: объекты заблокированы
+	for _, it := range items {
+		obj, err := q.LockObject(ctx, it.ObjectID)
+		if err != nil {
+			return Publication{}, err
+		}
+		heads[it.ObjectID] = obj.HeadVersionID
+		current, err := pointer(ctx, q, src.EnvironmentID, it.ObjectID)
+		if err != nil {
+			return Publication{}, err
+		}
+		if !sameID(current, it.CurrentVersionID) {
+			superseded = append(superseded, it.ObjectID)
+		}
+	}
+	if len(superseded) > 0 {
+		return Publication{}, commandbus.NewError(http.StatusConflict, "ROLLBACK_SUPERSEDED", "Публикация уже перекрыта",
+			"Объекты этой публикации позже изменены другой публикацией; откатывайте цепочку с последней").
+			WithParams(map[string]any{"objects": superseded})
+	}
+
+	pub, err := q.CreatePublication(ctx, store.CreatePublicationParams{
+		ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, EnvironmentID: src.EnvironmentID,
+		Kind: "rollback", SourcePublicationID: &src.ID, ActorID: actor.ID, Reason: reasonPtr(ctx),
+	})
+	if err != nil {
+		return Publication{}, err
+	}
+	resetHead := p.ResetHead == nil || *p.ResetHead
+	out := make([]Item, 0, len(items))
+	for _, it := range items {
+		back := Item{ObjectID: it.ObjectID, PreviousVersionID: it.CurrentVersionID, CurrentVersionID: it.PreviousVersionID}
+		if err := movePointer(ctx, q, src.EnvironmentID, pub.ID, back); err != nil {
+			return Publication{}, err
+		}
+		if resetHead && sameID(heads[it.ObjectID], it.CurrentVersionID) {
+			if err := q.SetHead(ctx, store.SetHeadParams{ID: it.ObjectID, HeadVersionID: it.PreviousVersionID}); err != nil {
+				return Publication{}, err
+			}
+		}
+		out = append(out, back)
+	}
+	return toPublication(pub, src.EnvironmentName, out), nil
+}
+
+// --- запросы -------------------------------------------------------------------------
+
+func toPublication(p store.Publication, env string, items []Item) Publication {
+	return Publication{ID: p.ID, Environment: env, Kind: p.Kind, ChangesetID: p.ChangesetID,
+		SourcePublicationID: p.SourcePublicationID, ActorID: p.ActorID, Reason: p.Reason, CreatedAt: p.CreatedAt, Items: items}
+}
+
+// GetPublication — публикация с изменёнными указателями.
+func GetPublication(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (Publication, error) {
+	row, err := q.GetPublication(ctx, store.GetPublicationParams{ID: id, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Publication{}, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Публикация не найдена",
+			fmt.Sprintf("Публикация %s не найдена", id))
+	}
+	if err != nil {
+		return Publication{}, err
+	}
+	rows, err := q.ListPublicationItems(ctx, id)
+	if err != nil {
+		return Publication{}, err
+	}
+	items := make([]Item, len(rows))
+	for i, r := range rows {
+		items[i] = Item{ObjectID: r.ObjectID, PreviousVersionID: r.PreviousVersionID, CurrentVersionID: r.CurrentVersionID}
+	}
+	return toPublication(store.Publication{ID: row.ID, Kind: row.Kind, ChangesetID: row.ChangesetID,
+		SourcePublicationID: row.SourcePublicationID, ActorID: row.ActorID, Reason: row.Reason, CreatedAt: row.CreatedAt},
+		row.EnvironmentName, items), nil
+}
+
+// ListPublications — история публикаций проекта (новые первыми), опционально по окружению.
+func ListPublications(ctx context.Context, q *store.Queries, projectID uuid.UUID, env *string) ([]Publication, error) {
+	rows, err := q.ListPublications(ctx, store.ListPublicationsParams{ProjectID: projectID, Environment: env})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Publication, len(rows))
+	for i, r := range rows {
+		out[i] = toPublication(store.Publication{ID: r.ID, Kind: r.Kind, ChangesetID: r.ChangesetID,
+			SourcePublicationID: r.SourcePublicationID, ActorID: r.ActorID, Reason: r.Reason, CreatedAt: r.CreatedAt},
+			r.EnvironmentName, nil)
+	}
+	return out, nil
+}
+
+// GetPublishedDocument — документ в версии, опубликованной в окружении.
+func GetPublishedDocument(ctx context.Context, q *store.Queries, projectID, id uuid.UUID, env string) (changes.Document, error) {
+	d, err := q.GetPublishedDocument(ctx, store.GetPublishedDocumentParams{ObjectID: id, ProjectID: projectID, Name: env})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return changes.Document{}, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Документ не опубликован",
+			fmt.Sprintf("Документ %s не опубликован в окружении %q", id, env))
+	}
+	if err != nil {
+		return changes.Document{}, err
+	}
+	return changes.Document{ID: d.ID, Kind: d.DocKind, VersionID: d.VersionID, State: d.State, Body: d.Body}, nil
+}
