@@ -246,7 +246,11 @@ func TestApprovalPolicy(t *testing.T) {
 			t.Errorf("%v: %v", bad, err)
 		}
 	}
-	e.Must(e.Admin, "set-approval-policy", map[string]int{"low": 1, "medium": 1, "high": 5}, nil)
+	var set workflow.ApprovalPolicy
+	e.Must(e.Admin, "set-approval-policy", map[string]int{"low": 1, "medium": 1, "high": 5}, &set)
+	if set != (workflow.ApprovalPolicy{Low: 1, Medium: 1, High: 5}) {
+		t.Errorf("ответ команды: %+v", set)
+	}
 	p, _ := workflow.LoadApprovalPolicy(ctx, e.Q, e.Admin.ProjectID)
 	if p.Required(workflow.RiskLow) != 1 || p.Required(workflow.RiskMedium) != 1 || p.Required(workflow.RiskHigh) != 5 {
 		t.Errorf("%+v", p)
@@ -271,5 +275,15 @@ func TestRisk(t *testing.T) {
 	}
 	if workflow.Risk(nil) != workflow.RiskLow {
 		t.Error("пусто — low")
+	}
+}
+
+func TestSubmitRequiresRebaseWhenHeadMoved(t *testing.T) {
+	e := setup(t)
+	cs, doc := e.Draft(e.Admin, "v1")
+	// Head появился у объекта после начала работы над Change Set.
+	e.Exec("UPDATE objects SET head_version_id = (SELECT id FROM object_versions WHERE object_id = $1) WHERE id = $1", doc)
+	if _, err := submit(e, cs, 1); cmstest.Code(err) != "REBASE_REQUIRED" {
+		t.Errorf("%v", err)
 	}
 }

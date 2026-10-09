@@ -130,10 +130,12 @@ func TestPublishRequiresRebaseWhenHeadMoved(t *testing.T) {
 	if _, err := publish(e, b, "staging"); cmstest.Code(err) != "REBASE_REQUIRED" {
 		t.Errorf("head сдвинулся: %v", err)
 	}
-	// Подача тоже не проходит, если head уже ушёл.
-	c := e.Edit(e.Admin, doc, "c")
-	if _, err := e.Pool.Exec(context.Background(), "UPDATE objects SET head_version_id = NULL WHERE id = $1", doc); err != nil {
-		t.Fatal(err)
+	// Head снят после согласования — и публикация, и подача требуют rebase.
+	d, c := e.Edit(e.Admin, doc, "d"), e.Edit(e.Admin, doc, "c")
+	approve(e, d)
+	e.Exec("UPDATE objects SET head_version_id = NULL WHERE id = $1", doc)
+	if _, err := publish(e, d, "staging"); cmstest.Code(err) != "REBASE_REQUIRED" {
+		t.Errorf("публикация: %v", err)
 	}
 	if err := e.Do(e.Admin, "submit-changeset", map[string]any{"changesetId": c, "expectedSeq": 1}, nil); cmstest.Code(err) != "REBASE_REQUIRED" {
 		t.Errorf("подача: %v", err)
