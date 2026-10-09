@@ -90,6 +90,18 @@ CREATE TABLE api_tokens (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Идемпотентность команд (API-010; см. §4) --------------------------------
+CREATE TABLE idempotency_keys (
+  actor_id      uuid NOT NULL REFERENCES actors(id),
+  key           text NOT NULL CHECK (length(key) BETWEEN 1 AND 200),
+  command       text NOT NULL,
+  request_hash  bytea NOT NULL,                              -- SHA-256 имени команды и компактного payload
+  status        int  NOT NULL,
+  response      bytea NOT NULL,                              -- тело ответа байт-в-байт
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (actor_id, key)
+);
+
 -- Manifest и схемы -------------------------------------------------------
 CREATE TABLE manifests (
   id              uuid PRIMARY KEY,
@@ -405,11 +417,12 @@ CREATE TABLE security_events (
 |---|---|---|
 | `dlv:{project}:{env}:{kind}:{key}:{locale}` | Кэш ответов Delivery API | 1 ч + явная инвалидация |
 | `tag:{project}:{env}:obj:{objectId}` | Множество ключей кэша, зависящих от объекта | как у ключей |
-| `idem:{actorId}:{commandId}` | Идемпотентность команд: сохранённый ответ | 24 ч |
 | `rl:{tokenId}:{window}` | Rate limiting | окно |
 | `presence:{project}:{documentId}` | Кто открыл документ (hash actorId → время) | 30 с, продлевается heartbeat |
 
-Потеря Redis НЕ ДОЛЖНА приводить к потере данных или нарушению корректности: кэш перестраивается, идемпотентность деградирует до проверки `client_op_id` в БД.
+Потеря Redis НЕ ДОЛЖНА приводить к потере данных или нарушению корректности: кэш перестраивается.
+
+**[Решение]** Ключи идемпотентности команд (API-010) хранятся в PostgreSQL (таблица `idempotency_keys`), а не в Redis: проверка, исполнение команды и сохранение ответа выполняются в одной транзакции, параллельные запросы с одним ключом сериализуются `pg_advisory_xact_lock`. Ответ хранится как `bytea`, чтобы повтор возвращал байт-в-байт то же тело (JSONB нормализует JSON). Записи старше 24 ч не учитываются.
 
 ## 5. Объектное хранилище
 

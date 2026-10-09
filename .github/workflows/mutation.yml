@@ -12,7 +12,19 @@ jobs:
   stryker:
     name: Stryker + Gremlins
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+    # Тесты сервера на каждого мутанта — одна база-сервер вместо контейнера на каждый прогон.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      CMS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

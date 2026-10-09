@@ -8,6 +8,8 @@ unleash:
   exclude-files:
     - "_gen\\.go$"
     - "^cmd/"
+    - "(^|/)store/" # сгенерировано sqlc
+    - "(^|/)testsupport/" # тестовая инфраструктура
   threshold:
     efficacy: 80
     mutant-coverage: 90
