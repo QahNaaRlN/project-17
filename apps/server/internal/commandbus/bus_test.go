@@ -66,6 +66,9 @@ func setup(t *testing.T) env {
 		},
 		Handle: func(ctx context.Context, tx pgx.Tx, actor auth.Actor, p notePayload) (noteResult, error) {
 			calls.Add(1)
+			if r := commandbus.ReasonFrom(ctx); r != "" {
+				p.Text += " (" + r + ")"
+			}
 			if _, err := tx.Exec(ctx, "UPDATE projects SET name = $1 WHERE id = $2", p.Text, actor.ProjectID); err != nil {
 				return noteResult{}, err
 			}
@@ -155,6 +158,19 @@ func TestIdempotencyKeyLengthBoundary(t *testing.T) {
 	e := setup(t)
 	if _, err := e.bus.Dispatch(context.Background(), e.actor, req(strings.Repeat("k", 200), `{"text":"x"}`)); err != nil {
 		t.Errorf("ключ из 200 символов допустим: %v", err)
+	}
+}
+
+func TestReasonReachesHandler(t *testing.T) {
+	e := setup(t)
+	r := req("k", `{"text":"x"}`)
+	r.Reason = "причина"
+	resp, err := e.bus.Dispatch(context.Background(), e.actor, r)
+	if err != nil || !strings.Contains(string(resp.Body), "x (причина)") {
+		t.Errorf("%v %s", err, resp.Body)
+	}
+	if commandbus.ReasonFrom(context.Background()) != "" {
+		t.Error("без команды причина пуста")
 	}
 }
 

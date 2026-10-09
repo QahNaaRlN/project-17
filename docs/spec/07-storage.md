@@ -247,10 +247,9 @@ CREATE TABLE operations (
   payload          jsonb NOT NULL,
   before           jsonb,
   after            jsonb,
+  inverse          jsonb,                                    -- обратная операция {type, payload}; NULL — отмена не поддерживается
   reason           text,
   client_op_id     text,
-  coalesce_key     text,
-  sealed           boolean NOT NULL DEFAULT false,
   undo_of          uuid REFERENCES operations(id),
   status           text NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'conflict', 'dropped')),
   created_at       timestamptz NOT NULL DEFAULT now(),

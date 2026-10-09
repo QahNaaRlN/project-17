@@ -118,6 +118,16 @@ type Request struct {
 	Name           string
 	IdempotencyKey string
 	Payload        json.RawMessage
+	// Reason — причина изменения из конверта команды (API-011); сохраняется в операциях.
+	Reason string
+}
+
+type reasonKey struct{}
+
+// ReasonFrom возвращает причину изменения текущей команды.
+func ReasonFrom(ctx context.Context) string {
+	r, _ := ctx.Value(reasonKey{}).(string)
+	return r
 }
 
 // Response — результат: HTTP-статус и тело {"result": …}. Повтор с тем же ключом
@@ -151,6 +161,7 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 	}
 
 	hash := requestHash(req)
+	ctx = context.WithValue(ctx, reasonKey{}, req.Reason)
 	var resp Response
 	err = postgres.InTx(ctx, b.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)

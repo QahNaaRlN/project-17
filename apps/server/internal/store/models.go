@@ -34,6 +34,32 @@ type ApiToken struct {
 	CreatedAt    time.Time  `json:"createdAt"`
 }
 
+type Changeset struct {
+	ID           uuid.UUID  `json:"id"`
+	ProjectID    uuid.UUID  `json:"projectId"`
+	Kind         string     `json:"kind"`
+	Title        string     `json:"title"`
+	Description  *string    `json:"description"`
+	OwnerID      uuid.UUID  `json:"ownerId"`
+	State        string     `json:"state"`
+	Risk         *string    `json:"risk"`
+	Targets      []string   `json:"targets"`
+	Seq          int32      `json:"seq"`
+	ContentHash  []byte     `json:"contentHash"`
+	HasConflicts bool       `json:"hasConflicts"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+	SubmittedAt  *time.Time `json:"submittedAt"`
+	MergedAt     *time.Time `json:"mergedAt"`
+}
+
+type ChangesetObject struct {
+	ChangesetID      uuid.UUID  `json:"changesetId"`
+	ObjectID         uuid.UUID  `json:"objectId"`
+	BaseVersionID    *uuid.UUID `json:"baseVersionId"`
+	WorkingVersionID uuid.UUID  `json:"workingVersionId"`
+}
+
 type Environment struct {
 	ID               uuid.UUID  `json:"id"`
 	ProjectID        uuid.UUID  `json:"projectId"`
@@ -53,6 +79,57 @@ type IdempotencyKey struct {
 	Status      int32     `json:"status"`
 	Response    []byte    `json:"response"`
 	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type Object struct {
+	ID            uuid.UUID  `json:"id"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	Kind          string     `json:"kind"`
+	SchemaName    *string    `json:"schemaName"`
+	DocKind       *string    `json:"docKind"`
+	HeadVersionID *uuid.UUID `json:"headVersionId"`
+	HeadPath      *string    `json:"headPath"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	DeletedAt     *time.Time `json:"deletedAt"`
+}
+
+type ObjectVersion struct {
+	ID              uuid.UUID  `json:"id"`
+	ProjectID       uuid.UUID  `json:"projectId"`
+	ObjectID        uuid.UUID  `json:"objectId"`
+	Number          *int32     `json:"number"`
+	State           string     `json:"state"`
+	ChangesetID     *uuid.UUID `json:"changesetId"`
+	ParentVersionID *uuid.UUID `json:"parentVersionId"`
+	SchemaVersion   *int32     `json:"schemaVersion"`
+	IrVersion       *string    `json:"irVersion"`
+	Path            *string    `json:"path"`
+	Body            []byte     `json:"body"`
+	BodyHash        []byte     `json:"bodyHash"`
+	CreatedBy       uuid.UUID  `json:"createdBy"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	CommittedAt     *time.Time `json:"committedAt"`
+}
+
+type Operation struct {
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	ChangesetID    uuid.UUID  `json:"changesetId"`
+	Seq            int32      `json:"seq"`
+	ActorID        uuid.UUID  `json:"actorId"`
+	OnBehalfOf     *uuid.UUID `json:"onBehalfOf"`
+	Source         string     `json:"source"`
+	TargetObjectID uuid.UUID  `json:"targetObjectId"`
+	Type           string     `json:"type"`
+	Payload        []byte     `json:"payload"`
+	Before         []byte     `json:"before"`
+	After          []byte     `json:"after"`
+	Inverse        []byte     `json:"inverse"`
+	Reason         *string    `json:"reason"`
+	ClientOpID     *string    `json:"clientOpId"`
+	UndoOf         *uuid.UUID `json:"undoOf"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 type Project struct {

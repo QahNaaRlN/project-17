@@ -51,13 +51,23 @@ func TestMigrateLifecycle(t *testing.T) {
 	if !strings.Contains(out.String(), "database version") {
 		t.Errorf("version не записал версию в журнал:\n%s", out.String())
 	}
-	if err := postgres.Migrate(ctx, pool, "down", log); err != nil {
-		t.Fatal(err)
+	// down откатывает по одной миграции; после отката всех таблиц не остаётся.
+	for {
+		var version int64
+		if err := pool.QueryRow(ctx, "SELECT COALESCE(max(version_id), 0) FROM goose_db_version WHERE is_applied").Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		if version == 0 {
+			break
+		}
+		if err := postgres.Migrate(ctx, pool, "down", log); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if !strings.Contains(out.String(), "migration rolled back") {
 		t.Errorf("down не записал откат в журнал:\n%s", out.String())
 	}
-	if err := pool.QueryRow(ctx, "SELECT to_regclass('public.projects') IS NOT NULL").Scan(&exists); err != nil || exists {
+	if err := pool.QueryRow(ctx, "SELECT to_regclass('public.projects') IS NOT NULL OR to_regclass('public.operations') IS NOT NULL").Scan(&exists); err != nil || exists {
 		t.Errorf("down не удалил таблицы: %v", err)
 	}
 	if err := postgres.Migrate(ctx, pool, "sideways", log); err == nil || !strings.Contains(err.Error(), "sideways") {
