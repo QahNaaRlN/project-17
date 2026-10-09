@@ -17,13 +17,14 @@ jobs:
     name: Check (TS + Go)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      # pnpm через Corepack (встроен в Node): версия закреплена в packageManager package.json.
+      - run: corepack enable
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: apps/server/go.mod
           cache-dependency-path: apps/server/go.sum
@@ -45,7 +46,7 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build server image
         run: docker build --build-arg VERSION=${{ github.sha }} -t cms/server:ci apps/server
       - name: Smoke test

@@ -26,13 +26,14 @@ jobs:
     env:
       CMS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      # pnpm через Corepack (встроен в Node): версия закреплена в packageManager package.json.
+      - run: corepack enable
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: apps/server/go.mod
           cache-dependency-path: apps/server/go.sum
@@ -42,7 +43,7 @@ jobs:
       - run: pnpm -r --workspace-concurrency=1 --if-present test:mutation
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mutation-reports
           path: packages/*/reports/mutation/
