@@ -1,0 +1,40 @@
+{
+  "description": "Узел не связан с корнем (IR-012)",
+  "expect": [
+    {
+      "code": "NODE_ORPHAN",
+      "pointer": "/nodes/n_lost"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        }
+      },
+      "n_lost": {
+        "id": "n_lost",
+        "type": "Box"
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}

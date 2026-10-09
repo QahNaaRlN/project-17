@@ -1,0 +1,41 @@
+{
+  "description": "Узел вложен в двух родителей (IR-012)",
+  "expect": [
+    {
+      "code": "NODE_MULTIPLE_PARENTS",
+      "pointer": "/nodes/n_box2/children/0"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text", "n_box2"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        }
+      },
+      "n_box2": {
+        "id": "n_box2",
+        "type": "Box",
+        "children": ["n_text"]
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}

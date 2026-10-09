@@ -1,0 +1,31 @@
+{
+  "irVersion": "1.0",
+  "kind": "page",
+  "root": "n_root",
+  "nodes": {
+    "n_root": {
+      "id": "n_root",
+      "type": "Box",
+      "children": ["n_text"]
+    },
+    "n_text": {
+      "id": "n_text",
+      "type": "Text",
+      "bindings": {
+        "text": "$local.t_hello"
+      },
+      "futureNodeField": true
+    }
+  },
+  "localContent": {
+    "t_hello": {
+      "type": "text",
+      "value": {
+        "ru": "Привет"
+      }
+    }
+  },
+  "unknownFutureField": {
+    "x": 1
+  }
+}

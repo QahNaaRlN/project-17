@@ -1,0 +1,41 @@
+{
+  "description": "Лишнее поле в зоне",
+  "expect": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "pointer": "/nodes/n_root/zone/color"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text"],
+        "zone": {
+          "id": "z",
+          "mode": "SYSTEM",
+          "color": "red"
+        }
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        }
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}
