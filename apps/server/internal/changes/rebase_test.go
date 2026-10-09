@@ -182,10 +182,9 @@ func TestRebaseEmptyOperations(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	// На новой базе: то же имя, n_aaa и n_bbb удалены, у корня новый ребёнок n_ddd.
+	// На новой базе: то же имя, детей нет — вставка по индексу 1 уходит в конец пустого списка.
 	e.moveHead(doc, `{"irVersion":"1.0","kind":"page","root":"n_root","nodes":{
-	  "n_root":{"id":"n_root","type":"Box","name":"same","children":["n_ddd"]},
-	  "n_ddd":{"id":"n_ddd","type":"Box"}}}`)
+	  "n_root":{"id":"n_root","type":"Box","name":"same"}}}`)
 	res := e.rebase(cs.ID, nil)
 	if len(res.Conflicts) != 1 || res.Conflicts[0].Type != "node.move" {
 		t.Fatalf("перенос в удалённый узел — конфликт: %+v", res)
@@ -194,7 +193,7 @@ func TestRebaseEmptyOperations(t *testing.T) {
 	if len(res.Conflicts) != 0 || e.statuses(cs.ID) != "applied,dropped,applied,dropped" {
 		t.Fatalf("%+v %s", res, e.statuses(cs.ID))
 	}
-	if got := e.body(doc, cs.ID); !strings.Contains(got, `"children":["n_ddd","n_ccc"]`) || !strings.Contains(got, `"name":"same"`) {
+	if got := e.body(doc, cs.ID); !strings.Contains(got, `"children":["n_ccc"]`) || !strings.Contains(got, `"name":"same"`) {
 		t.Errorf("индекс за концом списка — вставка в конец: %s", got)
 	}
 }
@@ -203,18 +202,46 @@ func TestRebaseObjectGone(t *testing.T) {
 	e := setup(t)
 	doc := e.commitHead(rebaseBase)
 	cs := e.createCS("b")
-	if _, err := e.apply(cs.ID, 0, rename(doc, "b")); err != nil {
+	if _, err := e.apply(cs.ID, 0, rename(doc, "b"), nodeOp(doc, "node.setProps", `{"nodeId":"n_aaa","set":{"as":"main"}}`)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.pool.Exec(context.Background(), "UPDATE objects SET head_version_id = NULL WHERE id = $1", doc); err != nil {
 		t.Fatal(err)
 	}
 	res := e.rebase(cs.ID, map[uuid.UUID]string{uuid.New(): changes.ResolutionMine})
-	if len(res.Conflicts) != 1 || res.Conflicts[0].Code != "OBJECT_GONE" || res.Conflicts[0].Seq != 1 {
+	if len(res.Conflicts) != 2 || res.Conflicts[0].Code != "OBJECT_GONE" || res.Conflicts[1].Seq != 2 {
+		t.Fatalf("%+v", res)
+	}
+	first, second := res.Conflicts[0].OperationID, res.Conflicts[1].OperationID
+	if res = e.rebase(cs.ID, map[uuid.UUID]string{first: changes.ResolutionTheirs}); len(res.Conflicts) != 1 || res.Conflicts[0].OperationID != second {
+		t.Fatalf("решена только первая: %+v", res)
+	}
+	res = e.rebase(cs.ID, map[uuid.UUID]string{first: changes.ResolutionTheirs, second: changes.ResolutionTheirs})
+	if len(res.Removed) != 1 || len(res.Conflicts) != 0 {
+		t.Errorf("%+v", res)
+	}
+}
+
+// Rebase обрабатывает все устаревшие объекты Change Set, а не только первый.
+func TestRebaseSeveralObjects(t *testing.T) {
+	e := setup(t)
+	gone, removed, kept := e.commitHead(rebaseBase), e.commitHead(rebaseBase), e.commitHead(rebaseBase)
+	cs := e.createCS("b")
+	if _, err := e.apply(cs.ID, 0, rename(gone, "b"), nodeOp(removed, "node.remove", `{"nodeId":"n_bbb"}`), rename(kept, "b")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(context.Background(), "UPDATE objects SET head_version_id = NULL WHERE id = $1", gone); err != nil {
+		t.Fatal(err)
+	}
+	e.moveHead(removed, strings.Replace(edited(`"children":["n_aaa","n_bbb"]`, `"children":["n_aaa"]`), `,
+  "n_bbb":{"id":"n_bbb","type":"Box"}`, "", 1))
+	e.moveHead(kept, edited(`"name":"v1","children":["n_aaa","n_bbb"]`, `"name":"v1","children":["n_bbb","n_aaa"]`))
+	res := e.rebase(cs.ID, nil)
+	if len(res.Conflicts) != 1 || res.Conflicts[0].Target != gone {
 		t.Fatalf("%+v", res)
 	}
 	res = e.rebase(cs.ID, map[uuid.UUID]string{res.Conflicts[0].OperationID: changes.ResolutionTheirs})
-	if len(res.Removed) != 1 || len(res.Conflicts) != 0 {
+	if len(res.Removed) != 2 || len(res.Rebased) != 1 || res.Rebased[0] != kept {
 		t.Errorf("%+v", res)
 	}
 }

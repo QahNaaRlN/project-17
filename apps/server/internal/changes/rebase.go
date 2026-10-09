@@ -140,7 +140,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 	}
 
 	for _, p := range plans {
-		kept := 0
+		kept := false
 		for _, step := range p.ops {
 			if step.status == "dropped" {
 				err = q.SetOperationStatus(ctx, store.SetOperationStatusParams{ID: step.op.ID, Status: "dropped"})
@@ -149,13 +149,13 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 					ID: step.op.ID, Before: nullableJSON(step.replay.Before), After: nullableJSON(step.replay.After),
 					Inverse: mustJSON(step.replay.Inverse),
 				})
-				kept++
+				kept = true
 			}
 			if err != nil {
 				return res, err
 			}
 		}
-		if kept == 0 {
+		if !kept {
 			// Ни одной операции над объектом не осталось — объект выходит из Change Set.
 			if err := q.RemoveChangesetObject(ctx, store.RemoveChangesetObjectParams{ChangesetID: cs.ID, ObjectID: p.id}); err != nil {
 				return res, err
@@ -188,7 +188,7 @@ func replay(body map[string]any, op store.Operation, choice string) (opPlan, *Co
 	}
 	next := ops.Clone(body)
 	r, err := ops.Apply(next, ops.Op{Type: op.Type, Payload: op.Payload}, nil)
-	if err != nil && structural[op.Type] {
+	if err != nil {
 		var oerr *ops.Error
 		errors.As(err, &oerr)
 		switch {
