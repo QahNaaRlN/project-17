@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
@@ -42,6 +43,7 @@ func setup(t *testing.T) env {
 	}
 	bus := commandbus.New(pool)
 	projects.Register(bus)
+	changes.Register(bus)
 	commandbus.Register(bus, commandbus.Command[panicPayload, string]{
 		Name: "test-panic", Right: auth.ContentRead,
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
@@ -196,4 +198,72 @@ func TestRequestsAreLogged(t *testing.T) {
 	if !strings.Contains(e.logs.String(), `"path":"/healthz"`) || !strings.Contains(e.logs.String(), `"status":200`) {
 		t.Errorf("журнал: %s", e.logs.String())
 	}
+}
+
+func (e env) command(t *testing.T, name, payload string) map[string]any {
+	t.Helper()
+	resp, body := e.do(t, "POST", "/api/v1/commands/"+name, `{"payload":`+payload+`,"reason":"http"}`,
+		e.authed(map[string]string{"Idempotency-Key": name + payload}))
+	if resp.StatusCode != 200 {
+		t.Fatalf("%s: %d %v", name, resp.StatusCode, body)
+	}
+	return body["result"].(map[string]any)
+}
+
+func TestChangesetAndDocumentRoutes(t *testing.T) {
+	e := setup(t)
+	cs := e.command(t, "create-changeset", `{"title":"HTTP"}`)["id"].(string)
+	res := e.command(t, "apply-operations", `{"changesetId":"`+cs+`","expectedSeq":0,"operations":[{"type":"document.create","payload":{"kind":"page","root":{"id":"n_root","type":"Box"}}}]}`)
+	doc := res["operations"].([]any)[0].(map[string]any)["target"].(string)
+
+	resp, body := e.do(t, "GET", "/api/v1/changesets?state=open", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 1 {
+		t.Errorf("список: %d %v", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/changesets", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 1 {
+		t.Errorf("список без фильтра: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/changesets/"+cs, "", e.authed(nil))
+	if resp.StatusCode != 200 || body["seq"].(float64) != 1 || len(body["objects"].([]any)) != 1 {
+		t.Errorf("Change Set: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/changesets/"+cs+"/operations?afterSeq=0", "", e.authed(nil))
+	items := body["items"].([]any)
+	if resp.StatusCode != 200 || len(items) != 1 || items[0].(map[string]any)["reason"] != "http" {
+		t.Errorf("операции: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/documents/"+doc+"?changesetId="+cs, "", e.authed(nil))
+	if resp.StatusCode != 200 || body["state"] != "working" || body["body"].(map[string]any)["root"] != "n_root" {
+		t.Errorf("документ: %v", body)
+	}
+	resp, body = e.do(t, "GET", "/api/v1/documents/"+doc, "", e.authed(nil))
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
+}
+
+func TestRouteParamErrors(t *testing.T) {
+	e := setup(t)
+	for _, path := range []string{
+		"/api/v1/changesets/not-a-uuid",
+		"/api/v1/changesets/not-a-uuid/operations",
+		"/api/v1/changesets/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11/operations?afterSeq=-1",
+		"/api/v1/changesets/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11/operations?afterSeq=x",
+		"/api/v1/documents/not-a-uuid",
+		"/api/v1/documents/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11?changesetId=x",
+	} {
+		resp, body := e.do(t, "GET", path, "", e.authed(nil))
+		expectProblem(t, resp, body, 400, "PARAM_INVALID")
+	}
+	resp, body := e.do(t, "GET", "/api/v1/changesets/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", e.authed(nil))
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
+}
+
+func TestDocumentsRequireDesignRead(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	if _, err := e.pool.Exec(ctx, "UPDATE roles SET capabilities = ARRAY['content.read']"); err != nil {
+		t.Fatal(err)
+	}
+	resp, body := e.do(t, "GET", "/api/v1/documents/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", e.authed(nil))
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
 }

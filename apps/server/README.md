@@ -33,6 +33,37 @@ curl -X POST localhost:8080/api/v1/commands/create-environment \
 curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -H "X-CMS-Project: store"
 ```
 
+## API
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| `POST` | `/api/v1/commands/create-environment` | Окружение проекта |
+| `POST` | `/api/v1/commands/create-changeset` | Новый Change Set |
+| `POST` | `/api/v1/commands/apply-operations` | Пакет операций над документами (атомарно, с `expectedSeq`) |
+| `POST` | `/api/v1/commands/undo` | Отмена последней операции Change Set |
+| `POST` | `/api/v1/commands/abandon-changeset` | Закрыть Change Set без слияния |
+| `GET` | `/api/v1/environments` | Окружения |
+| `GET` | `/api/v1/changesets?state=` | Change Set'ы проекта |
+| `GET` | `/api/v1/changesets/{id}` | Change Set и изменённые объекты |
+| `GET` | `/api/v1/changesets/{id}/operations?afterSeq=` | Журнал операций |
+| `GET` | `/api/v1/documents/{id}?changesetId=` | Документ: рабочая версия в Change Set или head |
+
+Пример пакета операций:
+
+```json
+{
+  "payload": {
+    "changesetId": "…",
+    "expectedSeq": 0,
+    "operations": [
+      { "type": "document.create", "payload": { "kind": "page", "root": { "id": "n_root", "type": "Container" } } },
+      { "type": "node.insert", "target": "<id документа>", "payload": { "parentId": "n_root", "subtree": { "type": "Heading", "bindings": { "text": "$content.title" } } } }
+    ]
+  },
+  "reason": "Новая страница коллекции"
+}
+```
+
 ## Устройство
 
 | Пакет | Ответственность |
@@ -44,6 +75,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `internal/commandbus` | Единая точка изменений: авторизация → проверка → идемпотентность → транзакция |
 | `internal/httpapi` | Маршруты, ошибки `application/problem+json`, журнал запросов |
 | `internal/projects` | Проекты, окружения, команда `create-environment`, bootstrap |
+| `internal/changes` | Change Set, рабочие версии, журнал операций, undo |
+| `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |
 | `internal/store` | Запросы sqlc (сгенерировано из `db/queries`) |
 | `db/migrations` | Миграции goose |

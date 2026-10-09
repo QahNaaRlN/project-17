@@ -9,13 +9,16 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -65,6 +68,63 @@ func NewRouter(d Deps) http.Handler {
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"items": envs})
 		})
+
+		r.Get("/changesets", func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			var state *string
+			if s := r.URL.Query().Get("state"); s != "" {
+				state = &s
+			}
+			items, err := changes.ListChangesets(r.Context(), store.New(d.Pool), actor.ProjectID, state)
+			respond(w, r, d, map[string]any{"items": items}, err)
+		})
+		r.Get("/changesets/{id}", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			cs, err := changes.GetChangeset(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
+			respond(w, r, d, cs, err)
+		})
+		r.Get("/changesets/{id}/operations", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			after := 0
+			if s := r.URL.Query().Get("afterSeq"); s != "" {
+				n, err := strconv.Atoi(s)
+				if err != nil || n < 0 {
+					writeError(w, r, d.Log, badParam("afterSeq", "неотрицательное целое"))
+					return
+				}
+				after = n
+			}
+			items, err := changes.ListOperations(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id, int32(after))
+			respond(w, r, d, map[string]any{"items": items}, err)
+		})
+		r.Get("/documents/{id}", func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			if err := commandbus.Require(actor, auth.DesignRead); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			var cs *uuid.UUID
+			if s := r.URL.Query().Get("changesetId"); s != "" {
+				parsed, err := uuid.Parse(s)
+				if err != nil {
+					writeError(w, r, d.Log, badParam("changesetId", "UUID"))
+					return
+				}
+				cs = &parsed
+			}
+			doc, err := changes.GetDocument(r.Context(), store.New(d.Pool), actor.ProjectID, id, cs)
+			respond(w, r, d, doc, err)
+		})
 	})
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +135,28 @@ func NewRouter(d Deps) http.Handler {
 			"Метод не поддерживается", fmt.Sprintf("Метод %s недоступен для %s", r.Method, r.URL.Path)))
 	})
 	return r
+}
+
+func respond(w http.ResponseWriter, r *http.Request, d Deps, v any, err error) {
+	if err != nil {
+		writeError(w, r, d.Log, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func badParam(name, want string) error {
+	return commandbus.NewError(http.StatusBadRequest, "PARAM_INVALID", "Некорректный параметр",
+		fmt.Sprintf("Параметр %s: ожидается %s", name, want)).WithParams(map[string]any{"param": name})
+}
+
+func uuidParam(w http.ResponseWriter, r *http.Request, d Deps, name string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(chi.URLParam(r, name))
+	if err != nil {
+		writeError(w, r, d.Log, badParam(name, "UUID"))
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 // commandEnvelope — тело POST /api/v1/commands/{name} (08-api.md §3.1).
@@ -106,6 +188,7 @@ func commandHandler(d Deps) http.HandlerFunc {
 			Name:           chi.URLParam(r, "name"),
 			IdempotencyKey: r.Header.Get("Idempotency-Key"),
 			Payload:        env.Payload,
+			Reason:         env.Reason,
 		})
 		if err != nil {
 			writeError(w, r, d.Log, err)

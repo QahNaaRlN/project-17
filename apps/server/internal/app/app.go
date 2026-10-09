@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
@@ -85,6 +86,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 
 	bus := commandbus.New(pool)
 	projects.Register(bus)
+	changes.Register(bus)
 
 	srv := &http.Server{
 		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version}),
