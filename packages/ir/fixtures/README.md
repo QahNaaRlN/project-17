@@ -1,6 +1,6 @@
 # Conformance-фикстуры IR
 
-Общий набор примеров для всех реализаций валидатора IR (TypeScript — `@cms/ir`, Go — сервер CMS), требование IR-005.
+Общий набор примеров для всех реализаций валидатора IR (TypeScript — `@cms/ir`, Go — `apps/server/internal/composition/ir`), требование IR-005.
 
 ## `valid/`
 

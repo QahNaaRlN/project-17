@@ -3,7 +3,8 @@
   "agentGuidance": false,
   "tasks": {
     "gen": {
-      "outputs": ["src/generated/**"]
+      "outputs": ["src/generated/**", "internal/**/*_gen.*"],
+      "dependsOn": ["^gen"]
     },
     "build": {
       "dependsOn": ["^build"],
@@ -13,7 +14,9 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
-    }
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**", "coverage.out"]
+    },
+    "lint": {}
   }
 }

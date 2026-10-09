@@ -10,11 +10,12 @@ CMS нового поколения: контент и визуальная ко
 | Каталог | Содержимое |
 |---|---|
 | `packages/ir` | Формат IR: JSON Schema, типы, валидатор, фикстуры |
+| `apps/server` | CMS Core на Go; сейчас — IR на стороне сервера (`internal/composition/ir`) |
 | `docs/spec` | Техническая спецификация |
 
 ## Разработка
 
-Требуются Node.js 22.12+ и pnpm 10 (`corepack enable`).
+Требуются Node.js 22.12+, pnpm 10 (`corepack enable`) и Go 1.25+.
 
 ```bash
 pnpm install

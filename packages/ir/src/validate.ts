@@ -154,26 +154,34 @@ function errorPointer(error: ErrorObject): string {
 // --- Инварианты дерева --------------------------------------------------------
 
 interface ChildRef {
-  childId: unknown;
+  childId: string;
   ptr: string;
 }
 
+/**
+ * Ссылки узла на детей в каноническом порядке (02-ir.md §2.3): children по порядку,
+ * затем слоты в лексикографическом порядке имён. Тот же порядок использует Go-валидатор.
+ */
 function childRefs(id: string, node: unknown): ChildRef[] {
   if (!isObject(node)) return [];
   const refs: ChildRef[] = [];
   const children = node["children"];
   if (Array.isArray(children)) {
-    children.forEach((childId, i) =>
-      refs.push({ childId, ptr: pointer("nodes", id, "children", i) }),
-    );
+    children.forEach((childId, i) => {
+      if (typeof childId === "string")
+        refs.push({ childId, ptr: pointer("nodes", id, "children", i) });
+    });
   }
   const slots = node["slots"];
   if (isObject(slots)) {
-    for (const [slot, ids] of Object.entries(slots)) {
+    for (const slot of Object.keys(slots).sort()) {
+      const ids = slots[slot];
       if (!Array.isArray(ids)) continue;
-      ids.forEach((childId, i) =>
-        refs.push({ childId, ptr: pointer("nodes", id, "slots", slot, i) }),
-      );
+      ids.forEach((childId, i) => {
+        if (typeof childId === "string") {
+          refs.push({ childId, ptr: pointer("nodes", id, "slots", slot, i) });
+        }
+      });
     }
   }
   return refs;
@@ -182,9 +190,11 @@ function childRefs(id: string, node: unknown): ChildRef[] {
 function treeDiagnostics(doc: IrDocument): Diagnostic[] {
   const out: Diagnostic[] = [];
   const nodes = doc.nodes as Record<string, unknown>;
+  const ids = Object.keys(nodes).sort();
   const root = doc.root;
+  const rootExists = typeof root === "string" && Object.hasOwn(nodes, root);
 
-  if (typeof root !== "string" || !Object.hasOwn(nodes, root)) {
+  if (!rootExists) {
     out.push({
       code: DiagnosticCode.NodeNotFound,
       severity: "error",
@@ -194,10 +204,8 @@ function treeDiagnostics(doc: IrDocument): Diagnostic[] {
     });
   }
 
-  const parentOf = new Map<string, string>();
-  const childrenOf = new Map<string, string[]>();
-
-  for (const [id, node] of Object.entries(nodes)) {
+  for (const id of ids) {
+    const node = nodes[id];
     if (isObject(node) && node["id"] !== id) {
       out.push({
         code: DiagnosticCode.NodeIdMismatch,
@@ -208,60 +216,21 @@ function treeDiagnostics(doc: IrDocument): Diagnostic[] {
         params: { key: id, id: node["id"] },
       });
     }
-
-    const kids: string[] = [];
-    for (const { childId, ptr } of childRefs(id, node)) {
-      if (typeof childId !== "string") continue; // нарушение типа уже сообщено схемой
-      if (!Object.hasOwn(nodes, childId)) {
-        out.push({
-          code: DiagnosticCode.NodeNotFound,
-          severity: "error",
-          pointer: ptr,
-          nodeId: id,
-          message: `Дочерний узел ${childId} отсутствует в nodes`,
-          params: { childId },
-        });
-        continue;
-      }
-      if (childId === root) {
-        out.push({
-          code: DiagnosticCode.NodeCycle,
-          severity: "error",
-          pointer: ptr,
-          nodeId: id,
-          message: `Корневой узел ${childId} указан как дочерний узла ${id}`,
-          params: { cycle: [childId] },
-        });
-        continue;
-      }
-      const existingParent = parentOf.get(childId);
-      if (existingParent !== undefined) {
-        out.push({
-          code: DiagnosticCode.NodeMultipleParents,
-          severity: "error",
-          pointer: ptr,
-          nodeId: childId,
-          message: `Узел ${childId} уже вложен в ${existingParent}; узел может иметь только одного родителя`,
-          params: { parents: [existingParent, id] },
-        });
-        continue;
-      }
-      parentOf.set(childId, id);
-      kids.push(childId);
-    }
-    childrenOf.set(id, kids);
   }
 
-  // Обход от корня: достижимость и глубина.
-  const reachable = new Set<string>();
-  if (typeof root === "string" && Object.hasOwn(nodes, root)) {
-    const stack: [string, number][] = [[root, 1]];
-    let depthReported = false;
+  const parentOf = new Map<string, string>();
+  const visited = new Set<string>();
+  let depthReported = false;
+
+  // Обход поддерева в прямом порядке: за узлом закрепляется первый родитель, через
+  // которого он достигнут; повторные ссылки — диагностики (02-ir.md §2.3).
+  const traverse = (start: string, checkDepth: boolean) => {
+    const stack: [string, number][] = [[start, 1]];
     while (stack.length > 0) {
       const [id, depth] = stack.pop()!;
-      if (reachable.has(id)) continue;
-      reachable.add(id);
-      if (depth > IR_LIMITS.maxDepth && !depthReported) {
+      if (visited.has(id)) continue;
+      visited.add(id);
+      if (checkDepth && depth > IR_LIMITS.maxDepth && !depthReported) {
         depthReported = true;
         out.push({
           code: DiagnosticCode.LimitExceeded,
@@ -272,16 +241,57 @@ function treeDiagnostics(doc: IrDocument): Diagnostic[] {
           params: { limit: "depth", max: IR_LIMITS.maxDepth },
         });
       }
-      for (const child of childrenOf.get(id) ?? []) stack.push([child, depth + 1]);
+      const kids: string[] = [];
+      for (const { childId, ptr } of childRefs(id, nodes[id])) {
+        if (!Object.hasOwn(nodes, childId)) {
+          out.push({
+            code: DiagnosticCode.NodeNotFound,
+            severity: "error",
+            pointer: ptr,
+            nodeId: id,
+            message: `Дочерний узел ${childId} отсутствует в nodes`,
+            params: { childId },
+          });
+        } else if (rootExists && childId === root) {
+          out.push({
+            code: DiagnosticCode.NodeCycle,
+            severity: "error",
+            pointer: ptr,
+            nodeId: id,
+            message: `Корневой узел ${childId} указан как дочерний узла ${id}`,
+            params: { cycle: [childId] },
+          });
+        } else {
+          const existingParent = parentOf.get(childId);
+          if (existingParent !== undefined) {
+            out.push({
+              code: DiagnosticCode.NodeMultipleParents,
+              severity: "error",
+              pointer: ptr,
+              nodeId: childId,
+              message: `Узел ${childId} уже вложен в ${existingParent}; узел может иметь только одного родителя`,
+              params: { parents: [existingParent, id] },
+            });
+          } else {
+            parentOf.set(childId, id);
+            kids.push(childId);
+          }
+        }
+      }
+      for (let i = kids.length - 1; i >= 0; i--) stack.push([kids[i]!, depth + 1]);
     }
-  }
+  };
+
+  if (rootExists) traverse(root, true);
+  const reachable = new Set(visited);
+  for (const id of ids) traverse(id, false);
 
   // Без корня достижимость не определена: каждый узел оказался бы «сиротой».
-  if (reachable.size === 0) return out;
+  if (!rootExists) return out;
 
   // Недостижимые узлы: либо вершина «сиротского» поддерева, либо часть цикла.
-  const settled = new Set<string>(reachable);
-  for (const id of Object.keys(nodes)) {
+  const settled = reachable;
+  for (const id of ids) {
     if (settled.has(id)) continue;
     const chain: string[] = [];
     const inChain = new Set<string>();
@@ -323,13 +333,15 @@ function treeDiagnostics(doc: IrDocument): Diagnostic[] {
 
 function nodeDiagnostics(doc: IrDocument): Diagnostic[] {
   const out: Diagnostic[] = [];
-  for (const [id, node] of Object.entries(doc.nodes as Record<string, unknown>)) {
+  const nodes = doc.nodes as Record<string, unknown>;
+  for (const id of Object.keys(nodes).sort()) {
+    const node = nodes[id];
     if (!isObject(node)) continue;
 
     const props = node["props"];
     const bindings = node["bindings"];
     if (isObject(props) && isObject(bindings)) {
-      for (const key of Object.keys(props)) {
+      for (const key of Object.keys(props).sort()) {
         if (!Object.hasOwn(bindings, key)) continue;
         out.push({
           code: DiagnosticCode.PropBothStaticAndBound,

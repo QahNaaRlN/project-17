@@ -1,0 +1,24 @@
+{
+  "description": "Узел с пустым ключом без родителя — «сирота», а не цикл (IR-012)",
+  "expect": [
+    {
+      "code": "NODE_ORPHAN",
+      "pointer": "/nodes/"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box"
+      },
+      "": {
+        "id": "",
+        "type": "Box"
+      }
+    }
+  }
+}

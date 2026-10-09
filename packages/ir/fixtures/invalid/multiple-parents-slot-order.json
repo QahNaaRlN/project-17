@@ -1,0 +1,28 @@
+{
+  "description": "Слоты обходятся в лексикографическом порядке имён (02-ir.md §2.3)",
+  "expect": [
+    {
+      "code": "NODE_MULTIPLE_PARENTS",
+      "pointer": "/nodes/n_root/slots/zeta/0"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "ProductCard",
+        "slots": {
+          "zeta": ["n_btn1"],
+          "alpha": ["n_btn1"]
+        }
+      },
+      "n_btn1": {
+        "id": "n_btn1",
+        "type": "Button"
+      }
+    }
+  }
+}

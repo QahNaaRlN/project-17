@@ -1,0 +1,17 @@
+{
+  "name": "@cms/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CMS Core (Go). Скрипты встраивают Go-модуль в pnpm check и Turborepo.",
+  "scripts": {
+    "gen": "go generate ./...",
+    "lint": "test -z \"$(gofmt -l .)\" || (gofmt -l . && echo 'gofmt: файлы выше не отформатированы' && exit 1)",
+    "typecheck": "go vet ./...",
+    "test": "go test -race -count=1 -coverpkg=./internal/... -coverprofile=coverage.out ./... && node ../../scripts/check-go-coverage.mjs coverage.out 95",
+    "test:mutation": "go tool gremlins unleash ./internal/composition/ir",
+    "build": "go build ./..."
+  },
+  "devDependencies": {
+    "@cms/ir": "workspace:*"
+  }
+}

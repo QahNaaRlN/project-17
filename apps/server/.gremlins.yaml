@@ -1,0 +1,23 @@
+# Мутационное тестирование Go (docs/testing.md §4). Запуск: pnpm --filter @cms/server test:mutation
+unleash:
+  # Один воркер: при параллельных прогонах тесты на случайных данных не укладываются в
+  # тайм-аут, и мутанты ошибочно считаются «TIMED OUT».
+  workers: 1
+  timeout-coefficient: 10
+  coverpkg: ./internal/...
+  exclude-files:
+    - "_gen\\.go$"
+    - "^cmd/"
+  threshold:
+    efficacy: 80
+    mutant-coverage: 90
+
+mutants:
+  invert-assignments:
+    enabled: true
+  invert-logical:
+    enabled: true
+  invert-loopctrl:
+    enabled: true
+  remove-self-assignments:
+    enabled: true

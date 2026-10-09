@@ -1,0 +1,35 @@
+{
+  "description": "Второй родитель определяется порядком обхода от корня, а не порядком ключей или ID (IR-012, 02-ir.md §2.3)",
+  "expect": [
+    {
+      "code": "NODE_MULTIPLE_PARENTS",
+      "pointer": "/nodes/n_aaaa/children/0"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_aaaa": {
+        "id": "n_aaaa",
+        "type": "Box",
+        "children": ["n_cccc"]
+      },
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_bbbb", "n_aaaa"]
+      },
+      "n_bbbb": {
+        "id": "n_bbbb",
+        "type": "Box",
+        "children": ["n_cccc"]
+      },
+      "n_cccc": {
+        "id": "n_cccc",
+        "type": "Box"
+      }
+    }
+  }
+}
