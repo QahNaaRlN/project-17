@@ -388,7 +388,16 @@ func TestRebaseErrors(t *testing.T) {
 	if err := e.Do(e.Admin, "rebase-changeset", map[string]any{"changesetId": b, "expectedSeq": 1, "resolutions": many}, nil); cmstest.Code(err) != "VALIDATION_FAILED" {
 		t.Errorf("много решений: %v", err)
 	}
-	ship(e, b, 1)
+	exact := many[:workflow.MaxResolutions]
+	if err := e.Do(e.Admin, "rebase-changeset", map[string]any{"changesetId": b, "expectedSeq": 1, "resolutions": exact}, nil); err != nil {
+		t.Errorf("ровно %d решений: %v", workflow.MaxResolutions, err)
+	}
+	// Поданный Change Set без изменившихся объектов rebase не трогает.
+	e.Must(e.Admin, "submit-changeset", map[string]any{"changesetId": b, "expectedSeq": 1}, nil)
+	if out, err := rebase(e, b, 1); err != nil || out.Checks != nil || out.Changeset.State != "approved" {
+		t.Errorf("нечего переносить: %+v %v", out, err)
+	}
+	e.Must(e.Admin, "publish", map[string]any{"changesetId": b, "environment": "staging"}, nil)
 	if _, err := rebase(e, b, 1); cmstest.Code(err) != "CHANGESET_STATE_INVALID" {
 		t.Errorf("слитый Change Set: %v", err)
 	}
