@@ -1,0 +1,61 @@
+{
+  "irVersion": "1.0",
+  "kind": "component",
+  "root": "n_root",
+  "meta": { "title": "ProductShowcase" },
+  "inputs": {
+    "title": { "type": "text", "required": true, "content": true },
+    "description": { "type": "text", "content": true },
+    "image": { "type": "asset", "assetKind": "image", "content": true },
+    "variant": { "type": "enum", "values": ["light", "dark"], "default": "light" }
+  },
+  "slotDefs": { "footer": { "allowedTypes": ["Button", "Link"], "max": 2 } },
+  "nodes": {
+    "n_root": {
+      "id": "n_root",
+      "type": "Grid",
+      "design": {
+        "columns": { "base": ["1fr"], "md": ["3fr", "2fr"] },
+        "gap": "xl",
+        "align": "center",
+        "padding": "lg",
+        "radius": "large",
+        "background": "surfaceAccent"
+      },
+      "children": ["n_text01", "n_img01"]
+    },
+    "n_text01": {
+      "id": "n_text01",
+      "type": "Stack",
+      "props": { "direction": "vertical" },
+      "design": { "gap": "md" },
+      "children": ["n_h01", "n_p01", "n_slot01"]
+    },
+    "n_h01": {
+      "id": "n_h01",
+      "type": "Heading",
+      "props": { "level": 2 },
+      "bindings": { "text": "$props.title" },
+      "design": { "typography": "display", "color": "text" }
+    },
+    "n_p01": {
+      "id": "n_p01",
+      "type": "Text",
+      "bindings": { "text": "$props.description" },
+      "design": { "typography": "body", "color": "textMuted", "lineClamp": 4 },
+      "when": { "op": "exists", "arg": "$props.description" }
+    },
+    "n_slot01": {
+      "id": "n_slot01",
+      "type": "Slot",
+      "props": { "name": "footer" }
+    },
+    "n_img01": {
+      "id": "n_img01",
+      "type": "Image",
+      "props": { "fit": "cover", "loading": "lazy" },
+      "bindings": { "src": "$props.image" },
+      "design": { "aspectRatio": "4:3", "radius": "medium" }
+    }
+  }
+}

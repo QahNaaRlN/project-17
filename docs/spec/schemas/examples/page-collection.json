@@ -1,0 +1,91 @@
+{
+  "irVersion": "1.0",
+  "kind": "page",
+  "root": "n_root",
+  "content": { "schema": "Collection", "resolve": { "by": "routeParam", "field": "handle", "param": "slug" } },
+  "policy": { "mode": "SYSTEM", "maxMode": "FREE" },
+  "dataSources": {
+    "featured": {
+      "source": "commerce.products.list",
+      "params": { "collection": "$content.handle", "limit": { "lit": 4 } }
+    }
+  },
+  "localContent": {
+    "t_cta_label": { "type": "text", "value": { "ru": "Смотреть всё" } }
+  },
+  "meta": { "title": "Шаблон коллекции" },
+  "nodes": {
+    "n_root": {
+      "id": "n_root",
+      "type": "Container",
+      "props": { "size": "xl" },
+      "design": { "paddingY": { "base": "lg", "lg": "2xl" } },
+      "children": ["n_header", "n_show01", "n_grid01"]
+    },
+    "n_header": {
+      "id": "n_header",
+      "type": "SiteHeader",
+      "zone": { "id": "header", "mode": "STRICT", "allowedTypes": ["SiteHeader"], "locked": true }
+    },
+    "n_show01": {
+      "id": "n_show01",
+      "type": "Composed",
+      "name": "Витрина коллекции",
+      "ref": { "component": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11", "version": "live" },
+      "props": { "variant": "light" },
+      "bindings": {
+        "title": "$content.title",
+        "description": "$content.lead",
+        "image": "$content.cover"
+      },
+      "slots": { "footer": ["n_cta01"] },
+      "design": { "marginBottom": "xl" }
+    },
+    "n_cta01": {
+      "id": "n_cta01",
+      "type": "Button",
+      "props": { "variant": "primary" },
+      "bindings": { "label": "$local.t_cta_label" },
+      "on": { "click": { "action": "navigate", "args": { "to": { "kind": "anchor", "node": "n_grid01" } } } }
+    },
+    "n_grid01": {
+      "id": "n_grid01",
+      "type": "Grid",
+      "name": "Товары",
+      "design": {
+        "columns": { "base": 1, "md": 2, "lg": 4 },
+        "gap": { "base": "md", "lg": "xl" }
+      },
+      "when": { "op": "not", "arg": { "op": "empty", "arg": "$data.featured.items" } },
+      "children": ["n_rep01"]
+    },
+    "n_rep01": {
+      "id": "n_rep01",
+      "type": "Repeat",
+      "props": { "as": "product", "limit": 4, "key": "id" },
+      "bindings": { "items": "$data.featured.items" },
+      "children": ["n_card01"]
+    },
+    "n_card01": {
+      "id": "n_card01",
+      "type": "ProductCard",
+      "props": { "variant": { "base": "compact", "lg": "default" } },
+      "bindings": { "product": "$item" },
+      "slots": { "footer": ["n_add01"] }
+    },
+    "n_add01": {
+      "id": "n_add01",
+      "type": "Button",
+      "props": { "variant": "secondary", "size": "sm" },
+      "bindings": {
+        "label": { "template": "В корзину · {price}", "vars": { "price": { "expr": "$context.product.price", "format": { "fn": "currency", "args": { "code": "RUB" } } } } }
+      },
+      "on": {
+        "click": [
+          { "action": "commerce.addToCart", "args": { "product": "$context.product", "quantity": { "lit": 1 } } },
+          { "action": "track", "args": { "event": { "lit": "add_to_cart" } } }
+        ]
+      }
+    }
+  }
+}

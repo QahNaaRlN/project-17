@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cms.dev/schemas/ir/1.0/document.json",
+  "title": "CMS IR document 1.0",
+  "description": "Структурная схема (уровень валидации L1). Проверки по manifest, привязкам, дизайну и политикам выполняются отдельными валидаторами (см. 02-ir.md §11).",
+  "type": "object",
+  "required": ["irVersion", "kind", "root", "nodes"],
+  "properties": {
+    "irVersion": { "const": "1.0" },
+    "kind": { "enum": ["page", "component"] },
+    "root": { "$ref": "#/$defs/nodeId" },
+    "nodes": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 5000,
+      "propertyNames": { "$ref": "#/$defs/nodeId" },
+      "additionalProperties": { "$ref": "#/$defs/node" }
+    },
+    "policy": { "$ref": "#/$defs/policy" },
+    "content": { "$ref": "#/$defs/contentDeclaration" },
+    "inputs": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "$ref": "#/$defs/typeDef" }
+    },
+    "slotDefs": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "$ref": "#/$defs/slotDef" }
+    },
+    "dataSources": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "$ref": "#/$defs/dataSourceUse" }
+    },
+    "localContent": {
+      "type": "object",
+      "propertyNames": { "pattern": "^t_[a-z0-9_]{2,40}$" },
+      "additionalProperties": { "$ref": "#/$defs/localContentItem" }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "thumbnailAssetId": { "$ref": "#/$defs/uuid" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "page" } } },
+      "then": { "properties": { "inputs": false, "slotDefs": false } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "component" } } },
+      "then": { "properties": { "content": false } }
+    }
+  ],
+
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "nodeId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{4,32}$" },
+    "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+    "mode": { "enum": ["STRICT", "SYSTEM", "FREE", "CODE"] },
+
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nodeId" },
+        "type": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
+        "ref": {
+          "type": "object",
+          "required": ["component"],
+          "properties": {
+            "component": { "$ref": "#/$defs/uuid" },
+            "version": {
+              "oneOf": [{ "const": "live" }, { "type": "integer", "minimum": 1 }]
+            }
+          },
+          "additionalProperties": false
+        },
+        "name": { "type": "string", "maxLength": 120 },
+        "props": { "type": "object" },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/binding" }
+        },
+        "design": { "$ref": "#/$defs/design" },
+        "when": { "$ref": "#/$defs/predicate" },
+        "on": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": {
+            "oneOf": [
+              { "$ref": "#/$defs/actionCall" },
+              { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/actionCall" } }
+            ]
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nodeId" },
+          "uniqueItems": true
+        },
+        "slots": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/nodeId" },
+            "uniqueItems": true
+          }
+        },
+        "zone": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/zone" }] },
+        "locked": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "Composed" } }, "required": ["type"] },
+          "then": { "required": ["ref"] },
+          "else": { "not": { "required": ["ref"] } }
+        }
+      ]
+    },
+
+    "path": {
+      "type": "string",
+      "pattern": "^\\$(content|local|props|item|index|each|data|context)(\\.([A-Za-z][A-Za-z0-9_]*|[0-9]+))*$"
+    },
+    "literal": {
+      "type": "object",
+      "required": ["lit"],
+      "properties": { "lit": {} },
+      "additionalProperties": false
+    },
+    "operand": { "oneOf": [{ "$ref": "#/$defs/path" }, { "$ref": "#/$defs/literal" }] },
+    "format": {
+      "type": "object",
+      "required": ["fn"],
+      "properties": {
+        "fn": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)*$" },
+        "args": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "binding": {
+      "oneOf": [
+        { "$ref": "#/$defs/path" },
+        {
+          "type": "object",
+          "required": ["expr"],
+          "properties": {
+            "expr": { "$ref": "#/$defs/path" },
+            "format": { "$ref": "#/$defs/format" },
+            "default": {}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["template", "vars"],
+          "properties": {
+            "template": { "type": "string", "maxLength": 2000 },
+            "vars": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/identifier" },
+              "additionalProperties": {
+                "oneOf": [
+                  { "$ref": "#/$defs/path" },
+                  {
+                    "type": "object",
+                    "required": ["expr"],
+                    "properties": {
+                      "expr": { "$ref": "#/$defs/path" },
+                      "format": { "$ref": "#/$defs/format" },
+                      "default": {}
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "predicate": {
+      "type": "object",
+      "required": ["op"],
+      "oneOf": [
+        {
+          "properties": { "op": { "enum": ["exists", "empty"] }, "arg": { "$ref": "#/$defs/path" } },
+          "required": ["arg"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": { "enum": ["eq", "neq", "gt", "gte", "lt", "lte"] },
+            "args": { "type": "array", "prefixItems": [{ "$ref": "#/$defs/operand" }, { "$ref": "#/$defs/operand" }], "minItems": 2, "maxItems": 2 }
+          },
+          "required": ["args"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": { "const": "in" },
+            "args": {
+              "type": "array",
+              "prefixItems": [{ "$ref": "#/$defs/operand" }, { "type": "object", "required": ["lit"], "properties": { "lit": { "type": "array" } }, "additionalProperties": false }],
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": ["args"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "op": { "enum": ["and", "or"] },
+            "args": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/predicate" } }
+          },
+          "required": ["args"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "op": { "const": "not" }, "arg": { "$ref": "#/$defs/predicate" } },
+          "required": ["arg"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "actionCall": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^([a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)*|pending:[0-9a-f-]{36})$"
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{ "$ref": "#/$defs/operand" }, { "$ref": "#/$defs/link" }]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "link": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "page" },
+            "page": { "$ref": "#/$defs/uuid" },
+            "params": { "type": "object", "additionalProperties": { "$ref": "#/$defs/operand" } }
+          },
+          "required": ["page"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "kind": { "const": "url" },
+            "url": { "type": "string", "pattern": "^(https?:|mailto:|tel:|/)" }
+          },
+          "required": ["url"],
+          "additionalProperties": false
+        },
+        {
+          "properties": { "kind": { "const": "anchor" }, "node": { "$ref": "#/$defs/nodeId" } },
+          "required": ["node"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "rawValue": {
+      "type": "object",
+      "required": ["raw"],
+      "properties": { "raw": { "type": ["string", "number"] } },
+      "additionalProperties": false
+    },
+    "scalarDesignValue": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9:/._-]*$" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/$defs/rawValue" }] }, "maxItems": 12 },
+        { "$ref": "#/$defs/rawValue" }
+      ]
+    },
+    "responsiveValue": {
+      "type": "object",
+      "required": ["base"],
+      "propertyNames": { "not": { "enum": ["raw", "token", "expr"] } },
+      "additionalProperties": { "$ref": "#/$defs/scalarDesignValue" }
+    },
+    "designValue": {
+      "oneOf": [{ "$ref": "#/$defs/scalarDesignValue" }, { "$ref": "#/$defs/responsiveValue" }]
+    },
+    "design": {
+      "type": "object",
+      "properties": {
+        "states": {
+          "type": "object",
+          "propertyNames": { "enum": ["hover", "active", "focusVisible", "disabled"] },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": { "enum": ["background", "color", "borderColor", "shadow", "opacity", "outline"] },
+            "additionalProperties": { "$ref": "#/$defs/scalarDesignValue" }
+          }
+        }
+      },
+      "propertyNames": { "pattern": "^[a-z][A-Za-z]*$" },
+      "additionalProperties": { "$ref": "#/$defs/designValue" }
+    },
+
+    "zone": {
+      "type": "object",
+      "required": ["id", "mode"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "maxMode": { "$ref": "#/$defs/mode" },
+        "allowedTypes": { "type": "array", "items": { "type": "string" } },
+        "deniedTypes": { "type": "array", "items": { "type": "string" } },
+        "locked": { "type": "boolean" },
+        "requiredApprovalRole": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "mode": { "$ref": "#/$defs/mode" },
+        "maxMode": { "$ref": "#/$defs/mode" },
+        "allowedTypes": { "type": "array", "items": { "type": "string" } },
+        "deniedTypes": { "type": "array", "items": { "type": "string" } },
+        "allowRawColors": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+
+    "contentDeclaration": {
+      "type": "object",
+      "required": ["schema", "resolve"],
+      "properties": {
+        "schema": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]{1,63}$" },
+        "resolve": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["by", "field", "param"],
+              "properties": {
+                "by": { "const": "routeParam" },
+                "field": { "$ref": "#/$defs/identifier" },
+                "param": { "$ref": "#/$defs/identifier" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["by", "entityId"],
+              "properties": { "by": { "const": "entity" }, "entityId": { "$ref": "#/$defs/uuid" } },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "typeDef": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["string", "text", "richText", "number", "boolean", "enum", "date", "datetime", "url", "link",
+                   "asset", "reference", "list", "object", "color", "nodeRef"]
+        },
+        "required": { "type": "boolean" },
+        "content": { "type": "boolean" },
+        "responsive": { "type": "boolean" },
+        "localized": { "type": "boolean" },
+        "default": {},
+        "description": { "type": "string" },
+        "values": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "schema": { "type": "string" },
+        "assetKind": { "enum": ["image", "video", "file"] },
+        "of": { "$ref": "#/$defs/typeDef" },
+        "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/typeDef" } },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "integer": { "type": "boolean" },
+        "minLength": { "type": "integer" },
+        "maxLength": { "type": "integer" },
+        "pattern": { "type": "string" },
+        "multiline": { "type": "boolean" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "enum" } } }, "then": { "required": ["values"] } },
+        { "if": { "properties": { "type": { "const": "reference" } } }, "then": { "required": ["schema"] } },
+        { "if": { "properties": { "type": { "const": "list" } } }, "then": { "required": ["of"] } }
+      ]
+    },
+    "slotDef": {
+      "type": "object",
+      "properties": {
+        "allowedTypes": { "type": "array", "items": { "type": "string" } },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "dataSourceUse": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$" },
+        "params": { "type": "object", "additionalProperties": { "$ref": "#/$defs/operand" } }
+      },
+      "additionalProperties": false
+    },
+    "localContentItem": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "enum": ["text", "richText", "asset", "link"] },
+        "value": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
