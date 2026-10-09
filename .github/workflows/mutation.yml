@@ -27,7 +27,8 @@ jobs:
       CMS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      # pnpm через Corepack (встроен в Node): версия закреплена в packageManager package.json.
+      - run: corepack enable
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
