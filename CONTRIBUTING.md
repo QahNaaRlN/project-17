@@ -1,0 +1,86 @@
+# Правила работы с репозиторием
+
+Репозиторий работает по модели **git-flow**. Прямые пуши в `main` и `dev` запрещены; любые изменения попадают в них только через pull request.
+
+## Ветки
+
+| Ветка | Назначение | Создаётся от | Вливается через PR в |
+|---|---|---|---|
+| `main` | Выпущенные версии. Каждый коммит в `main` — релиз с тегом | — | — |
+| `dev` | Интеграционная ветка следующего релиза | — | — |
+| `feature/<кратко>` | Новая функциональность, документация, рефакторинг | `dev` | `dev` |
+| `release/<x.y.z>` | Подготовка релиза: версия, changelog, только исправления | `dev` | `main`, затем `main` → `dev` |
+| `hotfix/<x.y.z>` | Срочное исправление выпущенной версии | `main` | `main`, затем `main` → `dev` |
+
+Имена веток — латиницей в kebab-case: `feature/ir-json-schema`, `release/0.1.0`, `hotfix/0.1.1`.
+
+## Процесс
+
+### Новая функциональность
+
+```bash
+git fetch origin
+git checkout -b feature/ir-json-schema origin/dev
+# … коммиты …
+git push -u origin feature/ir-json-schema
+# открыть PR feature/ir-json-schema → dev
+```
+
+Перед открытием PR ветку нужно обновить относительно `dev` (`git merge origin/dev` или `git rebase origin/dev`, если веткой пользуетесь только вы).
+
+### Релиз
+
+1. Создать `release/x.y.z` от `dev`.
+2. В ветке релиза — только повышение версии, changelog и исправления ошибок; новая функциональность не добавляется.
+3. PR `release/x.y.z` → `main`. После слияния поставить на коммит слияния тег `vx.y.z`.
+4. PR `main` → `dev`, чтобы исправления из релиза попали в разработку.
+5. Удалить ветку релиза.
+
+### Hotfix
+
+1. Создать `hotfix/x.y.z` от `main` (повышается patch-версия).
+2. PR `hotfix/x.y.z` → `main`, тег `vx.y.z` после слияния.
+3. PR `main` → `dev`.
+
+## Pull request
+
+- Один PR — одна логическая задача.
+- В описании: что изменено, зачем, как проверено; ссылки на требования спецификации (`IR-041`, `PUB-020` …), если изменение их реализует.
+- Все проверки CI должны быть зелёными.
+- Требуется одобрение хотя бы одного ревьюера, не являющегося автором.
+
+| Направление | Способ слияния |
+|---|---|
+| `feature/*` → `dev` | Squash and merge |
+| `release/*` → `main`, `hotfix/*` → `main` | Merge commit |
+| `main` → `dev` | Merge commit |
+
+## Коммиты
+
+Сообщения коммитов — по [Conventional Commits](https://www.conventionalcommits.org/ru/v1.0.0/):
+
+```
+<тип>(<область>): <кратко, в повелительном наклонении>
+
+<подробности при необходимости>
+```
+
+Типы: `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`. Область — пакет или модуль: `ir`, `sdk-core`, `server`, `studio`, `spec`.
+
+Пример: `feat(ir): add JSON Schema for IR 1.0`.
+
+## Версии
+
+Семантическое версионирование (`MAJOR.MINOR.PATCH`). До `1.0.0` несовместимые изменения допускаются в MINOR-версиях.
+
+## Настройки GitHub
+
+Защита `main` и `dev` настраивается в **Settings → Rules → Rulesets** (ruleset для обеих веток, Enforcement: Active):
+
+- Require a pull request before merging (не менее 1 одобрения);
+- Require status checks to pass (после появления CI);
+- Block force pushes;
+- Restrict deletions;
+- список Bypass — пустой.
+
+Ветка по умолчанию — `main`.
