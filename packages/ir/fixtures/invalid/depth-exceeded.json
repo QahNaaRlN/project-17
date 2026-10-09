@@ -1,0 +1,180 @@
+{
+  "description": "Глубина вложенности 33 > 32 (NFR-013)",
+  "expect": [
+    {
+      "code": "LIMIT_EXCEEDED",
+      "pointer": "/nodes/n_0032"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_0000",
+    "nodes": {
+      "n_0000": {
+        "id": "n_0000",
+        "type": "Box",
+        "children": ["n_0001"]
+      },
+      "n_0001": {
+        "id": "n_0001",
+        "type": "Box",
+        "children": ["n_0002"]
+      },
+      "n_0002": {
+        "id": "n_0002",
+        "type": "Box",
+        "children": ["n_0003"]
+      },
+      "n_0003": {
+        "id": "n_0003",
+        "type": "Box",
+        "children": ["n_0004"]
+      },
+      "n_0004": {
+        "id": "n_0004",
+        "type": "Box",
+        "children": ["n_0005"]
+      },
+      "n_0005": {
+        "id": "n_0005",
+        "type": "Box",
+        "children": ["n_0006"]
+      },
+      "n_0006": {
+        "id": "n_0006",
+        "type": "Box",
+        "children": ["n_0007"]
+      },
+      "n_0007": {
+        "id": "n_0007",
+        "type": "Box",
+        "children": ["n_0008"]
+      },
+      "n_0008": {
+        "id": "n_0008",
+        "type": "Box",
+        "children": ["n_0009"]
+      },
+      "n_0009": {
+        "id": "n_0009",
+        "type": "Box",
+        "children": ["n_0010"]
+      },
+      "n_0010": {
+        "id": "n_0010",
+        "type": "Box",
+        "children": ["n_0011"]
+      },
+      "n_0011": {
+        "id": "n_0011",
+        "type": "Box",
+        "children": ["n_0012"]
+      },
+      "n_0012": {
+        "id": "n_0012",
+        "type": "Box",
+        "children": ["n_0013"]
+      },
+      "n_0013": {
+        "id": "n_0013",
+        "type": "Box",
+        "children": ["n_0014"]
+      },
+      "n_0014": {
+        "id": "n_0014",
+        "type": "Box",
+        "children": ["n_0015"]
+      },
+      "n_0015": {
+        "id": "n_0015",
+        "type": "Box",
+        "children": ["n_0016"]
+      },
+      "n_0016": {
+        "id": "n_0016",
+        "type": "Box",
+        "children": ["n_0017"]
+      },
+      "n_0017": {
+        "id": "n_0017",
+        "type": "Box",
+        "children": ["n_0018"]
+      },
+      "n_0018": {
+        "id": "n_0018",
+        "type": "Box",
+        "children": ["n_0019"]
+      },
+      "n_0019": {
+        "id": "n_0019",
+        "type": "Box",
+        "children": ["n_0020"]
+      },
+      "n_0020": {
+        "id": "n_0020",
+        "type": "Box",
+        "children": ["n_0021"]
+      },
+      "n_0021": {
+        "id": "n_0021",
+        "type": "Box",
+        "children": ["n_0022"]
+      },
+      "n_0022": {
+        "id": "n_0022",
+        "type": "Box",
+        "children": ["n_0023"]
+      },
+      "n_0023": {
+        "id": "n_0023",
+        "type": "Box",
+        "children": ["n_0024"]
+      },
+      "n_0024": {
+        "id": "n_0024",
+        "type": "Box",
+        "children": ["n_0025"]
+      },
+      "n_0025": {
+        "id": "n_0025",
+        "type": "Box",
+        "children": ["n_0026"]
+      },
+      "n_0026": {
+        "id": "n_0026",
+        "type": "Box",
+        "children": ["n_0027"]
+      },
+      "n_0027": {
+        "id": "n_0027",
+        "type": "Box",
+        "children": ["n_0028"]
+      },
+      "n_0028": {
+        "id": "n_0028",
+        "type": "Box",
+        "children": ["n_0029"]
+      },
+      "n_0029": {
+        "id": "n_0029",
+        "type": "Box",
+        "children": ["n_0030"]
+      },
+      "n_0030": {
+        "id": "n_0030",
+        "type": "Box",
+        "children": ["n_0031"]
+      },
+      "n_0031": {
+        "id": "n_0031",
+        "type": "Box",
+        "children": ["n_0032"]
+      },
+      "n_0032": {
+        "id": "n_0032",
+        "type": "Box"
+      }
+    }
+  }
+}

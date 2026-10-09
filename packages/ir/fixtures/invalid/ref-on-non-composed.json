@@ -1,0 +1,39 @@
+{
+  "description": "ref у узла, не являющегося Composed",
+  "expect": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "pointer": "/nodes/n_text/ref"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        },
+        "ref": {
+          "component": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"
+        }
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}

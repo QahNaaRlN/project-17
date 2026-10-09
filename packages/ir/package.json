@@ -1,0 +1,32 @@
+{
+  "name": "@cms/ir",
+  "version": "0.1.0",
+  "description": "IR 1.0: JSON Schema, generated types, structural validator and normalization",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema/ir-1.0.schema.json": "./schema/ir-1.0.schema.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "fixtures"
+  ],
+  "scripts": {
+    "gen": "node scripts/generate-types.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-i18n": "^4.2.0"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.4"
+  }
+}

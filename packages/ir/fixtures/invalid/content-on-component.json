@@ -1,0 +1,43 @@
+{
+  "description": "content допустим только у страницы (IR-015)",
+  "expect": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "pointer": "/content"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "component",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        }
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    },
+    "content": {
+      "schema": "Article",
+      "resolve": {
+        "by": "entity",
+        "entityId": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"
+      }
+    }
+  }
+}

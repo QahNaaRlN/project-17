@@ -1,0 +1,64 @@
+{
+  "description": "Глубина условия 9 > 8 (02-ir.md §6.4)",
+  "expect": [
+    {
+      "code": "LIMIT_EXCEEDED",
+      "pointer": "/nodes/n_text/when"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        },
+        "when": {
+          "op": "not",
+          "arg": {
+            "op": "not",
+            "arg": {
+              "op": "not",
+              "arg": {
+                "op": "not",
+                "arg": {
+                  "op": "not",
+                  "arg": {
+                    "op": "not",
+                    "arg": {
+                      "op": "not",
+                      "arg": {
+                        "op": "not",
+                        "arg": {
+                          "op": "exists",
+                          "arg": "$content.title"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}

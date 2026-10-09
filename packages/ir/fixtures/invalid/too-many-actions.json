@@ -1,0 +1,116 @@
+{
+  "description": "Больше 8 действий на событие (IR-050)",
+  "expect": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "pointer": "/nodes/n_btn/on/click"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_text", "n_btn"]
+      },
+      "n_text": {
+        "id": "n_text",
+        "type": "Text",
+        "bindings": {
+          "text": "$local.t_hello"
+        }
+      },
+      "n_btn": {
+        "id": "n_btn",
+        "type": "Button",
+        "on": {
+          "click": [
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            },
+            {
+              "action": "track",
+              "args": {
+                "event": {
+                  "lit": "x"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "localContent": {
+      "t_hello": {
+        "type": "text",
+        "value": {
+          "ru": "Привет"
+        }
+      }
+    }
+  }
+}
