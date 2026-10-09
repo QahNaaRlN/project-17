@@ -41,14 +41,15 @@ var writeRights = []auth.Right{
 
 // Changeset — Change Set в ответах API.
 type Changeset struct {
-	ID          uuid.UUID `json:"id"`
-	Title       string    `json:"title"`
-	Description *string   `json:"description"`
-	OwnerID     uuid.UUID `json:"ownerId"`
-	State       string    `json:"state"`
-	Seq         int32     `json:"seq"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID           uuid.UUID `json:"id"`
+	Title        string    `json:"title"`
+	Description  *string   `json:"description"`
+	OwnerID      uuid.UUID `json:"ownerId"`
+	State        string    `json:"state"`
+	Seq          int32     `json:"seq"`
+	HasConflicts bool      `json:"hasConflicts"` // после rebase остались неразрешённые конфликты (§4.2)
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // ToChangeset — представление Change Set для ответов API.
@@ -56,7 +57,7 @@ func ToChangeset(c store.Changeset) Changeset { return toChangeset(c) }
 
 func toChangeset(c store.Changeset) Changeset {
 	return Changeset{ID: c.ID, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
-		State: c.State, Seq: c.Seq, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		State: c.State, Seq: c.Seq, HasConflicts: c.HasConflicts, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 // Register регистрирует команды модуля.
@@ -422,7 +423,11 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 		return recordInput{}, err
 	}
 	d.body = next
-	return recordInput{target: target, opType: op.Type, payload: op.Payload, before: res.Before, after: res.After, inverse: &res.Inverse}, nil
+	payload := op.Payload
+	if res.Payload != nil {
+		payload = res.Payload
+	}
+	return recordInput{target: target, opType: op.Type, payload: payload, before: res.Before, after: res.After, inverse: &res.Inverse}, nil
 }
 
 type createDocumentPayload struct {

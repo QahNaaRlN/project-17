@@ -80,6 +80,7 @@ type Operation struct {
 	Reason     *string         `json:"reason"`
 	ClientOpID *string         `json:"clientOpId"`
 	UndoOf     *uuid.UUID      `json:"undoOf"`
+	Status     string          `json:"status"` // applied | conflict | dropped (rebase, 06 §4)
 	CreatedAt  time.Time       `json:"createdAt"`
 }
 
@@ -94,7 +95,7 @@ func ListOperations(ctx context.Context, q *store.Queries, projectID, changesetI
 	}
 	out := make([]Operation, len(rows))
 	for i, r := range rows {
-		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Target: r.TargetObjectID,
+		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Target: r.TargetObjectID, Status: r.Status,
 			Type: r.Type, Payload: r.Payload, Before: r.Before, After: r.After, Reason: r.Reason,
 			ClientOpID: r.ClientOpID, UndoOf: r.UndoOf, CreatedAt: r.CreatedAt}
 	}

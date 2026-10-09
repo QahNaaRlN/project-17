@@ -171,3 +171,28 @@ func TestPropertyUndoSequence(t *testing.T) {
 		}
 	})
 }
+
+// Операция из журнала (Result.Payload, если задан) при повторном применении к тому же
+// документу даёт тот же результат — на этом держится rebase (06 §4.1).
+func TestPropertyRecordedPayloadReplays(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		orig := randomDoc(t)
+		op := randomOp(t, orig)
+		first := Clone(orig)
+		res, err := Apply(first, op, nil)
+		if err != nil {
+			return
+		}
+		recorded := op
+		if res.Payload != nil {
+			recorded.Payload = res.Payload
+		}
+		second := Clone(orig)
+		if _, err := Apply(second, recorded, nil); err != nil {
+			t.Fatalf("повтор %s %s: %v", recorded.Type, recorded.Payload, err)
+		}
+		if !reflect.DeepEqual(first, second) {
+			t.Fatalf("%s: повтор из журнала дал другой документ", op.Type)
+		}
+	})
+}

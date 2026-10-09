@@ -46,6 +46,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/approve-changeset` | Согласовать (только человек, не автор) |
 | `POST` | `/api/v1/commands/request-changes` | Запросить изменения (комментарий обязателен) |
 | `POST` | `/api/v1/commands/reopen-changeset` | Вернуть в работу, сбросив согласования |
+| `POST` | `/api/v1/commands/rebase-changeset` | Перенести Change Set на текущий head; конфликты и их разрешение (`mine`/`theirs`) |
 | `POST` | `/api/v1/commands/set-approval-policy` | Число согласований по риску |
 | `POST` | `/api/v1/commands/publish` | Опубликовать согласованный Change Set в окружение |
 | `POST` | `/api/v1/commands/rollback` | Откатить публикацию |
@@ -86,8 +87,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `internal/commandbus` | Единая точка изменений: авторизация → проверка → идемпотентность → транзакция |
 | `internal/httpapi` | Маршруты, ошибки `application/problem+json`, журнал запросов |
 | `internal/projects` | Проекты, окружения, команда `create-environment`, bootstrap |
-| `internal/changes` | Change Set, рабочие версии, журнал операций, undo |
-| `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований |
+| `internal/changes` | Change Set, рабочие версии, журнал операций, undo, переигрывание операций при rebase |
+| `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований, rebase |
 | `internal/publishing` | Публикация в окружение, head и опубликованные указатели, откат |
 | `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |
