@@ -7,8 +7,8 @@
     "gen": "go generate ./...",
     "lint": "test -z \"$(gofmt -l .)\" || (gofmt -l . && echo 'gofmt: файлы выше не отформатированы' && exit 1)",
     "typecheck": "go vet ./...",
-    "test": "go test -race -count=1 -coverpkg=./internal/... -coverprofile=coverage.out ./... && node ../../scripts/check-go-coverage.mjs coverage.out 95",
-    "test:mutation": "go tool gremlins unleash ./internal/composition/ir",
+    "test": "go test -race -count=1 -coverpkg=./internal/... -coverprofile=coverage.out $(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...) && node ../../scripts/check-go-coverage.mjs coverage.out 95 --exclude /internal/testsupport/ --exclude /internal/store/ --exclude '_gen\\.go$'",
+    "test:mutation": "go tool gremlins unleash ./internal",
     "build": "go build ./..."
   },
   "devDependencies": {

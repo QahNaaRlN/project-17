@@ -40,3 +40,13 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server image
+        run: docker build --build-arg VERSION=${{ github.sha }} -t cms/server:ci apps/server
+      - name: Smoke test
+        run: docker run --rm cms/server:ci version

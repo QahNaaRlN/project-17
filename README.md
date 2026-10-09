@@ -10,14 +10,17 @@ CMS нового поколения: контент и визуальная ко
 | Каталог | Содержимое |
 |---|---|
 | `packages/ir` | Формат IR: JSON Schema, типы, валидатор, фикстуры |
-| `apps/server` | CMS Core на Go; сейчас — IR на стороне сервера (`internal/composition/ir`) |
+| `apps/server` | CMS Core на Go: HTTP API, Command Bus, проекты и окружения, IR ([README](apps/server/README.md)) |
+| `deploy/compose` | Локальное окружение Docker Compose |
 | `docs/spec` | Техническая спецификация |
 
 ## Разработка
 
-Требуются Node.js 22.12+, pnpm 10 (`corepack enable`) и Go 1.25+.
+Требуются Node.js 22.12+, pnpm 10 (`corepack enable`) и Go 1.26+.
 
 ```bash
 pnpm install
 pnpm check   # формат, линтер, типы, тесты, сборка
 ```
+
+Тестам сервера нужен PostgreSQL: Docker (тесты поднимут контейнер сами) или `CMS_TEST_DATABASE_URL`.
