@@ -147,6 +147,10 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		return Publication{}, err
 	}
 
+	if err := check.RecordDiagnostics(ctx, cs, problems); err != nil {
+		return Publication{}, err
+	}
+
 	if err := workflow.RequireZoneApprovals(ctx, q, cs, env.Name); err != nil {
 		return Publication{}, err
 	}

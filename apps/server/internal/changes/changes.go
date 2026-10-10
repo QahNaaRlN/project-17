@@ -43,6 +43,7 @@ var writeRights = []auth.Right{
 
 // Changeset — Change Set в ответах API.
 type Changeset struct {
+	Kind         string    `json:"kind"`
 	ID           uuid.UUID `json:"id"`
 	Title        string    `json:"title"`
 	Description  *string   `json:"description"`
@@ -59,7 +60,7 @@ type Changeset struct {
 func ToChangeset(c store.Changeset) Changeset { return toChangeset(c) }
 
 func toChangeset(c store.Changeset) Changeset {
-	return Changeset{ID: c.ID, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
+	return Changeset{ID: c.ID, Kind: c.Kind, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
 		State: c.State, Targets: c.Targets, Seq: c.Seq, HasConflicts: c.HasConflicts, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 

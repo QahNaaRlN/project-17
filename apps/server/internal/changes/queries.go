@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -30,7 +31,11 @@ type ChangesetObject struct {
 // ChangesetDetail — Change Set с изменёнными объектами.
 type ChangesetDetail struct {
 	Changeset
-	Objects []ChangesetObject `json:"objects"`
+	Objects               []ChangesetObject                   `json:"objects"`
+	NeedsAttention        bool                                `json:"needsAttention"`
+	ManifestDiagnostics   []validation.EnvironmentDiagnostics `json:"manifestDiagnostics"`
+	CandidateManifestHash *string                             `json:"candidateManifestHash,omitempty"`
+	BaseManifestID        *uuid.UUID                          `json:"baseManifestId,omitempty"`
 }
 
 // GetChangeset возвращает Change Set проекта.
@@ -50,7 +55,22 @@ func GetChangeset(ctx context.Context, q *store.Queries, projectID, id uuid.UUID
 	for i, r := range rows {
 		objects[i] = ChangesetObject{ObjectID: r.ObjectID, DocKind: r.DocKind, BaseVersionID: r.BaseVersionID, WorkingVersionID: r.WorkingVersionID}
 	}
-	return ChangesetDetail{Changeset: toChangeset(cs), Objects: objects}, nil
+	diagnostics, attention, err := validation.Diagnostics(ctx, q, projectID, id)
+	if err != nil {
+		return ChangesetDetail{}, err
+	}
+	out := ChangesetDetail{Changeset: toChangeset(cs), Objects: objects, NeedsAttention: attention, ManifestDiagnostics: diagnostics}
+	if cs.Kind == "schema" {
+		candidate, err := q.ValidationCandidate(ctx, store.ValidationCandidateParams{ProjectID: projectID, ChangesetID: id})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return ChangesetDetail{}, err
+		}
+		if err == nil {
+			out.CandidateManifestHash = &candidate.Hash
+			out.BaseManifestID = candidate.BaseManifestID
+		}
+	}
+	return out, nil
 }
 
 // ListChangesets — Change Set'ы проекта (новые первыми), опционально по состоянию.
