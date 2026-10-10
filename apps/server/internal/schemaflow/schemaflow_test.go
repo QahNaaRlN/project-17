@@ -138,6 +138,10 @@ func TestFirstActivationAndJointRollback(t *testing.T) {
 	if !p.ManifestChanged || p.PreviousManifestID != nil || p.CurrentManifestID == nil || active(e) == nil || *active(e) != *p.CurrentManifestID || count(e, "schema_versions") != 1 || count(e, "published_pointers") != 1 {
 		t.Fatal(p)
 	}
+	historical, err := workflow.GetReview(context.Background(), e.Q, e.Admin.ProjectID, id)
+	if err != nil || historical.Changeset.State != "merged" || len(historical.History) != 1 {
+		t.Fatal(historical, err)
+	}
 	if detail(e, id).NeedsAttention {
 		t.Fatal("merged schema CS requires attention")
 	}
@@ -151,6 +155,9 @@ func TestFirstActivationAndJointRollback(t *testing.T) {
 	}
 	var back publishing.Publication
 	e.Must(owner, "rollback", map[string]any{"publicationId": p.ID}, &back)
+	if _, err := workflow.GetReview(context.Background(), e.Q, e.Admin.ProjectID, id); err != nil {
+		t.Fatal(err)
+	}
 	if !back.ManifestChanged || back.CurrentManifestID != nil || active(e) != nil || count(e, "published_pointers") != 0 || count(e, "schema_versions") != 1 {
 		t.Fatal(back)
 	}

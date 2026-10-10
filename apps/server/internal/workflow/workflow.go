@@ -19,6 +19,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/zonepolicy"
 	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -278,6 +279,12 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		return evaluation{}, err
 	}
 	hash = bindZoneHash(hash, requirements)
+	var checkDetails map[string]any
+	if err := json.Unmarshal(check.Details, &checkDetails); err != nil {
+		return evaluation{}, err
+	}
+	checkDetails["zoneRequirements"] = requirements
+	check.Details = mustJSON(checkDetails)
 	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err
@@ -649,9 +656,25 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 	if cs.Risk != nil {
 		required = policy.Required(*cs.Risk)
 	}
-	req, err := validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
-	if err != nil {
-		return ReviewDetail{}, err
+	var req zonepolicy.Result
+	if cs.Kind == "schema" {
+		// Reading the approved/merged history must not validate its obsolete candidate base.
+		for _, check := range checks {
+			if check.Stage == "ir" {
+				var snapshot struct {
+					ZoneRequirements zonepolicy.Result `json:"zoneRequirements"`
+				}
+				if err := json.Unmarshal(check.Details, &snapshot); err != nil {
+					return ReviewDetail{}, err
+				}
+				req = snapshot.ZoneRequirements
+			}
+		}
+	} else {
+		req, err = validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
+		if err != nil {
+			return ReviewDetail{}, err
+		}
 	}
 	status, err := coverage(ctx, q, projectID, cs.ID, cs.ContentHash, req.Roles)
 	if err != nil {
