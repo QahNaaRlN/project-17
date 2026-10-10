@@ -171,7 +171,7 @@ func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.U
 
 // OperationRight — право, необходимое для операции данного типа.
 func OperationRight(opType string) (auth.Right, bool) {
-	if opType == DocumentCreate {
+	if opType == DocumentCreate || opType == DocumentSetRoute {
 		return auth.DesignCompose, true
 	}
 	return ops.Right(opType)
@@ -261,6 +261,7 @@ type session struct {
 
 type workingDoc struct {
 	versionID uuid.UUID
+	path      *string // маршрут страницы
 	body      map[string]any
 }
 
@@ -271,7 +272,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	}
 	co, err := s.q.GetChangesetObject(s.ctx, store.GetChangesetObjectParams{ChangesetID: s.cs.ID, ObjectID: objectID})
 	if err == nil {
-		d := &workingDoc{versionID: co.WorkingVersionID, body: decodeBody(co.WorkingBody)}
+		d := &workingDoc{versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody)}
 		s.docs[objectID] = d
 		return d, nil
 	}
@@ -292,19 +293,19 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := s.createWorking(objectID, obj.HeadVersionID, decodeBody(head.Body))
+	d, err := s.createWorking(objectID, obj.HeadVersionID, head.Path, decodeBody(head.Body))
 	if err != nil {
 		return nil, err
 	}
 	return d, nil
 }
 
-func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, body map[string]any) (*workingDoc, error) {
+func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, path *string, body map[string]any) (*workingDoc, error) {
 	raw, hash := encodeBody(body)
 	irVersion := "1.0"
 	v, err := s.q.CreateWorkingVersion(s.ctx, store.CreateWorkingVersionParams{
 		ID: uuid.Must(uuid.NewV7()), ProjectID: s.actor.ProjectID, ObjectID: objectID, ChangesetID: &s.cs.ID,
-		ParentVersionID: base, IrVersion: &irVersion, Body: raw, BodyHash: hash, CreatedBy: s.actor.ID,
+		ParentVersionID: base, IrVersion: &irVersion, Path: path, Body: raw, BodyHash: hash, CreatedBy: s.actor.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -314,7 +315,7 @@ func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, body map[st
 	}); err != nil {
 		return nil, err
 	}
-	d := &workingDoc{versionID: v.ID, body: body}
+	d := &workingDoc{versionID: v.ID, path: path, body: body}
 	s.docs[objectID] = d
 	return d, nil
 }
@@ -323,7 +324,7 @@ func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, body map[st
 func (s *session) flush() error {
 	for _, d := range s.docs {
 		raw, hash := encodeBody(d.body)
-		if err := s.q.UpdateWorkingVersion(s.ctx, store.UpdateWorkingVersionParams{ID: d.versionID, Body: raw, BodyHash: hash}); err != nil {
+		if err := s.q.UpdateWorkingVersion(s.ctx, store.UpdateWorkingVersionParams{ID: d.versionID, Path: d.path, Body: raw, BodyHash: hash}); err != nil {
 			return err
 		}
 	}
@@ -413,6 +414,9 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 }
 
 func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, error) {
+	if op.Type == DocumentSetRoute {
+		return s.setRoute(target, op.Payload)
+	}
 	d, err := s.load(target)
 	if err != nil {
 		return recordInput{}, err
@@ -432,6 +436,7 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 
 type createDocumentPayload struct {
 	Kind    string          `json:"kind"`
+	Path    *string         `json:"path,omitempty"`
 	Root    json.RawMessage `json:"root"`
 	Meta    json.RawMessage `json:"meta,omitempty"`
 	Policy  json.RawMessage `json:"policy,omitempty"`
@@ -465,15 +470,19 @@ func (s *session) createDocument(in OperationInput) (recordInput, error) {
 		return recordInput{}, &ops.Error{Code: "OPERATION_INVALID", Message: "документ не проходит валидацию", Diagnostics: v.Diagnostics}
 	}
 
-	obj, err := s.q.CreateObject(s.ctx, store.CreateObjectParams{ID: uuid.Must(uuid.NewV7()), ProjectID: s.actor.ProjectID, DocKind: &p.Kind})
+	id := uuid.Must(uuid.NewV7())
+	if err := s.checkRoute(id, doc, p.Path); err != nil {
+		return recordInput{}, err
+	}
+	obj, err := s.q.CreateObject(s.ctx, store.CreateObjectParams{ID: id, ProjectID: s.actor.ProjectID, DocKind: &p.Kind})
 	if err != nil {
 		return recordInput{}, err
 	}
-	if _, err := s.createWorking(obj.ID, nil, doc); err != nil {
+	if _, err := s.createWorking(obj.ID, nil, p.Path, doc); err != nil {
 		return recordInput{}, err
 	}
 	return recordInput{target: obj.ID, opType: DocumentCreate, payload: in.Payload,
-		after: map[string]any{"documentId": obj.ID, "root": doc["root"]}}, nil
+		after: map[string]any{"documentId": obj.ID, "root": doc["root"], "path": p.Path}}, nil
 }
 
 // operationError превращает ошибку операции в ошибку команды с номером операции.

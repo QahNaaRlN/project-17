@@ -204,3 +204,9 @@ type RoleBinding struct {
 	ActorID   uuid.UUID `json:"actorId"`
 	RoleID    uuid.UUID `json:"roleId"`
 }
+
+type Route struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	Path          string    `json:"path"`
+	ObjectID      uuid.UUID `json:"objectId"`
+}

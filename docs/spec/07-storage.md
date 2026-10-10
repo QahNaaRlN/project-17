@@ -140,7 +140,10 @@ CREATE TABLE objects (
   CHECK ((kind = 'entity') = (schema_name IS NOT NULL)),
   CHECK ((kind = 'document') = (doc_kind IS NOT NULL))
 );
-CREATE UNIQUE INDEX objects_head_path ON objects (project_id, head_path)
+-- Форма маршрута: параметры заменены на ':' — '/a/:x' и '/a/:y' конфликтуют.
+CREATE FUNCTION route_shape(path text) RETURNS text LANGUAGE sql IMMUTABLE STRICT
+  AS $$ SELECT regexp_replace(path, ':[^/]+', ':', 'g') $$;
+CREATE UNIQUE INDEX objects_head_route ON objects (project_id, route_shape(head_path))
   WHERE head_path IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX objects_by_schema ON objects (project_id, schema_name) WHERE kind = 'entity';
 
@@ -323,6 +326,8 @@ CREATE TABLE routes (
   object_id       uuid NOT NULL REFERENCES objects(id),
   PRIMARY KEY (environment_id, path)
 );
+CREATE UNIQUE INDEX routes_shape ON routes (environment_id, route_shape(path));
+CREATE UNIQUE INDEX routes_object ON routes (environment_id, object_id);  -- маршрут опубликованной версии
 
 -- Ассеты -----------------------------------------------------------------
 CREATE TABLE asset_files (

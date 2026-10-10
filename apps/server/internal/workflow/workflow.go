@@ -277,6 +277,10 @@ func contentHash(versions []store.ChangesetWorkingVersionsRow) []byte {
 	for _, v := range versions {
 		h.Write(v.ObjectID[:])
 		h.Write(v.BodyHash)
+		if v.Path != nil { // маршрут — часть содержимого: его смена сбрасывает согласования
+			h.Write([]byte(*v.Path))
+		}
+		h.Write([]byte{0})
 	}
 	return h.Sum(nil)
 }

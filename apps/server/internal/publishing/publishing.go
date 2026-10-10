@@ -18,6 +18,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -139,7 +140,7 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		if err := q.CommitVersion(ctx, store.CommitVersionParams{ID: v.VersionID, Number: &number}); err != nil {
 			return Publication{}, err
 		}
-		if err := q.SetHead(ctx, store.SetHeadParams{ID: v.ObjectID, HeadVersionID: &v.VersionID}); err != nil {
+		if err := setHead(ctx, q, v.ObjectID, &v.VersionID); err != nil {
 			return Publication{}, err
 		}
 		previous, err := pointer(ctx, q, env.ID, v.ObjectID)
@@ -191,10 +192,43 @@ func movePointer(ctx context.Context, q *store.Queries, envID, publicationID uui
 	if err != nil {
 		return err
 	}
+	if err := syncRoute(ctx, q, envID, item); err != nil {
+		return err
+	}
 	return q.AddPublicationItem(ctx, store.AddPublicationItemParams{
 		PublicationID: publicationID, ObjectID: item.ObjectID,
 		PreviousVersionID: item.PreviousVersionID, CurrentVersionID: item.CurrentVersionID,
 	})
+}
+
+// syncRoute приводит маршрут объекта в окружении к пути опубликованной версии.
+func syncRoute(ctx context.Context, q *store.Queries, envID uuid.UUID, item Item) error {
+	if err := q.DeleteRoute(ctx, store.DeleteRouteParams{EnvironmentID: envID, ObjectID: item.ObjectID}); err != nil {
+		return err
+	}
+	if item.CurrentVersionID == nil {
+		return nil
+	}
+	err := q.InsertRoute(ctx, store.InsertRouteParams{EnvironmentID: envID, VersionID: *item.CurrentVersionID})
+	if postgres.IsUniqueViolation(err) {
+		return pathTaken(item.ObjectID, "в окружении")
+	}
+	return err
+}
+
+// setHead сдвигает head объекта вместе с его маршрутом.
+func setHead(ctx context.Context, q *store.Queries, objectID uuid.UUID, version *uuid.UUID) error {
+	err := q.SetHead(ctx, store.SetHeadParams{ID: objectID, VersionID: version})
+	if postgres.IsUniqueViolation(err) {
+		return pathTaken(objectID, "в head проекта")
+	}
+	return err
+}
+
+func pathTaken(objectID uuid.UUID, where string) error {
+	return commandbus.NewError(http.StatusConflict, "PATH_TAKEN", "Маршрут занят",
+		fmt.Sprintf("Маршрут страницы %s уже занят %s другой страницей (с точностью до имён параметров)", objectID, where)).
+		WithParams(map[string]any{"objectId": objectID})
 }
 
 // --- rollback ------------------------------------------------------------------------
@@ -259,7 +293,7 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 			return Publication{}, err
 		}
 		if resetHead && sameID(heads[it.ObjectID], it.CurrentVersionID) {
-			if err := q.SetHead(ctx, store.SetHeadParams{ID: it.ObjectID, HeadVersionID: it.PreviousVersionID}); err != nil {
+			if err := setHead(ctx, q, it.ObjectID, it.PreviousVersionID); err != nil {
 				return Publication{}, err
 			}
 		}
@@ -323,5 +357,25 @@ func GetPublishedDocument(ctx context.Context, q *store.Queries, projectID, id u
 	if err != nil {
 		return changes.Document{}, err
 	}
-	return changes.Document{ID: d.ID, Kind: d.DocKind, VersionID: d.VersionID, State: d.State, Body: d.Body}, nil
+	return changes.Document{ID: d.ID, Kind: d.DocKind, VersionID: d.VersionID, State: d.State, Path: d.Path, Body: d.Body}, nil
+}
+
+// Route — маршрут опубликованной страницы окружения.
+type Route struct {
+	Path      string    `json:"path"`
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+// ListRoutes — таблица маршрутов окружения (по пути).
+func ListRoutes(ctx context.Context, q *store.Queries, projectID uuid.UUID, env string) ([]Route, error) {
+	rows, err := q.ListRoutes(ctx, store.ListRoutesParams{ProjectID: projectID, Name: env})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Route, len(rows))
+	for i, r := range rows {
+		out[i] = Route{Path: r.Path, ObjectID: r.ObjectID, VersionID: r.VersionID}
+	}
+	return out, nil
 }

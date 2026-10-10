@@ -108,6 +108,7 @@ type Document struct {
 	Kind      *string         `json:"kind"`
 	VersionID uuid.UUID       `json:"versionId"`
 	State     string          `json:"state"` // working | committed
+	Path      *string         `json:"path"`  // маршрут страницы (null — без маршрута)
 	Body      json.RawMessage `json:"body"`
 }
 
@@ -120,7 +121,7 @@ func GetDocument(ctx context.Context, q *store.Queries, projectID, id uuid.UUID,
 		}
 		w, err := q.GetWorkingDocument(ctx, store.GetWorkingDocumentParams{ChangesetID: *changesetID, ObjectID: id, ProjectID: projectID})
 		if err == nil {
-			return Document{ID: w.ID, Kind: w.DocKind, VersionID: w.VersionID, State: w.State, Body: w.Body}, nil
+			return Document{ID: w.ID, Kind: w.DocKind, VersionID: w.VersionID, State: w.State, Path: w.Path, Body: w.Body}, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return Document{}, err
@@ -133,5 +134,5 @@ func GetDocument(ctx context.Context, q *store.Queries, projectID, id uuid.UUID,
 	if err != nil {
 		return Document{}, err
 	}
-	return Document{ID: h.ID, Kind: h.DocKind, VersionID: h.VersionID, State: h.State, Body: h.Body}, nil
+	return Document{ID: h.ID, Kind: h.DocKind, VersionID: h.VersionID, State: h.State, Path: h.Path, Body: h.Body}, nil
 }
