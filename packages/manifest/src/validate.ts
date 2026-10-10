@@ -9,6 +9,7 @@ import {
   UNIQUE_TYPES,
 } from "./builtins.js";
 import { DiagnosticCode, pointer, type Diagnostic } from "./diagnostics.js";
+import { compilePattern } from "./pattern.js";
 import { hasInvalidUnicode, hasNUL } from "./unicode.js";
 import { manifestSchema } from "./generated/schema.js";
 import type { Component, Fields, Manifest, Type } from "./generated/types.js";
@@ -364,8 +365,23 @@ class Checker {
     switch (t.type) {
       case "string":
         this.range(ptr, t.minLength, t.maxLength);
-        if (t.default !== undefined && !lengthFits(t.default, t.minLength, t.maxLength)) {
-          this.defaultInvalid(ptr, "значение по умолчанию не укладывается в ограничения длины");
+        {
+          const pattern = t.pattern === undefined ? undefined : compilePattern(t.pattern);
+          if (t.pattern !== undefined && pattern === undefined) {
+            this.add(
+              DiagnosticCode.ModifierInvalid,
+              ptr + "/pattern",
+              "pattern не входит в переносимое подмножество",
+              { reason: "unsupported_pattern" },
+            );
+          }
+          if (t.default !== undefined) {
+            if (!lengthFits(t.default, t.minLength, t.maxLength)) {
+              this.defaultInvalid(ptr, "значение по умолчанию не укладывается в ограничения длины");
+            } else if (pattern !== undefined && !pattern.test(t.default)) {
+              this.defaultInvalid(ptr, "значение по умолчанию не соответствует pattern");
+            }
+          }
         }
         break;
       case "text":

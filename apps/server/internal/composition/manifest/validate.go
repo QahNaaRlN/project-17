@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -330,8 +331,20 @@ func (c *checker) typ(ptr string, t obj, schemaField bool) {
 	switch kind {
 	case "string":
 		c.rangeCheck(ptr, t["minLength"], t["maxLength"])
-		if s, ok := def.(string); hasDefault && ok && !lengthFits(s, t["minLength"], t["maxLength"]) {
-			c.defaultInvalid(ptr, "значение по умолчанию не укладывается в ограничения длины")
+		var pattern *regexp.Regexp
+		if expression, ok := t["pattern"].(string); ok {
+			var err error
+			pattern, err = CompilePattern(expression)
+			if err != nil {
+				c.add(CodeModifierInvalid, ptr+"/pattern", "pattern не входит в переносимое подмножество", map[string]any{"reason": "unsupported_pattern"})
+			}
+		}
+		if s, ok := def.(string); hasDefault && ok {
+			if !lengthFits(s, t["minLength"], t["maxLength"]) {
+				c.defaultInvalid(ptr, "значение по умолчанию не укладывается в ограничения длины")
+			} else if pattern != nil && !pattern.MatchString(s) {
+				c.defaultInvalid(ptr, "значение по умолчанию не соответствует pattern")
+			}
 		}
 	case "text":
 		if s, ok := def.(string); hasDefault && ok && !lengthFits(s, nil, t["maxLength"]) {

@@ -51,10 +51,16 @@ func DocumentUses(document, active any) []Usage {
 		c.design(node["design"], p+"/design")
 		props := object(node["props"])
 		def := object(object(c.manifest[registry])[typ])
+		if builtin := BuiltinContract(typ); builtin != nil {
+			def = builtin
+		}
 		for name, value := range props {
 			path := p + "/props" + Pointer(name)
 			if object(object(def["props"])[name])["responsive"] == true {
 				c.responsive(value, path)
+			}
+			if category := text(object(object(def["props"])[name])["enumSource"]); category != "" && category != "icons" {
+				c.tokenValues(value, category, path)
 			}
 			if text(object(object(def["props"])[name])["type"]) == "color" {
 				c.tokenValues(value, "colors", path)

@@ -633,6 +633,32 @@
       "message": "значение по умолчанию вне допустимого диапазона"
     }
   ],
+  "manifest/portable-pattern.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/components/Test/props/default/default",
+      "message": "значение по умолчанию не соответствует pattern"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/Test/props/nested/fields/items/of/pattern",
+      "message": "pattern не входит в переносимое подмножество",
+      "params": {
+        "reason": "unsupported_pattern"
+      }
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/Test/props/unsupported/pattern",
+      "message": "pattern не входит в переносимое подмножество",
+      "params": {
+        "reason": "unsupported_pattern"
+      }
+    }
+  ],
   "manifest/primitive-name-reserved.json": [
     {
       "code": "MANIFEST_NAME_RESERVED",

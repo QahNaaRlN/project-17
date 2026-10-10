@@ -33,4 +33,9 @@ await writeFile(
   `${outDir}/schema.ts`,
   `${header}\nexport const manifestSchema = ${JSON.stringify(schema, null, 2)} as const;\n`,
 );
+const catalogue = JSON.parse(await readFile(`${root}schema/builtin-catalogue.json`, "utf8"));
+await writeFile(
+  `${outDir}/builtins.ts`,
+  `// Сгенерировано из schema/builtin-catalogue.json. Не редактировать.\nexport const builtinCatalogue = ${JSON.stringify(catalogue, null, 2)} as const;\n`,
+);
 console.log("generated:", `${outDir}/types.ts`, `${outDir}/schema.ts`);
