@@ -65,6 +65,14 @@ type Changeset struct {
 	MergedAt     *time.Time `json:"mergedAt"`
 }
 
+type ChangesetManifestCandidate struct {
+	ChangesetID    uuid.UUID  `json:"changesetId"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	EnvironmentID  uuid.UUID  `json:"environmentId"`
+	ManifestID     uuid.UUID  `json:"manifestId"`
+	BaseManifestID *uuid.UUID `json:"baseManifestId"`
+}
+
 type ChangesetObject struct {
 	ChangesetID      uuid.UUID  `json:"changesetId"`
 	ObjectID         uuid.UUID  `json:"objectId"`

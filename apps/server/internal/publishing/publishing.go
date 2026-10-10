@@ -18,6 +18,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -76,7 +77,7 @@ func reasonPtr(ctx context.Context) *string {
 
 // environment находит окружение, в которое можно публиковать (MF-031: не preview).
 func environment(ctx context.Context, q *store.Queries, projectID uuid.UUID, name string) (store.Environment, error) {
-	env, err := q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: projectID, Name: name})
+	env, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: projectID, Name: name})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return env, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Окружение не найдено",
 			fmt.Sprintf("Окружение %q не найдено", name))
@@ -123,6 +124,26 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if len(stale) > 0 {
 		return Publication{}, commandbus.NewError(http.StatusConflict, "REBASE_REQUIRED", "Требуется rebase",
 			"Head объектов изменился после начала работы над Change Set").WithParams(map[string]any{"objects": stale})
+	}
+	check, err := validation.Load(ctx, q, actor.ProjectID, env.Name, &cs.ID)
+	if err != nil {
+		return Publication{}, err
+	}
+	// Candidate activation and schema publication are a separate atomic lifecycle package.
+	// Never publish content under a candidate while leaving the active contract unchanged.
+	if cs.Kind == "schema" || check.Candidate != nil {
+		return Publication{}, commandbus.NewError(http.StatusConflict, "SCHEMA_PUBLICATION_NOT_READY", "Схемная публикация ещё не подключена", "Требуется атомарная активация manifest и схем")
+	}
+	docs := make([]validation.Document, len(versions))
+	for i, v := range versions {
+		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body}
+	}
+	problems, err := check.CheckPublication(ctx, docs)
+	if err != nil {
+		return Publication{}, err
+	}
+	if err := validation.RequireValid(problems); err != nil {
+		return Publication{}, err
 	}
 
 	pub, err := q.CreatePublication(ctx, store.CreatePublicationParams{
@@ -261,6 +282,9 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 			fmt.Sprintf("Публикация %s не найдена", p.PublicationID))
 	}
 	if err != nil {
+		return Publication{}, err
+	}
+	if _, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: actor.ProjectID, Name: src.EnvironmentName}); err != nil {
 		return Publication{}, err
 	}
 	items, err := q.ListPublicationItems(ctx, src.ID) // упорядочены по ID объекта

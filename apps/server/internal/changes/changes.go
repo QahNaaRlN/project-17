@@ -46,6 +46,7 @@ type Changeset struct {
 	Description  *string   `json:"description"`
 	OwnerID      uuid.UUID `json:"ownerId"`
 	State        string    `json:"state"`
+	Targets      []string  `json:"targets"`
 	Seq          int32     `json:"seq"`
 	HasConflicts bool      `json:"hasConflicts"` // после rebase остались неразрешённые конфликты (§4.2)
 	CreatedAt    time.Time `json:"createdAt"`
@@ -57,7 +58,7 @@ func ToChangeset(c store.Changeset) Changeset { return toChangeset(c) }
 
 func toChangeset(c store.Changeset) Changeset {
 	return Changeset{ID: c.ID, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
-		State: c.State, Seq: c.Seq, HasConflicts: c.HasConflicts, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		State: c.State, Targets: c.Targets, Seq: c.Seq, HasConflicts: c.HasConflicts, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 // Register регистрирует команды модуля.

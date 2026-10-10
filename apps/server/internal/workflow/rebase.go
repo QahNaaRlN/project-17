@@ -11,6 +11,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -54,6 +55,9 @@ func validateRebase(p rebasePayload) error {
 // согласования сбрасываются (CHG-041).
 func handleRebase(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rebasePayload) (RebaseOutcome, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return RebaseOutcome{}, err
+	}
 	cs, err := changes.Lock(ctx, q, actor.ProjectID, p.ChangesetID)
 	if err != nil {
 		return RebaseOutcome{}, err
