@@ -1,3 +1,5 @@
+import { validUnicode } from "./unicode.js";
+
 /**
  * Канонический JSON manifest (MF-002): ключи объектов по возрастанию кодовых единиц UTF-16,
  * без пробелов, строки и числа — как у JSON.stringify. Go-реализация даёт тот же результат.
@@ -8,8 +10,13 @@ export function canonicalJson(value: unknown): string {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, v]) => v !== undefined)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+    return `{${entries.map(([k, v]) => `${unicodeString(k)}:${canonicalJson(v)}`).join(",")}}`;
   }
+  return typeof value === "string" ? unicodeString(value) : JSON.stringify(value);
+}
+
+function unicodeString(value: string): string {
+  if (!validUnicode(value)) throw new TypeError("manifest содержит некорректный Unicode");
   return JSON.stringify(value);
 }
 

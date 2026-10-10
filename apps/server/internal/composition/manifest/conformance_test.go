@@ -56,7 +56,14 @@ func TestConformanceValid(t *testing.T) {
 	}
 	for _, file := range files {
 		t.Run(file, func(t *testing.T) {
-			m := load(t, filepath.Join("valid", file))
+			raw, err := os.ReadFile(filepath.Join(fixtures, "valid", file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err := manifest.ParseJSON(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if r := manifest.Validate(m); !r.Valid || len(r.Diagnostics) != 0 {
 				t.Errorf("диагностики: %+v", r.Diagnostics)
 			}
@@ -72,7 +79,15 @@ func TestConformanceInvalid(t *testing.T) {
 	for _, file := range fixtureFiles(t, "invalid") {
 		fixture := load(t, filepath.Join("invalid", file)).(map[string]any)
 		t.Run(file, func(t *testing.T) {
-			r := manifest.Validate(fixture["manifest"])
+			data, err := os.ReadFile(filepath.Join(fixtures, "invalid", file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var raw struct{ Manifest json.RawMessage }
+			if err := json.Unmarshal(data, &raw); err != nil {
+				t.Fatal(err)
+			}
+			r := manifest.ValidateJSON(raw.Manifest)
 			if r.Valid {
 				t.Fatal("manifest признан валидным")
 			}
