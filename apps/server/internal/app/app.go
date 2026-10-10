@@ -17,6 +17,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
+	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
@@ -87,7 +88,27 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	}
 	defer pool.Close()
 
+	var purger jobs.Purger = jobs.LogPurger{Log: log}
+	if cfg.CDNPurgeURL != "" {
+		purger = jobs.HTTPPurger{URL: cfg.CDNPurgeURL, Token: cfg.CDNPurgeToken}
+	}
+	queue, err := jobs.NewProcessor(pool, purger, log)
+	if err != nil {
+		return err
+	}
+	if err := queue.Start(ctx); err != nil {
+		return err
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if err := queue.Stop(stopCtx); err != nil {
+			log.Warn("job queue stop", "error", err)
+		}
+	}()
+
 	bus := commandbus.New(pool)
+	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
 	changes.Register(bus)
 	workflow.Register(bus)

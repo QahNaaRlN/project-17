@@ -39,7 +39,7 @@ func TestDeliveryPage(t *testing.T) {
 		t.Errorf("тело: %v", body)
 	}
 	etag := resp.Header.Get("ETag")
-	if !strings.HasPrefix(etag, `"`) || resp.Header.Get("Cache-Control") != httpapi.PublishedCacheControl || resp.Header.Get("Surrogate-Key") != product {
+	if !strings.HasPrefix(etag, `"`) || resp.Header.Get("Cache-Control") != httpapi.PublishedCacheControl || resp.Header.Get("Surrogate-Key") != "store:staging:"+product+" store:staging:routes" {
 		t.Errorf("заголовки: %v", resp.Header)
 	}
 	// Тот же ответ с If-None-Match — 304 без тела.
@@ -72,7 +72,7 @@ func TestDeliveryDocumentAndRoutes(t *testing.T) {
 	e := setup(t)
 	key, product := publishedSite(t, e)
 	resp, body := e.do(t, "GET", "/delivery/v1/store/staging/document/"+product, "", bearer(key))
-	if resp.StatusCode != 200 || body["objectId"] != product || body["path"] != "/products/:slug" || resp.Header.Get("Surrogate-Key") != product {
+	if resp.StatusCode != 200 || body["objectId"] != product || body["path"] != "/products/:slug" || resp.Header.Get("Surrogate-Key") != "store:staging:"+product {
 		t.Errorf("документ: %d %v", resp.StatusCode, body)
 	}
 	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/document/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", bearer(key))
@@ -82,7 +82,7 @@ func TestDeliveryDocumentAndRoutes(t *testing.T) {
 
 	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/routes", "", bearer(key))
 	items := body["items"].([]any)
-	if resp.StatusCode != 200 || len(items) != 2 || items[0].(map[string]any)["path"] != "/" || !strings.HasPrefix(resp.Header.Get("Surrogate-Key"), "routes ") {
+	if resp.StatusCode != 200 || len(items) != 2 || items[0].(map[string]any)["path"] != "/" || resp.Header.Get("Surrogate-Key") != "store:staging:routes" {
 		t.Errorf("маршруты: %d %v %v", resp.StatusCode, body, resp.Header)
 	}
 }

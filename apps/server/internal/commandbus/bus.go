@@ -47,11 +47,18 @@ type handler struct {
 type Bus struct {
 	pool     *pgxpool.Pool
 	handlers map[string]handler
+	contexts []func(context.Context) context.Context
 }
 
 // New создаёт шину команд.
 func New(pool *pgxpool.Pool) *Bus {
 	return &Bus{pool: pool, handlers: map[string]handler{}}
+}
+
+// WithContext добавляет обогащение контекста обработчиков (например, клиент очереди задач
+// для постановки задач в транзакции команды — OPS-010).
+func (b *Bus) WithContext(fn func(context.Context) context.Context) {
+	b.contexts = append(b.contexts, fn)
 }
 
 // Register добавляет команду в шину. Повторное имя — ошибка программирования (паника).
@@ -162,6 +169,9 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 
 	hash := requestHash(req)
 	ctx = context.WithValue(ctx, reasonKey{}, req.Reason)
+	for _, fn := range b.contexts {
+		ctx = fn(ctx)
+	}
 	var resp Response
 	err = postgres.InTx(ctx, b.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)

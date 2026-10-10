@@ -36,7 +36,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, command string, log *slog.
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS())
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS(),
+		goose.WithGoMigrations(riverMigration()))
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
