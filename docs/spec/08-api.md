@@ -88,6 +88,7 @@ X-CMS-Project: store
 | `register-manifest` | manifest, `environment`, `codeIndexUploadId?` | `manifest.register` |
 | `create-asset-upload` / `complete-asset-upload` | см. [05-content.md §6](05-content.md#61-загрузка) | `asset.write` |
 | `create-preview-token` | `changesetId?`, `environment` | `content.read` |
+| `create-delivery-key` / `revoke-delivery-key` | `environment`, `name` / `id` | `project.admin` |
 | `create-capability-request` / `update-capability-request` | см. [09-agent.md §5](09-agent.md#5-missing-capability) | `capability.request` |
 | `start-agent-session` / `end-agent-session` | см. [09-agent.md §3](09-agent.md#3-идентичность-и-делегирование-агента) | `agent.delegate` |
 | `create-environment` / `delete-environment` | `name`, `kind`, `appUrl` | `project.admin`; для `preview` — `manifest.register` |
@@ -159,6 +160,14 @@ Authorization: Bearer cms_pub_…
 | `GET /delivery/v1/{project}/{env}/entities/{id}?locale=` | Опубликованная сущность |
 | `GET /delivery/v1/{project}/{env}/entities?schema=&filter[field]=&sort=&cursor=` | Простые выборки опубликованных сущностей (REST для простых ресурсов) |
 | `GET /delivery/v1/{project}/{env}/document/{id}` | Документ по ID (компоненты, фрагменты) |
+
+### 5.2.1. Реализация (этап M2, первая итерация)
+
+- Ключ доставки `cms_pub_<random>` выдаёт команда `create-delivery-key {environment, name}`; секрет показывается один раз, хранится SHA-256. `revoke-delivery-key {id}` отзывает ключ, `GET /api/v1/delivery-keys` — список ключей проекта (право `project.admin`). Ключ действует только для своего проекта и окружения: чужие `{project}/{env}` в пути — `403 FORBIDDEN`, неизвестный или отозванный ключ — `401 UNAUTHENTICATED`.
+- Реализованы `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`. Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
+- Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
+- Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` (ID объектов; у `/routes` — ещё ключ `routes`); на совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
+- Пока не реализованы: черновой режим и preview-токены (§5.3), локали и fallback (API-032), сущности и ассеты, кэш Redis и инвалидация CDN по `Surrogate-Key` (PUB-021), лимиты запросов.
 
 ### 5.3. Черновой режим
 

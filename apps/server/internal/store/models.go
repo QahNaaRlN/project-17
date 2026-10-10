@@ -86,6 +86,17 @@ type Check struct {
 	FinishedAt  *time.Time `json:"finishedAt"`
 }
 
+type DeliveryKey struct {
+	ID            uuid.UUID  `json:"id"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+	Name          string     `json:"name"`
+	TokenHash     []byte     `json:"tokenHash"`
+	CreatedBy     uuid.UUID  `json:"createdBy"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	RevokedAt     *time.Time `json:"revokedAt"`
+}
+
 type Environment struct {
 	ID               uuid.UUID  `json:"id"`
 	ProjectID        uuid.UUID  `json:"projectId"`

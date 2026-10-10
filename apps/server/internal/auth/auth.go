@@ -38,6 +38,9 @@ type Actor struct {
 // ServiceTokenPrefix — префикс сервисных токенов (08-api.md §2).
 const ServiceTokenPrefix = "cms_svc_"
 
+// DeliveryKeyPrefix — префикс публичных ключей доставки окружения (08-api.md §2).
+const DeliveryKeyPrefix = "cms_pub_"
+
 // ErrUnauthenticated — токен отсутствует, неизвестен, отозван или истёк.
 var ErrUnauthenticated = errors.New("unauthenticated")
 

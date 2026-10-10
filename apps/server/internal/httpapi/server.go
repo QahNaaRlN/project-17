@@ -20,6 +20,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -57,6 +58,8 @@ func NewRouter(d Deps) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
+
+	r.Route("/delivery/v1/{project}/{env}", deliveryRoutes(d))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
@@ -112,6 +115,15 @@ func NewRouter(d Deps) http.Handler {
 			}
 			rv, err := workflow.GetReview(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
 			respond(w, r, d, rv, err)
+		})
+		r.Get("/delivery-keys", func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			if err := commandbus.Require(actor, auth.ProjectAdmin); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
+			keys, err := delivery.ListKeys(r.Context(), store.New(d.Pool), actor.ProjectID)
+			respond(w, r, d, map[string]any{"items": keys}, err)
 		})
 		r.Get("/publications", func(w http.ResponseWriter, r *http.Request) {
 			var env *string

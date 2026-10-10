@@ -3,7 +3,9 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
@@ -48,6 +51,7 @@ func setup(t *testing.T) env {
 	changes.Register(bus)
 	workflow.Register(bus)
 	publishing.Register(bus)
+	delivery.Register(bus)
 	commandbus.Register(bus, commandbus.Command[panicPayload, string]{
 		Name: "test-panic", Right: auth.ContentRead,
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
@@ -207,7 +211,7 @@ func TestRequestsAreLogged(t *testing.T) {
 func (e env) command(t *testing.T, name, payload string) map[string]any {
 	t.Helper()
 	resp, body := e.do(t, "POST", "/api/v1/commands/"+name, `{"payload":`+payload+`,"reason":"http"}`,
-		e.authed(map[string]string{"Idempotency-Key": name + payload}))
+		e.authed(map[string]string{"Idempotency-Key": fmt.Sprintf("%s-%x", name, sha256.Sum256([]byte(payload)))}))
 	if resp.StatusCode != 200 {
 		t.Fatalf("%s: %d %v", name, resp.StatusCode, body)
 	}
