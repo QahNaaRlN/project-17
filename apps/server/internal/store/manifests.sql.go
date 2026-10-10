@@ -245,6 +245,72 @@ func (q *Queries) LockManifestEnvironment(ctx context.Context, arg LockManifestE
 	return i, err
 }
 
+const manifestImpactVersions = `-- name: ManifestImpactVersions :many
+WITH target_environment AS (
+ SELECT env.id FROM environments env WHERE env.project_id = $1::uuid AND env.name = $2::text
+)
+SELECT o.id AS object_id, v.id AS version_id, v.body, 'head'::text AS stage, NULL::uuid AS changeset_id
+FROM objects o JOIN object_versions v ON v.id = o.head_version_id AND v.object_id = o.id
+CROSS JOIN target_environment e
+WHERE o.project_id = $1 AND o.kind = 'document' AND o.deleted_at IS NULL
+UNION ALL
+SELECT o.id, v.id, v.body, 'published'::text, NULL::uuid
+FROM target_environment e JOIN published_pointers pp ON pp.environment_id = e.id
+JOIN objects o ON o.id = pp.object_id
+JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
+WHERE o.project_id = $1 AND o.kind = 'document'
+UNION ALL
+SELECT o.id, v.id, v.body, 'working'::text, cs.id
+FROM changesets cs JOIN changeset_objects co ON co.changeset_id = cs.id
+JOIN objects o ON o.id = co.object_id
+JOIN object_versions v ON v.id = co.working_version_id AND v.object_id = o.id
+CROSS JOIN target_environment e
+WHERE cs.project_id = $1 AND o.project_id = $1
+  AND o.kind = 'document' AND cs.state NOT IN ('merged', 'abandoned')
+ORDER BY object_id, stage, version_id, changeset_id
+`
+
+type ManifestImpactVersionsParams struct {
+	ProjectID   uuid.UUID `json:"projectId"`
+	Environment string    `json:"environment"`
+}
+
+type ManifestImpactVersionsRow struct {
+	ObjectID    uuid.UUID  `json:"objectId"`
+	VersionID   uuid.UUID  `json:"versionId"`
+	Body        []byte     `json:"body"`
+	Stage       string     `json:"stage"`
+	ChangesetID *uuid.UUID `json:"changesetId"`
+}
+
+// MF-020, MF-023: стадии сохраняются отдельно даже для одного version_id.
+// Опубликованные версии выбираются только для указанного окружения; head/рабочие — по проекту.
+func (q *Queries) ManifestImpactVersions(ctx context.Context, arg ManifestImpactVersionsParams) ([]ManifestImpactVersionsRow, error) {
+	rows, err := q.db.Query(ctx, manifestImpactVersions, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ManifestImpactVersionsRow
+	for rows.Next() {
+		var i ManifestImpactVersionsRow
+		if err := rows.Scan(
+			&i.ObjectID,
+			&i.VersionID,
+			&i.Body,
+			&i.Stage,
+			&i.ChangesetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setActiveManifest = `-- name: SetActiveManifest :execrows
 UPDATE environments SET active_manifest_id = $3
 WHERE project_id = $1 AND id = $2
