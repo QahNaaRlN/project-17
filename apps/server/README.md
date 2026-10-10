@@ -104,4 +104,4 @@ pnpm --filter @cms/server gen    # sqlc и типы IR
 pnpm --filter @cms/server test   # тесты с -race и порогом покрытия
 ```
 
-Интеграционным тестам нужен PostgreSQL: либо `CMS_TEST_DATABASE_URL` (любая база на сервере; тесты создают и удаляют свои базы), либо Docker — тогда тесты сами поднимут контейнер `postgres:16-alpine` (testcontainers).
+Интеграционным тестам нужен PostgreSQL: либо `CMS_TEST_DATABASE_URL` (любая база на сервере; тесты создают и удаляют свои базы), либо Docker — тогда тесты сами поднимут контейнер `postgres:16-alpine` из зеркала `mirror.gcr.io` (testcontainers). Образы берутся из зеркала Google, потому что Docker Hub ограничивает анонимные загрузки с раннеров CI.
