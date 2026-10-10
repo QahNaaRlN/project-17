@@ -9,7 +9,7 @@ import {
   UNIQUE_TYPES,
 } from "./builtins.js";
 import { DiagnosticCode, pointer, type Diagnostic } from "./diagnostics.js";
-import { hasInvalidUnicode } from "./unicode.js";
+import { hasInvalidUnicode, hasNUL } from "./unicode.js";
 import { manifestSchema } from "./generated/schema.js";
 import type { Component, Fields, Manifest, Type } from "./generated/types.js";
 
@@ -51,6 +51,20 @@ export function validateManifest(manifest: unknown): ValidationResult {
           pointer: "",
           message: "manifest содержит некорректный Unicode",
           params: { keyword: "unicode" },
+        },
+      ],
+    };
+  }
+  if (hasNUL(manifest)) {
+    return {
+      valid: false,
+      diagnostics: [
+        {
+          code: DiagnosticCode.SchemaViolation,
+          severity: "error",
+          pointer: "",
+          message: "manifest содержит запрещённый U+0000",
+          params: { keyword: "nul" },
         },
       ],
     };

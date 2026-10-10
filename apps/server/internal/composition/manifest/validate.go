@@ -48,6 +48,9 @@ func ValidateJSON(data []byte) Result {
 	if errors.Is(err, ErrInvalidUnicode) {
 		return unicodeResult()
 	}
+	if errors.Is(err, ErrNUL) {
+		return nulResult()
+	}
 	if err != nil {
 		return result([]Diagnostic{{Code: CodeSchemaViolation, Severity: "error", Pointer: "",
 			Message: "manifest не является корректным JSON", Params: map[string]any{"error": err.Error()}}})
@@ -62,6 +65,9 @@ func ValidateJSON(data []byte) Result {
 func Validate(doc any) Result {
 	if !validUnicodeValue(doc) {
 		return unicodeResult()
+	}
+	if hasNUL(doc) {
+		return nulResult()
 	}
 	var out []Diagnostic
 	if err := compiledSchema().Validate(doc); err != nil {

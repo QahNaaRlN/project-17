@@ -596,6 +596,17 @@
       }
     }
   ],
+  "manifest/nul-string.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "",
+      "message": "manifest содержит запрещённый U+0000",
+      "params": {
+        "keyword": "nul"
+      }
+    }
+  ],
   "manifest/number-default-out-of-range.json": [
     {
       "code": "MANIFEST_DEFAULT_INVALID",

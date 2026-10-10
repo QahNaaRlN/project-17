@@ -28,3 +28,25 @@ describe("MF-002: Unicode", () => {
     }
   });
 });
+
+describe("MF-002: U+0000 не сохраняется в JSONB", () => {
+  it("отклоняет NUL в значениях и ключах до канонизации", async () => {
+    for (const value of ["\0", "a\0b"]) {
+      for (const document of [value, [value], { nested: { value } }, { [value]: "ok" }]) {
+        expect(validateManifest(document)).toMatchObject({
+          valid: false,
+          diagnostics: [
+            { code: "MANIFEST_SCHEMA_VIOLATION", pointer: "", params: { keyword: "nul" } },
+          ],
+        });
+        expect(() => canonicalJson(document)).toThrow("U+0000");
+        await expect(manifestHash(document)).rejects.toThrow("U+0000");
+      }
+    }
+  });
+  it("сохраняет буквальный escape и остальные управляющие символы", () => {
+    for (const value of ["\\u0000", "\n\t\b\f\r", "😀"]) {
+      expect(canonicalJson({ [value]: value })).toBe(JSON.stringify({ [value]: value }));
+    }
+  });
+});

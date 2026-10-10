@@ -1,4 +1,5 @@
 import fc from "fast-check";
+import { hasNUL } from "../src/unicode.js";
 import { describe, expect, it } from "vitest";
 import { canonicalJson, manifestHash } from "../src/index.js";
 
@@ -29,6 +30,11 @@ describe("canonicalJson", () => {
   it("свойство: результат — корректный JSON того же значения и не зависит от порядка ключей", () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
+        if (hasNUL(value)) {
+          // MF-002: NUL должен отклоняться, а не исчезать при канонизации.
+          expect(() => canonicalJson(value)).toThrow("U+0000");
+          return;
+        }
         const text = canonicalJson(value);
         expect(JSON.parse(text)).toEqual(JSON.parse(JSON.stringify(value)));
         const shuffled = JSON.parse(JSON.stringify(value), (_k, v: unknown) =>

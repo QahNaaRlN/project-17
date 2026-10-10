@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"unicode/utf16"
-	"unicode/utf8"
 )
 
 // CanonicalJSON — канонический JSON (MF-002), байт в байт как canonicalJson в @cms/manifest:
@@ -17,6 +16,12 @@ import (
 // JSON.stringify. v — результат разбора JSON (map[string]any, []any, string, json.Number или
 // float64, bool, nil).
 func CanonicalJSON(v any) ([]byte, error) {
+	if !validUnicodeValue(v) {
+		return nil, ErrInvalidUnicode
+	}
+	if hasNUL(v) {
+		return nil, ErrNUL
+	}
 	var b bytes.Buffer
 	if err := writeCanonical(&b, v); err != nil {
 		return nil, err
@@ -41,9 +46,6 @@ func writeCanonical(b *bytes.Buffer, v any) error {
 	case bool:
 		b.WriteString(strconv.FormatBool(t))
 	case string:
-		if !utf8.ValidString(t) {
-			return ErrInvalidUnicode
-		}
 		writeString(b, t)
 	case json.Number:
 		f, err := t.Float64()
@@ -67,9 +69,6 @@ func writeCanonical(b *bytes.Buffer, v any) error {
 	case map[string]any:
 		keys := make([]string, 0, len(t))
 		for k := range t {
-			if !utf8.ValidString(k) {
-				return ErrInvalidUnicode
-			}
 			keys = append(keys, k)
 		}
 		slices.SortFunc(keys, compareUTF16)

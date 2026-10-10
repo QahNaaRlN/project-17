@@ -1,0 +1,20 @@
+{
+  "description": "MF-002: U+0000 запрещён в строках manifest для хранения в JSONB",
+  "expect": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "pointer": ""
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0\u0000",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {}
+  }
+}

@@ -124,18 +124,33 @@ CREATE TABLE manifests (
   code_index_key  text,                                      -- ключ в объектном хранилище
   registered_by   uuid NOT NULL REFERENCES actors(id),
   created_at      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (project_id, hash)
+  UNIQUE (project_id, hash),
+  UNIQUE (project_id, id)
 );
-ALTER TABLE environments ADD FOREIGN KEY (active_manifest_id) REFERENCES manifests(id);
+ALTER TABLE environments ADD FOREIGN KEY (project_id, active_manifest_id) REFERENCES manifests(project_id, id);
 
 CREATE TABLE schema_versions (
   project_id   uuid NOT NULL REFERENCES projects(id),
   schema_name  text NOT NULL,
   version      int  NOT NULL,
   body         jsonb NOT NULL,
-  manifest_id  uuid NOT NULL REFERENCES manifests(id),
+  manifest_id  uuid NOT NULL,
   created_at   timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (project_id, schema_name, version)
+  PRIMARY KEY (project_id, schema_name, version),
+  FOREIGN KEY (project_id, manifest_id) REFERENCES manifests(project_id, id)
+);
+
+-- Общий реестр заполняется только при согласованном применении в standard; кандидаты не резервируют версии.
+-- INSERT сериализуется по проекту и допускает только новую версию выше сохранённых.
+-- UPDATE/DELETE manifest, версий standard и снимков preview запрещены триггерами.
+-- Снимки схем preview не занимают версии в общем реестре standard (MF-033, CNT-002).
+-- Один manifest может быть активен в нескольких preview: снимок неизменяем и разделяется по hash.
+CREATE TABLE preview_schema_snapshots (
+  manifest_id uuid NOT NULL REFERENCES manifests(id),
+  schema_name text NOT NULL,
+  version int NOT NULL CHECK (version > 0),
+  body jsonb NOT NULL,
+  PRIMARY KEY (manifest_id, schema_name)
 );
 
 -- Версионируемые объекты -------------------------------------------------
