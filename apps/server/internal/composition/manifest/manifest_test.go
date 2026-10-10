@@ -3,6 +3,7 @@ package manifest_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"math"
 	"slices"
 	"strconv"
@@ -95,6 +96,16 @@ func TestPropertyCanonicalRoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		v := jsonValue(3).Draw(t, "value")
 		first, err := manifest.CanonicalJSON(v)
+		if errors.Is(err, manifest.ErrNUL) {
+			raw, marshalErr := json.Marshal(v)
+			if marshalErr != nil || !bytes.Contains(raw, []byte(`\u0000`)) {
+				t.Fatalf("unexpected NUL error for %#v", v)
+			}
+			if _, parseErr := manifest.ParseJSON(raw); !errors.Is(parseErr, manifest.ErrNUL) {
+				t.Fatalf("parse NUL: %v", parseErr)
+			}
+			return
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

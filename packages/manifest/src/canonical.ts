@@ -17,6 +17,7 @@ export function canonicalJson(value: unknown): string {
 
 function unicodeString(value: string): string {
   if (!validUnicode(value)) throw new TypeError("manifest содержит некорректный Unicode");
+  if (value.includes("\0")) throw new TypeError("manifest содержит запрещённый U+0000");
   return JSON.stringify(value);
 }
 

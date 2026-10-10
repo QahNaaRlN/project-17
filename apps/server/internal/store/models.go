@@ -119,6 +119,17 @@ type IdempotencyKey struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type Manifest struct {
+	ID           uuid.UUID `json:"id"`
+	ProjectID    uuid.UUID `json:"projectId"`
+	Hash         string    `json:"hash"`
+	AppVersion   string    `json:"appVersion"`
+	Body         []byte    `json:"body"`
+	CodeIndexKey *string   `json:"codeIndexKey"`
+	RegisteredBy uuid.UUID `json:"registeredBy"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
 type Object struct {
 	ID            uuid.UUID  `json:"id"`
 	ProjectID     uuid.UUID  `json:"projectId"`
@@ -168,6 +179,13 @@ type Operation struct {
 	UndoOf         *uuid.UUID `json:"undoOf"`
 	Status         string     `json:"status"`
 	CreatedAt      time.Time  `json:"createdAt"`
+}
+
+type PreviewSchemaSnapshot struct {
+	ManifestID uuid.UUID `json:"manifestId"`
+	SchemaName string    `json:"schemaName"`
+	Version    int32     `json:"version"`
+	Body       []byte    `json:"body"`
 }
 
 type Project struct {
@@ -221,4 +239,13 @@ type Route struct {
 	EnvironmentID uuid.UUID `json:"environmentId"`
 	Path          string    `json:"path"`
 	ObjectID      uuid.UUID `json:"objectId"`
+}
+
+type SchemaVersion struct {
+	ProjectID  uuid.UUID `json:"projectId"`
+	SchemaName string    `json:"schemaName"`
+	Version    int32     `json:"version"`
+	Body       []byte    `json:"body"`
+	ManifestID uuid.UUID `json:"manifestId"`
+	CreatedAt  time.Time `json:"createdAt"`
 }

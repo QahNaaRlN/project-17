@@ -1,5 +1,14 @@
 // MF-002: JSON.stringify сохраняет одиночные суррогаты, Go JSON decoder теряет их.
 // Проверяем до валидации структуры и до канонизации, не заменяя исходные символы.
+export function hasNUL(value: unknown): boolean {
+  if (typeof value === "string") return value.includes("\0");
+  if (Array.isArray(value)) return value.some(hasNUL);
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).some(([key, item]) => key.includes("\0") || hasNUL(item));
+  }
+  return false;
+}
+
 export function validUnicode(value: string): boolean {
   return !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value);
 }

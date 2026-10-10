@@ -27,8 +27,8 @@ func TestParseJSONUnicode(t *testing.T) {
 		`"\ud800\udc00"`: `"𐀀"`, `"\udbff\udfff"`: `"􏿿"`,
 		`"\uD83D\uDE00"`: `"😀"`, `"�"`: `"�"`, `"\ufffd"`: `"�"`,
 		`"\\ud800"`: `"\\ud800"`, `""`: `""`, `"abc"`: `"abc"`,
-		`{"😀":["\u0000\n\t\b\f\r\"\\"]}`: `{"😀":["\u0000\n\t\b\f\r\"\\"]}`,
-		`[null,true,1]`:                  `[null,true,1]`,
+		`{"😀":["\n\t\b\f\r\"\\"]}`: `{"😀":["\n\t\b\f\r\"\\"]}`,
+		`[null,true,1]`:            `[null,true,1]`,
 	} {
 		t.Run(raw, func(t *testing.T) {
 			parsed, err := manifest.ParseJSON([]byte(raw))
@@ -98,4 +98,25 @@ func FuzzParseJSONUnicode(f *testing.F) {
 			t.Fatalf("not idempotent: %s / %s (%v)", got, second, err)
 		}
 	})
+}
+
+// MF-002: U+0000 допустим в Unicode, но запрещён контрактом хранения manifest в JSONB.
+func TestNULRejected(t *testing.T) {
+	for _, raw := range []string{`"\u0000"`, `"a\u0000b"`, `{"\u0000":"ok"}`, `{"nested":["\u0000"]}`} {
+		if _, err := manifest.ParseJSON([]byte(raw)); !errors.Is(err, manifest.ErrNUL) {
+			t.Fatalf("parse NUL: %v", err)
+		}
+		result := manifest.ValidateJSON([]byte(raw))
+		if result.Valid || len(result.Diagnostics) != 1 || result.Diagnostics[0].Params["keyword"] != "nul" {
+			t.Fatalf("NUL accepted: %s: %+v", raw, result)
+		}
+	}
+	for _, value := range []any{"\x00", []any{"a\x00b"}, map[string]any{"\x00": "ok"}, map[string]any{"nested": "\x00"}} {
+		if manifest.Validate(value).Valid {
+			t.Fatal("native NUL accepted")
+		}
+		if _, err := manifest.Hash(value); err == nil {
+			t.Fatal("NUL hashed")
+		}
+	}
 }

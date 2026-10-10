@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -13,14 +14,49 @@ import (
 // ErrInvalidUnicode запрещает потерю исходных символов при разборе и хэшировании (MF-002).
 var ErrInvalidUnicode = errors.New("manifest содержит некорректный Unicode")
 
+// ErrNUL отделяет ограничение хранения JSONB от корректности Unicode (MF-002).
+var ErrNUL = errors.New("manifest содержит запрещённый U+0000")
+
+func hasNUL(value any) bool {
+	switch v := value.(type) {
+	case string:
+		return strings.ContainsRune(v, 0)
+	case []any:
+		for _, item := range v {
+			if hasNUL(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, item := range v {
+			if strings.ContainsRune(key, 0) || hasNUL(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func nulResult() Result {
+	return result([]Diagnostic{{Code: CodeSchemaViolation, Severity: "error", Pointer: "",
+		Message: ErrNUL.Error(), Params: map[string]any{"keyword": "nul"}}})
+}
+
 // ParseJSON проверяет Unicode до JSON decoder, который заменяет одиночные суррогаты на U+FFFD.
 // Внешний JSON manifest нужно разбирать этим методом, затем передавать в Validate и Hash.
-// Проверка UTF-8 и пар суррогатов не является проверкой схемы manifest.
+// После разбора запрещает U+0000 для JSONB; проверка структуры manifest выполняется отдельно.
 func ParseJSON(data []byte) (any, error) {
 	if json.Valid(data) && !validJSONUnicode(data) {
 		return nil, ErrInvalidUnicode
 	}
-	return jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if hasNUL(value) {
+		return nil, ErrNUL
+	}
+	return value, nil
 }
 
 // validJSONUnicode вызывается только для синтаксически корректного JSON.
