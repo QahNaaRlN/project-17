@@ -9,6 +9,7 @@ import {
   UNIQUE_TYPES,
 } from "./builtins.js";
 import { DiagnosticCode, pointer, type Diagnostic } from "./diagnostics.js";
+import { hasInvalidUnicode } from "./unicode.js";
 import { manifestSchema } from "./generated/schema.js";
 import type { Component, Fields, Manifest, Type } from "./generated/types.js";
 
@@ -40,6 +41,20 @@ function schemaValidator(): ValidateFunction {
  * Диагностики отсортированы по указателю и коду — так же, как в Go-реализации.
  */
 export function validateManifest(manifest: unknown): ValidationResult {
+  if (hasInvalidUnicode(manifest)) {
+    return {
+      valid: false,
+      diagnostics: [
+        {
+          code: DiagnosticCode.SchemaViolation,
+          severity: "error",
+          pointer: "",
+          message: "manifest содержит некорректный Unicode",
+          params: { keyword: "unicode" },
+        },
+      ],
+    };
+  }
   const validate = schemaValidator();
   let diagnostics: Diagnostic[];
   if (validate(manifest)) {

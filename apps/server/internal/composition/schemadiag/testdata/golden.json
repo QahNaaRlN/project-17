@@ -902,6 +902,39 @@
       }
     }
   ],
+  "manifest/unicode-surrogate-high.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "",
+      "message": "manifest содержит некорректный Unicode",
+      "params": {
+        "keyword": "unicode"
+      }
+    }
+  ],
+  "manifest/unicode-surrogate-low.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "",
+      "message": "manifest содержит некорректный Unicode",
+      "params": {
+        "keyword": "unicode"
+      }
+    }
+  ],
+  "manifest/unicode-surrogate-nested.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "",
+      "message": "manifest содержит некорректный Unicode",
+      "params": {
+        "keyword": "unicode"
+      }
+    }
+  ],
   "manifest/unique-nested.json": [
     {
       "code": "MANIFEST_MODIFIER_INVALID",

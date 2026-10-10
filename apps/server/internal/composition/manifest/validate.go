@@ -44,7 +44,10 @@ type Result struct {
 
 // ValidateJSON разбирает JSON и валидирует manifest (см. Validate).
 func ValidateJSON(data []byte) Result {
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+	doc, err := ParseJSON(data)
+	if errors.Is(err, ErrInvalidUnicode) {
+		return unicodeResult()
+	}
 	if err != nil {
 		return result([]Diagnostic{{Code: CodeSchemaViolation, Severity: "error", Pointer: "",
 			Message: "manifest не является корректным JSON", Params: map[string]any{"error": err.Error()}}})
@@ -57,6 +60,9 @@ func ValidateJSON(data []byte) Result {
 // doc — результат jsonschema.UnmarshalJSON (числа — json.Number). Диагностики отсортированы
 // по указателю (кодовые единицы UTF-16) и коду — как в @cms/manifest.
 func Validate(doc any) Result {
+	if !validUnicodeValue(doc) {
+		return unicodeResult()
+	}
 	var out []Diagnostic
 	if err := compiledSchema().Validate(doc); err != nil {
 		var verr *jsonschema.ValidationError
