@@ -98,8 +98,8 @@ X-CMS-Project: store
 
 | Запрос | Описание |
 |---|---|
-| `GET /api/v1/schemas?environment=` | Схемы активного manifest окружения |
-| `GET /api/v1/manifest?environment=` | Активный manifest |
+| `GET /api/v1/schemas?environment=` | Схемы активного manifest окружения; до первой активации — `409 MANIFEST_NOT_READY` |
+| `GET /api/v1/manifest?environment=` | Активный manifest; до первой активации — `409 MANIFEST_NOT_READY` |
 | `GET /api/v1/objects?kind=&schema=&q=&cursor=` | Поиск объектов (head); `q` — полнотекстовый |
 | `GET /api/v1/objects/{id}?changesetId=` | Объект: head или рабочая версия в CS |
 | `GET /api/v1/objects/{id}/versions` | Список версий |
@@ -218,7 +218,7 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
-| 409 | `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
+| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
 | 413 | `LIMIT_EXCEEDED` |
 | 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |

@@ -30,7 +30,7 @@ CREATE TABLE environments (
   project_id          uuid NOT NULL REFERENCES projects(id),
   name                text NOT NULL,                        -- staging, production, preview/feature-x
   kind                text NOT NULL CHECK (kind IN ('standard', 'preview')),
-  active_manifest_id  uuid,
+  active_manifest_id  uuid,                                  -- NULL до первой активации: MANIFEST_NOT_READY (MF-003)
   app_url             text,                                  -- базовый URL приложения (preview, SSR-проверки)
   expires_at          timestamptz,                           -- для preview
   preview_key         bytea NOT NULL,                        -- ключ подписи preview-токенов (08 API-041), 32 байта
