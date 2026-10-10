@@ -72,13 +72,14 @@ func (q *Queries) ObjectOperations(ctx context.Context, arg ObjectOperationsPara
 }
 
 const rebaseWorkingVersion = `-- name: RebaseWorkingVersion :exec
-UPDATE object_versions SET parent_version_id = $2, body = $3, body_hash = $4
+UPDATE object_versions SET parent_version_id = $2, path = $3, body = $4, body_hash = $5
 WHERE id = $1 AND state = 'working'
 `
 
 type RebaseWorkingVersionParams struct {
 	ID              uuid.UUID  `json:"id"`
 	ParentVersionID *uuid.UUID `json:"parentVersionId"`
+	Path            *string    `json:"path"`
 	Body            []byte     `json:"body"`
 	BodyHash        []byte     `json:"bodyHash"`
 }
@@ -87,6 +88,7 @@ func (q *Queries) RebaseWorkingVersion(ctx context.Context, arg RebaseWorkingVer
 	_, err := q.db.Exec(ctx, rebaseWorkingVersion,
 		arg.ID,
 		arg.ParentVersionID,
+		arg.Path,
 		arg.Body,
 		arg.BodyHash,
 	)

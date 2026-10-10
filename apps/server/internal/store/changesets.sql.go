@@ -106,8 +106,8 @@ func (q *Queries) CreateObject(ctx context.Context, arg CreateObjectParams) (Obj
 }
 
 const createWorkingVersion = `-- name: CreateWorkingVersion :one
-INSERT INTO object_versions (id, project_id, object_id, state, changeset_id, parent_version_id, ir_version, body, body_hash, created_by)
-VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9)
+INSERT INTO object_versions (id, project_id, object_id, state, changeset_id, parent_version_id, ir_version, path, body, body_hash, created_by)
+VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, project_id, object_id, number, state, changeset_id, parent_version_id, schema_version, ir_version, path, body, body_hash, created_by, created_at, committed_at
 `
 
@@ -118,6 +118,7 @@ type CreateWorkingVersionParams struct {
 	ChangesetID     *uuid.UUID `json:"changesetId"`
 	ParentVersionID *uuid.UUID `json:"parentVersionId"`
 	IrVersion       *string    `json:"irVersion"`
+	Path            *string    `json:"path"`
 	Body            []byte     `json:"body"`
 	BodyHash        []byte     `json:"bodyHash"`
 	CreatedBy       uuid.UUID  `json:"createdBy"`
@@ -131,6 +132,7 @@ func (q *Queries) CreateWorkingVersion(ctx context.Context, arg CreateWorkingVer
 		arg.ChangesetID,
 		arg.ParentVersionID,
 		arg.IrVersion,
+		arg.Path,
 		arg.Body,
 		arg.BodyHash,
 		arg.CreatedBy,
@@ -190,7 +192,7 @@ func (q *Queries) GetChangeset(ctx context.Context, arg GetChangesetParams) (Cha
 }
 
 const getChangesetObject = `-- name: GetChangesetObject :one
-SELECT co.changeset_id, co.object_id, co.base_version_id, co.working_version_id, v.body AS working_body
+SELECT co.changeset_id, co.object_id, co.base_version_id, co.working_version_id, v.path AS working_path, v.body AS working_body
 FROM changeset_objects co
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1 AND co.object_id = $2
@@ -206,6 +208,7 @@ type GetChangesetObjectRow struct {
 	ObjectID         uuid.UUID  `json:"objectId"`
 	BaseVersionID    *uuid.UUID `json:"baseVersionId"`
 	WorkingVersionID uuid.UUID  `json:"workingVersionId"`
+	WorkingPath      *string    `json:"workingPath"`
 	WorkingBody      []byte     `json:"workingBody"`
 }
 
@@ -217,13 +220,14 @@ func (q *Queries) GetChangesetObject(ctx context.Context, arg GetChangesetObject
 		&i.ObjectID,
 		&i.BaseVersionID,
 		&i.WorkingVersionID,
+		&i.WorkingPath,
 		&i.WorkingBody,
 	)
 	return i, err
 }
 
 const getHeadDocument = `-- name: GetHeadDocument :one
-SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.body
+SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.path, v.body
 FROM objects o
 JOIN object_versions v ON v.id = o.head_version_id
 WHERE o.id = $1 AND o.project_id = $2 AND o.kind = 'document' AND o.deleted_at IS NULL
@@ -239,6 +243,7 @@ type GetHeadDocumentRow struct {
 	DocKind   *string   `json:"docKind"`
 	VersionID uuid.UUID `json:"versionId"`
 	State     string    `json:"state"`
+	Path      *string   `json:"path"`
 	Body      []byte    `json:"body"`
 }
 
@@ -250,6 +255,7 @@ func (q *Queries) GetHeadDocument(ctx context.Context, arg GetHeadDocumentParams
 		&i.DocKind,
 		&i.VersionID,
 		&i.State,
+		&i.Path,
 		&i.Body,
 	)
 	return i, err
@@ -309,7 +315,7 @@ func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (ObjectVersion, 
 }
 
 const getWorkingDocument = `-- name: GetWorkingDocument :one
-SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.body
+SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.path, v.body
 FROM changeset_objects co
 JOIN objects o ON o.id = co.object_id
 JOIN object_versions v ON v.id = co.working_version_id
@@ -327,6 +333,7 @@ type GetWorkingDocumentRow struct {
 	DocKind   *string   `json:"docKind"`
 	VersionID uuid.UUID `json:"versionId"`
 	State     string    `json:"state"`
+	Path      *string   `json:"path"`
 	Body      []byte    `json:"body"`
 }
 
@@ -338,6 +345,7 @@ func (q *Queries) GetWorkingDocument(ctx context.Context, arg GetWorkingDocument
 		&i.DocKind,
 		&i.VersionID,
 		&i.State,
+		&i.Path,
 		&i.Body,
 	)
 	return i, err
@@ -615,6 +623,27 @@ func (q *Queries) LockChangeset(ctx context.Context, arg LockChangesetParams) (C
 	return i, err
 }
 
+const routeTaken = `-- name: RouteTaken :one
+SELECT id FROM objects
+WHERE project_id = $1 AND id <> $2 AND deleted_at IS NULL AND head_path IS NOT NULL
+  AND route_shape(head_path) = route_shape($3::text)
+LIMIT 1
+`
+
+type RouteTakenParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	ID        uuid.UUID `json:"id"`
+	Path      string    `json:"path"`
+}
+
+// Объект, чей head уже занимает маршрут той же формы (route_shape), кроме данного.
+func (q *Queries) RouteTaken(ctx context.Context, arg RouteTakenParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, routeTaken, arg.ProjectID, arg.ID, arg.Path)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const setChangesetSeq = `-- name: SetChangesetSeq :exec
 UPDATE changesets SET seq = $2, updated_at = now() WHERE id = $1
 `
@@ -644,16 +673,22 @@ func (q *Queries) SetChangesetState(ctx context.Context, arg SetChangesetStatePa
 }
 
 const updateWorkingVersion = `-- name: UpdateWorkingVersion :exec
-UPDATE object_versions SET body = $2, body_hash = $3 WHERE id = $1 AND state = 'working'
+UPDATE object_versions SET path = $2, body = $3, body_hash = $4 WHERE id = $1 AND state = 'working'
 `
 
 type UpdateWorkingVersionParams struct {
 	ID       uuid.UUID `json:"id"`
+	Path     *string   `json:"path"`
 	Body     []byte    `json:"body"`
 	BodyHash []byte    `json:"bodyHash"`
 }
 
 func (q *Queries) UpdateWorkingVersion(ctx context.Context, arg UpdateWorkingVersionParams) error {
-	_, err := q.db.Exec(ctx, updateWorkingVersion, arg.ID, arg.Body, arg.BodyHash)
+	_, err := q.db.Exec(ctx, updateWorkingVersion,
+		arg.ID,
+		arg.Path,
+		arg.Body,
+		arg.BodyHash,
+	)
 	return err
 }

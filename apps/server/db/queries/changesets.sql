@@ -29,12 +29,12 @@ RETURNING *;
 SELECT * FROM objects WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL;
 
 -- name: CreateWorkingVersion :one
-INSERT INTO object_versions (id, project_id, object_id, state, changeset_id, parent_version_id, ir_version, body, body_hash, created_by)
-VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9)
+INSERT INTO object_versions (id, project_id, object_id, state, changeset_id, parent_version_id, ir_version, path, body, body_hash, created_by)
+VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateWorkingVersion :exec
-UPDATE object_versions SET body = $2, body_hash = $3 WHERE id = $1 AND state = 'working';
+UPDATE object_versions SET path = $2, body = $3, body_hash = $4 WHERE id = $1 AND state = 'working';
 
 -- name: GetVersion :one
 SELECT * FROM object_versions WHERE id = $1;
@@ -44,7 +44,7 @@ INSERT INTO changeset_objects (changeset_id, object_id, base_version_id, working
 VALUES ($1, $2, $3, $4);
 
 -- name: GetChangesetObject :one
-SELECT co.*, v.body AS working_body
+SELECT co.*, v.path AS working_path, v.body AS working_body
 FROM changeset_objects co
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1 AND co.object_id = $2;
@@ -74,14 +74,21 @@ ORDER BY o.seq DESC
 LIMIT 1;
 
 -- name: GetHeadDocument :one
-SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.body
+SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.path, v.body
 FROM objects o
 JOIN object_versions v ON v.id = o.head_version_id
 WHERE o.id = $1 AND o.project_id = $2 AND o.kind = 'document' AND o.deleted_at IS NULL;
 
 -- name: GetWorkingDocument :one
-SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.body
+SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.path, v.body
 FROM changeset_objects co
 JOIN objects o ON o.id = co.object_id
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1 AND co.object_id = $2 AND o.project_id = $3 AND o.kind = 'document';
+
+-- name: RouteTaken :one
+-- Объект, чей head уже занимает маршрут той же формы (route_shape), кроме данного.
+SELECT id FROM objects
+WHERE project_id = $1 AND id <> $2 AND deleted_at IS NULL AND head_path IS NOT NULL
+  AND route_shape(head_path) = route_shape(sqlc.arg(path)::text)
+LIMIT 1;

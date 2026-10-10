@@ -287,3 +287,32 @@ func TestSubmitRequiresRebaseWhenHeadMoved(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+// Маршрут — часть содержимого (PUB-004): его смена меняет хэш, к которому привязаны согласования.
+func TestContentHashIncludesRoute(t *testing.T) {
+	e := setup(t)
+	cs, doc := e.Draft(e.Admin, "v1")
+	hash := func() []byte {
+		var h []byte
+		if err := e.Pool.QueryRow(context.Background(), "SELECT content_hash FROM changesets WHERE id = $1", cs).Scan(&h); err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	submit(e, cs, 1)
+	before := hash()
+	e.Must(e.Admin, "reopen-changeset", map[string]any{"changesetId": cs}, nil)
+	if err := e.Apply(e.Admin, cs, 1, doc, cmstest.Op("document.setRoute", map[string]any{"path": "/a"})); err != nil {
+		t.Fatal(err)
+	}
+	submit(e, cs, 2)
+	withRoute := hash()
+	e.Must(e.Admin, "reopen-changeset", map[string]any{"changesetId": cs}, nil)
+	if err := e.Apply(e.Admin, cs, 2, doc, cmstest.Op("document.setRoute", map[string]any{"path": "/b"})); err != nil {
+		t.Fatal(err)
+	}
+	submit(e, cs, 3)
+	if string(before) == string(withRoute) || string(withRoute) == string(hash()) {
+		t.Error("хэш содержимого должен зависеть от маршрута")
+	}
+}

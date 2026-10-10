@@ -59,7 +59,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `GET` | `/api/v1/publications?environment=` | История публикаций |
 | `GET` | `/api/v1/publications/{id}` | Публикация с перемещёнными указателями |
 | `GET` | `/api/v1/documents/{id}?changesetId=` | Документ: рабочая версия в Change Set или head |
-| `GET` | `/api/v1/documents/{id}?environment=` | Опубликованная в окружении версия документа |
+| `GET` | `/api/v1/documents/{id}?environment=` | Опубликованная в окружении версия документа (с маршрутом `path`) |
 
 Пример пакета операций:
 

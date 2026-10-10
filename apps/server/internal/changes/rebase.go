@@ -63,6 +63,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 	type objectPlan struct {
 		id      uuid.UUID
 		head    *uuid.UUID
+		path    *string // маршрут на новой базе с переигранными document.setRoute
 		body    map[string]any
 		working uuid.UUID
 		ops     []opPlan
@@ -98,14 +99,20 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 		if err != nil {
 			return res, err
 		}
-		plan.body = decodeBody(head.Body)
+		plan.body, plan.path = decodeBody(head.Body), head.Path
 		dropped := map[uuid.UUID]bool{}
 		for _, op := range list {
 			choice := resolutions[op.ID]
 			if op.UndoOf != nil && dropped[*op.UndoOf] {
 				choice = ResolutionTheirs // отмена исключённой операции исключается вместе с ней
 			}
-			step, conflict := replay(plan.body, op, choice)
+			var step opPlan
+			var conflict *Conflict
+			if op.Type == DocumentSetRoute {
+				step, conflict = replayRoute(&plan.path, op, choice)
+			} else {
+				step, conflict = replay(plan.body, op, choice)
+			}
 			if step.status == "dropped" {
 				dropped[op.ID] = true
 			}
@@ -167,7 +174,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			continue
 		}
 		raw, hash := encodeBody(p.body)
-		if err := q.RebaseWorkingVersion(ctx, store.RebaseWorkingVersionParams{ID: p.working, ParentVersionID: p.head, Body: raw, BodyHash: hash}); err != nil {
+		if err := q.RebaseWorkingVersion(ctx, store.RebaseWorkingVersionParams{ID: p.working, ParentVersionID: p.head, Path: p.path, Body: raw, BodyHash: hash}); err != nil {
 			return res, err
 		}
 		if err := q.SetChangesetObjectBase(ctx, store.SetChangesetObjectBaseParams{ChangesetID: cs.ID, ObjectID: p.id, BaseVersionID: p.head}); err != nil {
@@ -234,4 +241,31 @@ func decodeNullable(raw []byte) any {
 // sameJSON сравнивает значение с сохранённым JSON без учёта форматирования jsonb.
 func sameJSON(v any, stored []byte) bool {
 	return reflect.DeepEqual(decodeNullable(nullableJSON(v)), decodeNullable(stored))
+}
+
+// replayRoute переигрывает document.setRoute: конфликт, если маршрут на новой базе отличается
+// от «до» операции (кроме случая, когда он уже равен новому значению).
+func replayRoute(path **string, op store.Operation, choice string) (opPlan, *Conflict) {
+	if choice == ResolutionTheirs {
+		return opPlan{op: op, status: "dropped"}, nil
+	}
+	p, _ := decodeRoute(op.Payload) // payload проверен при применении
+	current := map[string]any{"path": *path}
+	empty := sameString(*path, p.Path)
+	if !empty && choice != ResolutionMine && !sameJSON(current, op.Before) {
+		return opPlan{}, &Conflict{OperationID: op.ID, Seq: op.Seq, Type: op.Type, Code: "BEFORE_MISMATCH",
+			Message: "Маршрут изменён после начала работы над Change Set", Expected: decodeNullable(op.Before),
+			Current: decodeNullable(nullableJSON(current))}
+	}
+	r := ops.Result{Before: current, After: map[string]any{"path": p.Path},
+		Inverse: ops.Op{Type: DocumentSetRoute, Payload: mustJSON(routePayload{Path: *path})}}
+	*path = p.Path
+	return opPlan{op: op, status: "applied", replay: &r}, nil
+}
+
+func sameString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

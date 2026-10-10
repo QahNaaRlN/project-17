@@ -106,6 +106,20 @@ func (q *Queries) DeletePublishedPointer(ctx context.Context, arg DeletePublishe
 	return err
 }
 
+const deleteRoute = `-- name: DeleteRoute :exec
+DELETE FROM routes WHERE environment_id = $1 AND object_id = $2
+`
+
+type DeleteRouteParams struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	ObjectID      uuid.UUID `json:"objectId"`
+}
+
+func (q *Queries) DeleteRoute(ctx context.Context, arg DeleteRouteParams) error {
+	_, err := q.db.Exec(ctx, deleteRoute, arg.EnvironmentID, arg.ObjectID)
+	return err
+}
+
 const getEnvironmentByName = `-- name: GetEnvironmentByName :one
 SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at FROM environments WHERE project_id = $1 AND name = $2
 `
@@ -174,7 +188,7 @@ func (q *Queries) GetPublication(ctx context.Context, arg GetPublicationParams) 
 }
 
 const getPublishedDocument = `-- name: GetPublishedDocument :one
-SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.body
+SELECT o.id, o.doc_kind, v.id AS version_id, v.state, v.path, v.body
 FROM published_pointers pp
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id
@@ -193,6 +207,7 @@ type GetPublishedDocumentRow struct {
 	DocKind   *string   `json:"docKind"`
 	VersionID uuid.UUID `json:"versionId"`
 	State     string    `json:"state"`
+	Path      *string   `json:"path"`
 	Body      []byte    `json:"body"`
 }
 
@@ -204,6 +219,7 @@ func (q *Queries) GetPublishedDocument(ctx context.Context, arg GetPublishedDocu
 		&i.DocKind,
 		&i.VersionID,
 		&i.State,
+		&i.Path,
 		&i.Body,
 	)
 	return i, err
@@ -228,6 +244,23 @@ func (q *Queries) GetPublishedPointer(ctx context.Context, arg GetPublishedPoint
 		&i.PublicationID,
 	)
 	return i, err
+}
+
+const insertRoute = `-- name: InsertRoute :exec
+INSERT INTO routes (environment_id, path, object_id)
+SELECT $1, v.path, v.object_id FROM object_versions v
+WHERE v.id = $2 AND v.path IS NOT NULL
+`
+
+type InsertRouteParams struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	VersionID     uuid.UUID `json:"versionId"`
+}
+
+// Маршрут опубликованной версии (если у версии есть путь).
+func (q *Queries) InsertRoute(ctx context.Context, arg InsertRouteParams) error {
+	_, err := q.db.Exec(ctx, insertRoute, arg.EnvironmentID, arg.VersionID)
+	return err
 }
 
 const listPublicationItems = `-- name: ListPublicationItems :many
@@ -316,6 +349,46 @@ func (q *Queries) ListPublications(ctx context.Context, arg ListPublicationsPara
 	return items, nil
 }
 
+const listRoutes = `-- name: ListRoutes :many
+SELECT r.path, r.object_id, pp.version_id
+FROM routes r
+JOIN environments e ON e.id = r.environment_id
+JOIN published_pointers pp ON pp.environment_id = r.environment_id AND pp.object_id = r.object_id
+WHERE e.project_id = $1 AND e.name = $2
+ORDER BY r.path
+`
+
+type ListRoutesParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Name      string    `json:"name"`
+}
+
+type ListRoutesRow struct {
+	Path      string    `json:"path"`
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+func (q *Queries) ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListRoutesRow, error) {
+	rows, err := q.db.Query(ctx, listRoutes, arg.ProjectID, arg.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoutesRow
+	for rows.Next() {
+		var i ListRoutesRow
+		if err := rows.Scan(&i.Path, &i.ObjectID, &i.VersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockObject = `-- name: LockObject :one
 SELECT id, project_id, kind, schema_name, doc_kind, head_version_id, head_path, created_at, deleted_at FROM objects WHERE id = $1 FOR UPDATE
 `
@@ -349,16 +422,19 @@ func (q *Queries) NextVersionNumber(ctx context.Context, objectID uuid.UUID) (in
 }
 
 const setHead = `-- name: SetHead :exec
-UPDATE objects SET head_version_id = $2 WHERE id = $1
+UPDATE objects o SET head_version_id = $1::uuid,
+  head_path = (SELECT v.path FROM object_versions v WHERE v.id = $1::uuid)
+WHERE o.id = $2
 `
 
 type SetHeadParams struct {
-	ID            uuid.UUID  `json:"id"`
-	HeadVersionID *uuid.UUID `json:"headVersionId"`
+	VersionID *uuid.UUID `json:"versionId"`
+	ID        uuid.UUID  `json:"id"`
 }
 
+// Head и маршрут head (из пути версии; NULL — снять).
 func (q *Queries) SetHead(ctx context.Context, arg SetHeadParams) error {
-	_, err := q.db.Exec(ctx, setHead, arg.ID, arg.HeadVersionID)
+	_, err := q.db.Exec(ctx, setHead, arg.VersionID, arg.ID)
 	return err
 }
 
