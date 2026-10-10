@@ -111,6 +111,12 @@ func Register(bus *commandbus.Bus) {
 		Authorize: func(actor auth.Actor, _ changesetRef) error { return nil }, // владение проверяет Handle
 		Handle:    handleReopen,
 	})
+	commandbus.Register(bus, commandbus.Command[rebasePayload, RebaseOutcome]{
+		Name:      "rebase-changeset",
+		Authorize: func(actor auth.Actor, _ rebasePayload) error { return nil }, // владение проверяет Handle
+		Validate:  validateRebase,
+		Handle:    handleRebase,
+	})
 	commandbus.Register(bus, commandbus.Command[ApprovalPolicy, ApprovalPolicy]{
 		Name:     "set-approval-policy",
 		Right:    auth.ProjectAdmin,
@@ -163,60 +169,83 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_SEQ_CONFLICT", "Change Set изменился",
 			fmt.Sprintf("Ожидался seq %d, текущий %d", p.ExpectedSeq, cs.Seq))
 	}
-	if cs.Seq == 0 {
-		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_EMPTY", "Change Set пуст",
-			"Нечего отправлять на проверку: в Change Set нет операций")
+	if cs.HasConflicts {
+		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_HAS_CONFLICTS", "Есть неразрешённые конфликты",
+			"Разрешите конфликты rebase (rebase-changeset с resolutions) перед подачей")
 	}
 	if err := requireNoRebase(ctx, q, cs.ID); err != nil {
 		return Review{}, err
 	}
-
-	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+	objects, err := q.ListChangesetObjects(ctx, cs.ID)
 	if err != nil {
 		return Review{}, err
+	}
+	if len(objects) == 0 {
+		// Операций нет или все исключены при rebase.
+		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_EMPTY", "Change Set пуст",
+			"Нечего отправлять на проверку: в Change Set нет изменённых объектов")
+	}
+	ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID)
+	if err != nil {
+		return Review{}, err
+	}
+	state := "in_review"
+	if failed(ev.checks) {
+		state = "failed"
+	} else if ev.required == 0 {
+		state = "approved"
+	}
+	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: []string{}}); err != nil {
+		return Review{}, err
+	}
+	checks, risk, hash, required := ev.checks, ev.risk, ev.hash, ev.required
+	cs.State, cs.Risk, cs.ContentHash = state, &risk, hash
+	return Review{Changeset: changes.ToChangeset(cs), Risk: &risk, RequiredApprovals: required, Checks: checks}, nil
+}
+
+// evaluation — результат pipeline проверок над текущим содержимым Change Set.
+type evaluation struct {
+	checks   []Check
+	hash     []byte
+	risk     string
+	required int
+}
+
+// evaluate выполняет проверки (§5.1), сохраняет их и вычисляет риск и число согласований.
+func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid.UUID) (evaluation, error) {
+	versions, err := q.ChangesetWorkingVersions(ctx, changesetID)
+	if err != nil {
+		return evaluation{}, err
 	}
 	hash := contentHash(versions)
-	opActors, err := q.ChangesetOperationActors(ctx, cs.ID)
+	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
-		return Review{}, err
+		return evaluation{}, err
 	}
 	checks := []Check{irCheck(versions)}
-	policy, err := policyCheck(ctx, q, actor.ProjectID, opActors)
+	policy, err := policyCheck(ctx, q, projectID, opActors)
 	if err != nil {
-		return Review{}, err
+		return evaluation{}, err
 	}
 	checks = append(checks, policy)
 	for _, c := range checks {
 		if err := q.InsertCheck(ctx, store.InsertCheckParams{
-			ID: uuid.Must(uuid.NewV7()), ChangesetID: cs.ID, ContentHash: hash, Stage: c.Stage,
+			ID: uuid.Must(uuid.NewV7()), ChangesetID: changesetID, ContentHash: hash, Stage: c.Stage,
 			Status: c.Status, Blocking: c.Blocking, Details: c.Details,
 		}); err != nil {
-			return Review{}, err
+			return evaluation{}, err
 		}
 	}
-
 	types := make([]string, len(opActors))
 	for i, a := range opActors {
 		types[i] = a.Type
 	}
 	risk := Risk(types)
-	approvalPolicy, err := LoadApprovalPolicy(ctx, q, actor.ProjectID)
+	approvalPolicy, err := LoadApprovalPolicy(ctx, q, projectID)
 	if err != nil {
-		return Review{}, err
+		return evaluation{}, err
 	}
-	required := approvalPolicy.Required(risk)
-
-	state := "in_review"
-	if failed(checks) {
-		state = "failed"
-	} else if required == 0 {
-		state = "approved"
-	}
-	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &risk, ContentHash: hash, Targets: []string{}}); err != nil {
-		return Review{}, err
-	}
-	cs.State, cs.Risk, cs.ContentHash = state, &risk, hash
-	return Review{Changeset: changes.ToChangeset(cs), Risk: &risk, RequiredApprovals: required, Checks: checks}, nil
+	return evaluation{checks: checks, hash: hash, risk: risk, required: approvalPolicy.Required(risk)}, nil
 }
 
 func failed(checks []Check) bool {
@@ -396,13 +425,9 @@ func handleReopen(ctx context.Context, tx pgx.Tx, actor auth.Actor, p changesetR
 		return Review{}, err
 	}
 	// Правки меняют содержимое — полученные согласования больше не действуют (PUB-004).
-	if err := q.InvalidateApprovals(ctx, cs.ID); err != nil {
+	if err := reopen(ctx, q, &cs); err != nil {
 		return Review{}, err
 	}
-	if err := q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: "open"}); err != nil {
-		return Review{}, err
-	}
-	cs.State = "open"
 	return Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk}, nil
 }
 

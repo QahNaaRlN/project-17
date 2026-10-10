@@ -76,7 +76,7 @@ X-CMS-Project: store
 | `apply-operations` | `changesetId`, `expectedSeq`, `operations[]` (≤ 200) | по каталогу операций |
 | `undo` / `redo` | `changesetId`, `expectedSeq` | автор CS |
 | `import-document` | `changesetId`, `document` (вложенная форма), `path?` | `design.compose` |
-| `rebase-changeset` | `changesetId`, `resolutions?: [{operationId, choice: mine\|theirs}]` | автор CS |
+| `rebase-changeset` | `changesetId`, `expectedSeq`, `resolutions?: [{operationId, choice: mine\|theirs}]` (≤ 1000) | автор CS |
 | `submit-changeset` | `changesetId`, `targets` | автор CS |
 | `reopen-changeset` | `changesetId` | автор CS |
 | `abandon-changeset` | `changesetId` | автор CS, `project.admin` |
@@ -198,7 +198,7 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
-| 409 | `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
+| 409 | `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
 | 413 | `LIMIT_EXCEEDED` |
 | 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |

@@ -169,3 +169,19 @@ func ExpectDBError(t *testing.T, err error) {
 		t.Errorf("ожидалась ошибка БД, получено %v", err)
 	}
 }
+
+// Apply применяет операции к документу doc в Change Set cs при ожидаемом seq.
+func (e *Env) Apply(actor auth.Actor, cs uuid.UUID, seq int, doc uuid.UUID, operations ...map[string]any) error {
+	e.T.Helper()
+	list := make([]any, len(operations))
+	for i, op := range operations {
+		op["target"] = doc
+		list[i] = op
+	}
+	return e.Do(actor, "apply-operations", map[string]any{"changesetId": cs, "expectedSeq": seq, "operations": list}, nil)
+}
+
+// Op — операция над документом для Apply.
+func Op(opType string, payload map[string]any) map[string]any {
+	return map[string]any{"type": opType, "payload": payload}
+}

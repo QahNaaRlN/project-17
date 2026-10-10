@@ -1,0 +1,159 @@
+package workflow
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
+	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/store"
+)
+
+// Resolution — решение автора по конфликту rebase (06 §4.2).
+type Resolution struct {
+	OperationID uuid.UUID `json:"operationId"`
+	Choice      string    `json:"choice"` // mine | theirs
+}
+
+type rebasePayload struct {
+	ChangesetID uuid.UUID    `json:"changesetId"`
+	ExpectedSeq int32        `json:"expectedSeq"`
+	Resolutions []Resolution `json:"resolutions"`
+}
+
+// RebaseOutcome — ответ rebase-changeset.
+type RebaseOutcome struct {
+	changes.RebaseResult
+	Changeset changes.Changeset `json:"changeset"`
+	Checks    []Check           `json:"checks,omitempty"` // проверки повторены для поданного Change Set
+}
+
+// MaxResolutions — предел решений в одной команде.
+const MaxResolutions = 1000
+
+func validateRebase(p rebasePayload) error {
+	if len(p.Resolutions) > MaxResolutions {
+		return commandbus.Validation(map[string]string{"resolutions": fmt.Sprintf("не больше %d", MaxResolutions)})
+	}
+	for i, r := range p.Resolutions {
+		if r.Choice != changes.ResolutionMine && r.Choice != changes.ResolutionTheirs {
+			return commandbus.Validation(map[string]string{fmt.Sprintf("resolutions[%d].choice", i): "mine или theirs"})
+		}
+	}
+	return nil
+}
+
+// handleRebase переносит Change Set на текущий head (06 §4). Без конфликтов поданный
+// Change Set остаётся на проверке: проверки повторяются, согласования переносятся на новое
+// содержимое (CHG-040, кроме риска high). С конфликтами Change Set возвращается в open,
+// согласования сбрасываются (CHG-041).
+func handleRebase(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rebasePayload) (RebaseOutcome, error) {
+	q := store.New(tx)
+	cs, err := changes.Lock(ctx, q, actor.ProjectID, p.ChangesetID)
+	if err != nil {
+		return RebaseOutcome{}, err
+	}
+	if err := changes.RequireOwner(cs, actor); err != nil {
+		return RebaseOutcome{}, err
+	}
+	if err := changes.RequireState(cs, "Rebase", "open", "failed", "changes_requested", "in_review", "approved"); err != nil {
+		return RebaseOutcome{}, err
+	}
+	if cs.Seq != p.ExpectedSeq {
+		return RebaseOutcome{}, commandbus.NewError(http.StatusConflict, "CHANGESET_SEQ_CONFLICT", "Change Set изменился",
+			fmt.Sprintf("Ожидался seq %d, текущий %d", p.ExpectedSeq, cs.Seq))
+	}
+	resolutions := make(map[uuid.UUID]string, len(p.Resolutions))
+	for _, r := range p.Resolutions {
+		resolutions[r.OperationID] = r.Choice
+	}
+	res, err := changes.Rebase(ctx, q, cs, resolutions)
+	if err != nil {
+		return RebaseOutcome{}, err
+	}
+	submitted := cs.State != "open"
+	nothing := len(res.Rebased) == 0 && len(res.Removed) == 0 && len(res.Conflicts) == 0
+
+	switch {
+	case len(res.Conflicts) > 0:
+		cs.HasConflicts = true
+		if submitted {
+			if err := reopen(ctx, q, &cs); err != nil {
+				return RebaseOutcome{}, err
+			}
+		}
+	case nothing || !submitted:
+		cs.HasConflicts = false
+	default:
+		cs.HasConflicts = false
+		objects, err := q.ListChangesetObjects(ctx, cs.ID)
+		if err != nil {
+			return RebaseOutcome{}, err
+		}
+		if len(objects) == 0 {
+			// Все операции исключены — подавать нечего, Change Set возвращается в работу.
+			if err := reopen(ctx, q, &cs); err != nil {
+				return RebaseOutcome{}, err
+			}
+			break
+		}
+		checks, err := reevaluate(ctx, q, actor.ProjectID, &cs)
+		if err != nil {
+			return RebaseOutcome{}, err
+		}
+		return RebaseOutcome{RebaseResult: res, Changeset: changes.ToChangeset(cs), Checks: checks}, nil
+	}
+	return RebaseOutcome{RebaseResult: res, Changeset: changes.ToChangeset(cs)}, nil
+}
+
+// reopen возвращает поданный Change Set в работу со сбросом согласований.
+func reopen(ctx context.Context, q *store.Queries, cs *store.Changeset) error {
+	if err := q.InvalidateApprovals(ctx, cs.ID); err != nil {
+		return err
+	}
+	if err := q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: "open"}); err != nil {
+		return err
+	}
+	cs.State = "open"
+	return nil
+}
+
+// reevaluate повторяет проверки поданного Change Set после rebase и пересчитывает состояние.
+func reevaluate(ctx context.Context, q *store.Queries, projectID uuid.UUID, cs *store.Changeset) ([]Check, error) {
+	ev, err := evaluate(ctx, q, projectID, cs.ID)
+	if err != nil {
+		return nil, err
+	}
+	if ev.risk == RiskHigh {
+		err = q.InvalidateApprovals(ctx, cs.ID)
+	} else {
+		err = q.RebindApprovals(ctx, store.RebindApprovalsParams{ChangesetID: cs.ID, OldHash: cs.ContentHash, NewHash: ev.hash})
+	}
+	if err != nil {
+		return nil, err
+	}
+	count, err := q.CountValidApprovals(ctx, store.CountValidApprovalsParams{ChangesetID: cs.ID, ContentHash: ev.hash})
+	if err != nil {
+		return nil, err
+	}
+	state := cs.State
+	switch {
+	case failed(ev.checks):
+		state = "failed"
+	case state == "changes_requested":
+	case int(count) >= ev.required:
+		state = "approved"
+	default:
+		state = "in_review"
+	}
+	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: cs.Targets}); err != nil {
+		return nil, err
+	}
+	cs.State, cs.Risk, cs.ContentHash = state, &ev.risk, ev.hash
+	return ev.checks, nil
+}

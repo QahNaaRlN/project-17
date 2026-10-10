@@ -1,5 +1,5 @@
 # Образ сервера CMS. Контекст сборки — apps/server.
-FROM golang:1.26-alpine AS build
+FROM mirror.gcr.io/library/golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
 ARG VERSION=dev

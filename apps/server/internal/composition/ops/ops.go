@@ -45,6 +45,10 @@ type Result struct {
 	Before  any // минимальный фрагмент состояния до операции (nil — неприменимо)
 	After   any // минимальный фрагмент после операции
 	Inverse Op  // операция, отменяющая эту
+	// Payload — payload в каноническом виде для журнала, если он отличается от переданного:
+	// у node.insert — поддерево с назначенными ID, чтобы повторное применение (rebase) давало
+	// те же узлы. nil — записывается переданный payload.
+	Payload json.RawMessage
 }
 
 // Error — операция неприменима к документу.
@@ -343,10 +347,15 @@ func applyInsert(doc map[string]any, raw json.RawMessage, gen ir.IDGenerator) (R
 	}
 	rootID := flat["root"].(string)
 	setList(parent, p.Slot, insertAt(list(parent, p.Slot), index, rootID))
+	withIDs, err := ir.ToNested(flat)
+	if err != nil {
+		return Result{}, err
+	}
 
 	return Result{
 		After:   map[string]any{"nodeId": rootID, "nodeIds": ids, "parentId": p.ParentID, "slot": p.Slot, "index": index},
 		Inverse: Op{Type: NodeRemove, Payload: mustRaw(map[string]any{"nodeId": rootID})},
+		Payload: mustRaw(insertPayload{ParentID: p.ParentID, Slot: p.Slot, Index: p.Index, Subtree: withIDs["root"].(map[string]any)}),
 	}, nil
 }
 

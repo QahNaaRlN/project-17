@@ -124,7 +124,7 @@ func setup(t testing.TB) (base, tpl string) {
 
 	serverURL = os.Getenv("CMS_TEST_DATABASE_URL")
 	if serverURL == "" {
-		container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
+		container, err := tcpostgres.Run(ctx, "mirror.gcr.io/library/postgres:16-alpine",
 			tcpostgres.WithDatabase("postgres"), tcpostgres.WithUsername("postgres"), tcpostgres.WithPassword("postgres"),
 			tcpostgres.BasicWaitStrategies())
 		if err != nil {
