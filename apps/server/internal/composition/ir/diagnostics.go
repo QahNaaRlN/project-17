@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/schemadiag"
 )
 
 // Code — код диагностики (02-ir.md §11.2). Совпадает с DiagnosticCode в @cms/ir.
@@ -41,9 +43,7 @@ type Diagnostic struct {
 }
 
 // PointerSegment экранирует сегмент JSON Pointer.
-func PointerSegment(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
-}
+func PointerSegment(s string) string { return schemadiag.PointerSegment(s) }
 
 // Pointer собирает JSON Pointer из сегментов; целые числа — индексы массивов.
 func Pointer(segments ...any) string {

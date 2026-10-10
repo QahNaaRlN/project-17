@@ -1,0 +1,334 @@
+{
+  "description": "minLength больше maxLength",
+  "expect": [
+    {
+      "code": "MANIFEST_RANGE_INVALID",
+      "pointer": "/primitives/PriceTag/props/currency"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "2.14.0",
+      "build": "git:3f2a1c9",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {
+      "sm": 640,
+      "md": 768,
+      "lg": 1024,
+      "xl": 1280
+    },
+    "tokens": {
+      "spacing": {
+        "none": "0",
+        "xs": "4px",
+        "sm": "8px",
+        "md": "16px",
+        "lg": "24px",
+        "xl": "40px",
+        "xxl": "64px"
+      },
+      "colors": {
+        "surface": "#ffffff",
+        "surfaceAccent": "#f4f1ec",
+        "text": "#1c1b1a",
+        "textMuted": "#6b6762",
+        "primary": {
+          "value": "#1f4fd1",
+          "modes": {
+            "dark": "#7aa2ff"
+          }
+        },
+        "onPrimary": "#ffffff"
+      },
+      "radius": {
+        "none": "0",
+        "small": "4px",
+        "full": "9999px"
+      },
+      "typography": {
+        "body": {
+          "fontFamily": "Inter, sans-serif",
+          "fontSize": {
+            "base": "16px"
+          },
+          "lineHeight": "1.5",
+          "fontWeight": 400
+        },
+        "display": {
+          "fontFamily": "Inter, sans-serif",
+          "fontSize": {
+            "base": "36px",
+            "lg": "56px"
+          },
+          "lineHeight": "1.1",
+          "fontWeight": 700,
+          "large": true
+        }
+      },
+      "shadow": {
+        "sm": "0 1px 2px rgba(0,0,0,.1)"
+      },
+      "layer": {
+        "base": 0,
+        "modal": 1000
+      },
+      "transition": {
+        "fast": "120ms ease-out"
+      }
+    },
+    "icons": ["cart", "search", "arrow-right"],
+    "primitives": {
+      "PriceTag": {
+        "group": "Typography",
+        "props": {
+          "amount": {
+            "type": "number",
+            "required": true
+          },
+          "currency": {
+            "type": "string",
+            "default": "RUB",
+            "minLength": 4,
+            "maxLength": 3
+          }
+        }
+      }
+    },
+    "components": {
+      "ProductCard": {
+        "origin": "native",
+        "description": "Карточка товара с ценой и изображением",
+        "category": "Commerce",
+        "container": false,
+        "props": {
+          "product": {
+            "type": "reference",
+            "schema": "Product",
+            "required": true
+          },
+          "variant": {
+            "type": "enum",
+            "values": ["default", "compact"],
+            "default": "default",
+            "responsive": true
+          },
+          "badge": {
+            "type": "text",
+            "content": true,
+            "maxLength": 40
+          },
+          "accent": {
+            "type": "color",
+            "default": "primary"
+          }
+        },
+        "slots": {
+          "footer": {
+            "allowedTypes": ["Button", "Link", "PriceTag"],
+            "max": 2
+          }
+        },
+        "events": {
+          "select": {}
+        },
+        "provides": {
+          "product": {
+            "type": "reference",
+            "schema": "Product"
+          }
+        },
+        "capabilities": ["commerce.product.display"],
+        "since": "2.10.0",
+        "deprecated": null,
+        "sourceRef": {
+          "file": "src/components/ProductCard.tsx",
+          "export": "ProductCard",
+          "line": 12
+        }
+      },
+      "Gallery": {
+        "container": true,
+        "props": {
+          "images": {
+            "type": "list",
+            "of": {
+              "type": "asset",
+              "assetKind": "image"
+            },
+            "max": 12
+          },
+          "focus": {
+            "type": "nodeRef",
+            "nodeType": "Image"
+          }
+        }
+      }
+    },
+    "actions": {
+      "commerce.addToCart": {
+        "description": "Добавить товар в корзину",
+        "args": {
+          "product": {
+            "type": "reference",
+            "schema": "Product",
+            "required": true
+          },
+          "quantity": {
+            "type": "number",
+            "integer": true,
+            "min": 1,
+            "max": 99,
+            "default": 1
+          }
+        },
+        "capabilities": ["commerce.cart.add"],
+        "sourceRef": {
+          "file": "src/cms/actions/cart.ts",
+          "export": "addToCart"
+        }
+      }
+    },
+    "dataSources": {
+      "commerce.products.list": {
+        "description": "Товары коллекции",
+        "params": {
+          "collection": {
+            "type": "string",
+            "required": true
+          },
+          "limit": {
+            "type": "number",
+            "integer": true,
+            "min": 1,
+            "max": 48,
+            "default": 12
+          }
+        },
+        "result": {
+          "type": "list",
+          "of": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "text"
+              },
+              "price": {
+                "type": "number"
+              },
+              "image": {
+                "type": "asset",
+                "assetKind": "image"
+              },
+              "slug": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "paginated": true,
+        "cache": {
+          "ttlSeconds": 60
+        }
+      }
+    },
+    "formatters": {
+      "currency": {
+        "description": "Цена в валюте",
+        "input": ["number"],
+        "args": {
+          "code": {
+            "type": "string",
+            "required": true
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Product": {
+        "version": 3,
+        "title": "Товар",
+        "display": {
+          "titleField": "title",
+          "previewField": "image"
+        },
+        "fields": {
+          "title": {
+            "type": "text",
+            "required": true,
+            "localized": true,
+            "maxLength": 200
+          },
+          "slug": {
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "image": {
+            "type": "asset",
+            "assetKind": "image"
+          },
+          "price": {
+            "type": "number",
+            "min": 0
+          }
+        },
+        "migrateFrom": {
+          "2": [
+            {
+              "op": "rename",
+              "from": "name",
+              "to": "title"
+            },
+            {
+              "op": "localize",
+              "field": "title"
+            }
+          ],
+          "1": [
+            {
+              "op": "mapEnum",
+              "field": "status",
+              "map": {
+                "draft": "hidden",
+                "Готов": "visible"
+              }
+            }
+          ]
+        }
+      },
+      "SiteSettings": {
+        "version": 1,
+        "singleton": true,
+        "fields": {
+          "footerText": {
+            "type": "richText",
+            "localized": true,
+            "blocks": ["paragraph"],
+            "marks": ["bold", "link"]
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "commerce.product.display": {
+        "description": "Отображение карточки товара",
+        "domain": "commerce"
+      },
+      "commerce.cart.add": {
+        "domain": "commerce"
+      }
+    },
+    "codeIndex": {
+      "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "uploaded": true
+    }
+  }
+}

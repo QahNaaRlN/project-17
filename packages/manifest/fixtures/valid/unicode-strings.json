@@ -1,0 +1,17 @@
+{
+  "manifestVersion": "1.0",
+  "app": {
+    "id": "store-web",
+    "version": "1.0.0",
+    "framework": "react",
+    "build": "сборка   «тест» <&> 😀"
+  },
+  "irVersions": ["1.0"],
+  "breakpoints": {},
+  "tokens": {
+    "colors": {
+      "zeta": "#000",
+      "alpha": "#fff"
+    }
+  }
+}

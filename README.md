@@ -10,6 +10,7 @@ CMS нового поколения: контент и визуальная ко
 | Каталог | Содержимое |
 |---|---|
 | `packages/ir` | Формат IR: JSON Schema, типы, валидатор, фикстуры |
+| `packages/manifest` | Формат manifest: JSON Schema, типы, валидатор, канонический хэш, фикстуры |
 | `apps/server` | CMS Core на Go: HTTP API, Command Bus, проекты и окружения, IR ([README](apps/server/README.md)) |
 | `deploy/compose` | Локальное окружение Docker Compose |
 | `docs/spec` | Техническая спецификация |
