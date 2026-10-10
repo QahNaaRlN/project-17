@@ -20,7 +20,9 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
+	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
@@ -34,6 +36,9 @@ type Item struct {
 
 // Publication — публикация в ответах API.
 type Publication struct {
+	ManifestChanged     bool       `json:"manifestChanged"`
+	PreviousManifestID  *uuid.UUID `json:"previousManifestId"`
+	CurrentManifestID   *uuid.UUID `json:"currentManifestId"`
 	ID                  uuid.UUID  `json:"id"`
 	Environment         string     `json:"environment"`
 	Kind                string     `json:"kind"`
@@ -95,6 +100,9 @@ func environment(ctx context.Context, q *store.Queries, projectID uuid.UUID, nam
 
 func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPayload) (Publication, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return Publication{}, err
+	}
 	env, err := environment(ctx, q, actor.ProjectID, p.Environment)
 	if err != nil {
 		return Publication{}, err
@@ -126,14 +134,24 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		return Publication{}, commandbus.NewError(http.StatusConflict, "REBASE_REQUIRED", "Требуется rebase",
 			"Head объектов изменился после начала работы над Change Set").WithParams(map[string]any{"objects": stale})
 	}
+	if cs.Kind == "schema" {
+		if err := commandbus.Require(actor, auth.SchemaApply); err != nil {
+			return Publication{}, err
+		}
+		candidate, err := q.ValidationCandidate(ctx, store.ValidationCandidateParams{ProjectID: actor.ProjectID, ChangesetID: cs.ID})
+		if err != nil {
+			return Publication{}, err
+		}
+		if candidate.EnvironmentID == env.ID && !sameID(candidate.BaseManifestID, env.ActiveManifestID) {
+			return Publication{}, commandbus.NewError(http.StatusConflict, "MANIFEST_BASE_CHANGED", "Исходный manifest изменился", "Нужны новый анализ и согласование")
+		}
+		if err := schemaflow.Verify(ctx, q, actor.ProjectID, cs.ID); err != nil {
+			return Publication{}, err
+		}
+	}
 	check, err := validation.Load(ctx, q, actor.ProjectID, env.Name, &cs.ID)
 	if err != nil {
 		return Publication{}, err
-	}
-	// Candidate activation and schema publication are a separate atomic lifecycle package.
-	// Never publish content under a candidate while leaving the active contract unchanged.
-	if cs.Kind == "schema" || check.Candidate != nil {
-		return Publication{}, commandbus.NewError(http.StatusConflict, "SCHEMA_PUBLICATION_NOT_READY", "Схемная публикация ещё не подключена", "Требуется атомарная активация manifest и схем")
 	}
 	docs := make([]validation.Document, len(versions))
 	for i, v := range versions {
@@ -151,7 +169,11 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		return Publication{}, err
 	}
 
-	if err := workflow.RequireZoneApprovals(ctx, q, cs, env.Name); err != nil {
+	if check.Candidate != nil {
+		if err := workflow.RequireSchemaApprovals(ctx, q, cs); err != nil {
+			return Publication{}, err
+		}
+	} else if err := workflow.RequireZoneApprovals(ctx, q, cs, env.Name); err != nil {
 		return Publication{}, err
 	}
 
@@ -161,6 +183,20 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	})
 	if err != nil {
 		return Publication{}, err
+	}
+	if check.Candidate != nil {
+		if err := schemaflow.StoreVersions(ctx, q, *check.Candidate); err != nil {
+			return Publication{}, err
+		}
+		if _, err := q.SetActiveManifest(ctx, store.SetActiveManifestParams{ProjectID: actor.ProjectID, ID: env.ID, ActiveManifestID: check.ManifestID}); err != nil {
+			return Publication{}, err
+		}
+		if err := q.PublicationManifest(ctx, store.PublicationManifestParams{ID: pub.ID, PreviousManifestID: env.ActiveManifestID, CurrentManifestID: check.ManifestID}); err != nil {
+			return Publication{}, err
+		}
+		pub.ManifestChanged = true
+		pub.PreviousManifestID = env.ActiveManifestID
+		pub.CurrentManifestID = check.ManifestID
 	}
 	items := make([]Item, 0, len(versions))
 	for _, v := range versions {
@@ -187,7 +223,12 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := q.MergeChangeset(ctx, cs.ID); err != nil {
 		return Publication{}, err
 	}
-	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, env.Name, items); err != nil {
+	if check.Candidate != nil {
+		if err := manifestregistry.Refresh(ctx, q, actor.ProjectID, env.Name); err != nil {
+			return Publication{}, err
+		}
+	}
+	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, env.Name, items, pub.ManifestChanged); err != nil {
 		return Publication{}, err
 	}
 	return toPublication(pub, env.Name, items), nil
@@ -237,8 +278,11 @@ func movePointer(ctx context.Context, q *store.Queries, envID, publicationID uui
 
 // enqueuePurge ставит в outbox purge CDN по объектам публикации и таблице маршрутов окружения
 // (06 §7.1 п. 6, PUB-021): задача появится, только если транзакция публикации зафиксирована.
-func enqueuePurge(ctx context.Context, tx pgx.Tx, project, env string, items []Item) error {
+func enqueuePurge(ctx context.Context, tx pgx.Tx, project, env string, items []Item, manifestChanged ...bool) error {
 	keys := []string{jobs.SurrogateKey(project, env, "routes")}
+	if len(manifestChanged) > 0 && manifestChanged[0] {
+		keys = append(keys, jobs.SurrogateKey(project, env, "manifest"))
+	}
 	for _, it := range items {
 		keys = append(keys, jobs.SurrogateKey(project, env, it.ObjectID.String()))
 	}
@@ -293,8 +337,15 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 	if err != nil {
 		return Publication{}, err
 	}
-	if _, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: actor.ProjectID, Name: src.EnvironmentName}); err != nil {
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
 		return Publication{}, err
+	}
+	env, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: actor.ProjectID, Name: src.EnvironmentName})
+	if err != nil {
+		return Publication{}, err
+	}
+	if src.ManifestChanged && !sameID(env.ActiveManifestID, src.CurrentManifestID) {
+		return Publication{}, commandbus.NewError(http.StatusConflict, "ROLLBACK_SUPERSEDED", "Manifest публикации уже перекрыт", "Откатите сначала последующую активацию")
 	}
 	items, err := q.ListPublicationItems(ctx, src.ID) // упорядочены по ID объекта
 	if err != nil {
@@ -331,6 +382,17 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 	if err != nil {
 		return Publication{}, err
 	}
+	if src.ManifestChanged {
+		if _, err := q.SetActiveManifest(ctx, store.SetActiveManifestParams{ProjectID: actor.ProjectID, ID: env.ID, ActiveManifestID: src.PreviousManifestID}); err != nil {
+			return Publication{}, err
+		}
+		if err := q.PublicationManifest(ctx, store.PublicationManifestParams{ID: pub.ID, PreviousManifestID: src.CurrentManifestID, CurrentManifestID: src.PreviousManifestID}); err != nil {
+			return Publication{}, err
+		}
+		pub.ManifestChanged = true
+		pub.PreviousManifestID = src.CurrentManifestID
+		pub.CurrentManifestID = src.PreviousManifestID
+	}
 	// Head сдвигает только publish; promote и rollback его не трогали — и их откат тоже.
 	resetHead := (p.ResetHead == nil || *p.ResetHead) && src.Kind == "publish"
 	out := make([]Item, 0, len(items))
@@ -346,7 +408,23 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 		}
 		out = append(out, back)
 	}
-	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, src.EnvironmentName, out); err != nil {
+	if src.ManifestChanged {
+		c, err := validation.Load(ctx, q, actor.ProjectID, src.EnvironmentName, nil)
+		if err != nil {
+			return Publication{}, err
+		}
+		problems, err := c.CheckPublication(ctx, nil)
+		if err != nil {
+			return Publication{}, err
+		}
+		if err := validation.RequireValid(problems); err != nil {
+			return Publication{}, err
+		}
+		if err := manifestregistry.Refresh(ctx, q, actor.ProjectID, src.EnvironmentName); err != nil {
+			return Publication{}, err
+		}
+	}
+	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, src.EnvironmentName, out, src.ManifestChanged); err != nil {
 		return Publication{}, err
 	}
 	return toPublication(pub, src.EnvironmentName, out), nil
@@ -355,7 +433,7 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 // --- запросы -------------------------------------------------------------------------
 
 func toPublication(p store.Publication, env string, items []Item) Publication {
-	return Publication{ID: p.ID, Environment: env, Kind: p.Kind, ChangesetID: p.ChangesetID,
+	return Publication{ManifestChanged: p.ManifestChanged, PreviousManifestID: p.PreviousManifestID, CurrentManifestID: p.CurrentManifestID, ID: p.ID, Environment: env, Kind: p.Kind, ChangesetID: p.ChangesetID,
 		SourcePublicationID: p.SourcePublicationID, ActorID: p.ActorID, Reason: p.Reason, CreatedAt: p.CreatedAt, Items: items}
 }
 
@@ -377,7 +455,7 @@ func GetPublication(ctx context.Context, q *store.Queries, projectID, id uuid.UU
 	for i, r := range rows {
 		items[i] = Item{ObjectID: r.ObjectID, PreviousVersionID: r.PreviousVersionID, CurrentVersionID: r.CurrentVersionID}
 	}
-	return toPublication(store.Publication{ID: row.ID, Kind: row.Kind, ChangesetID: row.ChangesetID,
+	return toPublication(store.Publication{ManifestChanged: row.ManifestChanged, PreviousManifestID: row.PreviousManifestID, CurrentManifestID: row.CurrentManifestID, ID: row.ID, Kind: row.Kind, ChangesetID: row.ChangesetID,
 		SourcePublicationID: row.SourcePublicationID, ActorID: row.ActorID, Reason: row.Reason, CreatedAt: row.CreatedAt},
 		row.EnvironmentName, items), nil
 }
@@ -390,7 +468,7 @@ func ListPublications(ctx context.Context, q *store.Queries, projectID uuid.UUID
 	}
 	out := make([]Publication, len(rows))
 	for i, r := range rows {
-		out[i] = toPublication(store.Publication{ID: r.ID, Kind: r.Kind, ChangesetID: r.ChangesetID,
+		out[i] = toPublication(store.Publication{ManifestChanged: r.ManifestChanged, PreviousManifestID: r.PreviousManifestID, CurrentManifestID: r.CurrentManifestID, ID: r.ID, Kind: r.Kind, ChangesetID: r.ChangesetID,
 			SourcePublicationID: r.SourcePublicationID, ActorID: r.ActorID, Reason: r.Reason, CreatedAt: r.CreatedAt},
 			r.EnvironmentName, nil)
 	}

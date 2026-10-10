@@ -35,6 +35,9 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 	if err != nil {
 		return Publication{}, err
 	}
+	if src.ManifestChanged {
+		return Publication{}, commandbus.NewError(http.StatusConflict, "PROMOTE_SCHEMA_NOT_SUPPORTED", "Схемная публикация привязана к окружению", "Зарегистрируйте manifest и согласуйте кандидат в целевом окружении")
+	}
 	if src.Kind != "publish" && src.Kind != "promote" {
 		return Publication{}, commandbus.NewError(http.StatusUnprocessableEntity, "PROMOTE_NOT_SUPPORTED", "Публикацию нельзя продвинуть",
 			fmt.Sprintf("Продвигаются публикации видов publish и promote; эта — %s", src.Kind))

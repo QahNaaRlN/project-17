@@ -99,12 +99,13 @@ func (q *Queries) ChangesetBaseMismatches(ctx context.Context, changesetID uuid.
 }
 
 const changesetOperationActors = `-- name: ChangesetOperationActors :many
-SELECT DISTINCT actor_id, type FROM operations WHERE changeset_id = $1 AND status = 'applied'
+SELECT DISTINCT actor_id, type, source FROM operations WHERE changeset_id = $1 AND status = 'applied'
 `
 
 type ChangesetOperationActorsRow struct {
 	ActorID uuid.UUID `json:"actorId"`
 	Type    string    `json:"type"`
+	Source  string    `json:"source"`
 }
 
 func (q *Queries) ChangesetOperationActors(ctx context.Context, changesetID uuid.UUID) ([]ChangesetOperationActorsRow, error) {
@@ -116,7 +117,7 @@ func (q *Queries) ChangesetOperationActors(ctx context.Context, changesetID uuid
 	var items []ChangesetOperationActorsRow
 	for rows.Next() {
 		var i ChangesetOperationActorsRow
-		if err := rows.Scan(&i.ActorID, &i.Type); err != nil {
+		if err := rows.Scan(&i.ActorID, &i.Type, &i.Source); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -85,6 +85,7 @@ X-CMS-Project: store
 | `publish` | `changesetId`, `environment` | `content.publish` (окружение) |
 | `promote` | `publicationId`, `toEnvironment` | `content.publish` (целевое окружение) |
 | `rollback` | `publicationId`, `resetHead?` | `content.publish` (окружение) |
+| `claim-schema-changeset` | `changesetId`, `expectedSeq` | человек с `schema.apply`; открытый кандидат сервиса |
 | `register-manifest` | manifest, `environment`, `codeIndexUploadId?` | `manifest.register` |
 | `create-asset-upload` / `complete-asset-upload` | см. [05-content.md §6](05-content.md#61-загрузка) | `asset.write` |
 | `create-preview-token` | `changesetId?`, `environment` | `content.read` |

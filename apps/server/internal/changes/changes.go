@@ -26,6 +26,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/policydoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -175,6 +176,9 @@ func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.U
 
 // OperationRight — право, необходимое для операции данного типа.
 func OperationRight(opType string) (auth.Right, bool) {
+	if opType == schemaflow.Apply {
+		return auth.SchemaApply, true
+	}
 	if opType == ComponentCertify {
 		return auth.DesignComponentsCertify, true
 	}
@@ -197,10 +201,11 @@ func checkSeq(cs store.Changeset, expected int32) error {
 
 // OperationInput — операция в команде apply-operations.
 type OperationInput struct {
-	ClientOpID *string         `json:"clientOpId"`
-	Type       string          `json:"type"`
-	Target     *uuid.UUID      `json:"target"` // документ; для document.create не задаётся
-	Payload    json.RawMessage `json:"payload"`
+	ClientOpID   *string            `json:"clientOpId"`
+	Type         string             `json:"type"`
+	Target       *uuid.UUID         `json:"-"`
+	SchemaTarget *schemaflow.Target `json:"-"` // документ; для document.create не задаётся
+	Payload      json.RawMessage    `json:"payload"`
 }
 
 type applyPayload struct {
@@ -211,12 +216,13 @@ type applyPayload struct {
 
 // AppliedOperation — запись о применённой операции в ответе.
 type AppliedOperation struct {
-	ID         uuid.UUID `json:"id"`
-	Seq        int32     `json:"seq"`
-	Type       string    `json:"type"`
-	Target     uuid.UUID `json:"target"`
-	ClientOpID *string   `json:"clientOpId,omitempty"`
-	After      any       `json:"after"`
+	ID           uuid.UUID          `json:"id"`
+	Seq          int32              `json:"seq"`
+	Type         string             `json:"type"`
+	Target       uuid.UUID          `json:"-"`
+	SchemaTarget *schemaflow.Target `json:"-"`
+	ClientOpID   *string            `json:"clientOpId,omitempty"`
+	After        any                `json:"after"`
 }
 
 // ApplyResult — ответ apply-operations и undo.
@@ -248,7 +254,11 @@ func validateApply(p applyPayload) error {
 		if _, ok := OperationRight(op.Type); !ok {
 			return commandbus.Validation(map[string]string{field + ".type": "неизвестный тип операции " + op.Type})
 		}
-		if (op.Type == DocumentCreate) != (op.Target == nil) {
+		if op.Type == schemaflow.Apply {
+			if op.Target != nil || op.SchemaTarget == nil || op.SchemaTarget.Kind != "schema" || op.SchemaTarget.SchemaName == "" {
+				return commandbus.Validation(map[string]string{field + ".target": "нужна цель {kind: schema, schemaName}"})
+			}
+		} else if op.SchemaTarget != nil || (op.Type == DocumentCreate) != (op.Target == nil) {
 			return commandbus.Validation(map[string]string{field + ".target": "target обязателен для всех операций, кроме document.create, и запрещён для неё"})
 		}
 		if len(op.Payload) == 0 {
@@ -343,6 +353,7 @@ func (s *session) flush() error {
 
 type recordInput struct {
 	target     uuid.UUID
+	schemaName *string
 	opType     string
 	payload    json.RawMessage
 	before     any
@@ -363,9 +374,13 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 	if in.inverse != nil {
 		inverse = mustJSON(in.inverse)
 	}
+	var target *uuid.UUID
+	if in.schemaName == nil {
+		target = &in.target
+	}
 	row, err := s.q.InsertOperation(s.ctx, store.InsertOperationParams{
 		ID: uuid.Must(uuid.NewV7()), ProjectID: s.actor.ProjectID, ChangesetID: s.cs.ID, Seq: s.cs.Seq,
-		ActorID: s.actor.ID, Source: "api", TargetObjectID: in.target, Type: in.opType, Payload: in.payload,
+		ActorID: s.actor.ID, Source: "api", TargetObjectID: target, TargetSchemaName: in.schemaName, Type: in.opType, Payload: in.payload,
 		Before: nullableJSON(in.before), After: nullableJSON(in.after), Inverse: inverse,
 		Reason: reasonPtr, ClientOpID: in.clientOpID, UndoOf: in.undoOf,
 	})
@@ -376,7 +391,11 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 	if err != nil {
 		return AppliedOperation{}, err
 	}
-	return AppliedOperation{ID: row.ID, Seq: row.Seq, Type: row.Type, Target: in.target, ClientOpID: in.clientOpID, After: in.after}, nil
+	out := AppliedOperation{ID: row.ID, Seq: row.Seq, Type: row.Type, Target: in.target, ClientOpID: in.clientOpID, After: in.after}
+	if in.schemaName != nil {
+		out.SchemaTarget = &schemaflow.Target{Kind: "schema", SchemaName: *in.schemaName}
+	}
+	return out, nil
 }
 
 func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayload) (ApplyResult, error) {
@@ -397,7 +416,9 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 	for i, in := range p.Operations {
 		var rec recordInput
 		var err error
-		if in.Type == DocumentCreate {
+		if in.Type == schemaflow.Apply {
+			rec, err = s.applySchema(in)
+		} else if in.Type == DocumentCreate {
 			rec, err = s.createDocument(in)
 		} else {
 			rec, err = s.applyToDocument(*in.Target, ops.Op{Type: in.Type, Payload: in.Payload})
@@ -583,7 +604,7 @@ func handleUndo(ctx context.Context, tx pgx.Tx, actor auth.Actor, p seqPayload) 
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	if last.Inverse == nil {
+	if last.Inverse == nil || last.TargetObjectID == nil {
 		return ApplyResult{}, commandbus.NewError(http.StatusConflict, "UNDO_NOT_SUPPORTED", "Отмена не поддерживается",
 			fmt.Sprintf("Операцию %s нельзя отменить; закройте Change Set (abandon-changeset)", last.Type)).
 			WithParams(map[string]any{"operationId": last.ID, "type": last.Type})
@@ -593,7 +614,7 @@ func handleUndo(ctx context.Context, tx pgx.Tx, actor auth.Actor, p seqPayload) 
 		return ApplyResult{}, err
 	}
 	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
-	rec, err := s.applyToDocument(last.TargetObjectID, inverse)
+	rec, err := s.applyToDocument(*last.TargetObjectID, inverse)
 	if err != nil {
 		return ApplyResult{}, fmt.Errorf("undo %s: %w", last.ID, err)
 	}

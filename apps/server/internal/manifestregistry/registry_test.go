@@ -266,6 +266,10 @@ func TestDraftAttentionPublicationAndRollback(t *testing.T) {
 	e.Must(e.Admin, "publish", map[string]any{"changesetId": cs, "environment": "staging"}, nil)
 	before := active(e, "staging")
 	n := count(e, "manifests")
+	withSchema := strings.TrimSuffix(base, "}") + `,"schemas":{"Product":{"version":1,"fields":{"title":{"type":"text"}}}}}`
+	if cmstest.Code(e.Do(e.Admin, "register-manifest", payload(withSchema, "staging"), nil)) != "MANIFEST_BREAKING_IN_USE" {
+		t.Fatal("schema candidate bypassed application contract removal")
+	}
 	code := cmstest.Code(e.Do(e.Admin, "register-manifest", payload(base, "staging"), nil))
 	if code != "MANIFEST_BREAKING_IN_USE" || count(e, "manifests") != n || active(e, "staging").ManifestHash != before.ManifestHash {
 		t.Fatal(code)

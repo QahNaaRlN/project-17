@@ -23,7 +23,7 @@ WHERE co.changeset_id = $1
 ORDER BY co.object_id;
 
 -- name: ChangesetOperationActors :many
-SELECT DISTINCT actor_id, type FROM operations WHERE changeset_id = $1 AND status = 'applied';
+SELECT DISTINCT actor_id, type, source FROM operations WHERE changeset_id = $1 AND status = 'applied';
 
 -- name: ChangesetAuthors :many
 -- UNION убирает повторы; «DISTINCT on_behalf_of» парсер принял бы за DISTINCT ON.
