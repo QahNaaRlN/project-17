@@ -1,0 +1,65 @@
+{
+  "manifestVersion": "1.0",
+  "app": {
+    "id": "store-web",
+    "version": "1.0.0",
+    "framework": "react"
+  },
+  "irVersions": ["1.0"],
+  "breakpoints": {},
+  "tokens": {
+    "colors": {
+      "brand": "#000000"
+    }
+  },
+  "components": {
+    "Card": {
+      "container": true,
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": ["a", "b"]
+        },
+        "accent": {
+          "type": "color"
+        },
+        "target": {
+          "type": "nodeRef"
+        },
+        "count": {
+          "type": "number",
+          "integer": true
+        },
+        "ratio": {
+          "type": "number",
+          "min": 0,
+          "default": 1.5
+        },
+        "scale": {
+          "type": "number",
+          "max": 10
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 10,
+          "default": "x"
+        },
+        "items": {
+          "type": "list",
+          "of": {
+            "type": "string"
+          },
+          "min": 1
+        }
+      },
+      "slots": {
+        "body": {
+          "min": 1
+        },
+        "aside": {
+          "max": 2
+        }
+      }
+    }
+  }
+}

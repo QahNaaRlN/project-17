@@ -20,5 +20,6 @@
 
 ## Правила
 
-- Один файл — одно нарушение. Имя файла описывает нарушение в kebab-case.
+- Один файл — одно правило (нарушение может встречаться в нескольких местах). Имя файла описывает нарушение в kebab-case.
 - Новая проверка добавляется вместе с фикстурами.
+- Полный результат валидации (тексты, params, порядок, отсутствие лишних диагностик) по всем invalid-фикстурам фиксируют снимки: `packages/manifest/test/__snapshots__/golden.json` (TS) и `apps/server/internal/composition/schemadiag/testdata/golden.json` (Go). После изменения фикстур или сообщений снимки обновляются командами `pnpm vitest run -u` и `go test ./internal/composition/schemadiag -run TestGolden -update`. Семантические диагностики в снимках TS и Go совпадают полностью; тексты `MANIFEST_SCHEMA_VIOLATION` различаются — их дают разные библиотеки JSON Schema.

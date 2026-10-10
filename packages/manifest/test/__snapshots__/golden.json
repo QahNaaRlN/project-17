@@ -1,0 +1,507 @@
+{
+  "action-name-reserved.json": [
+    {
+      "code": "MANIFEST_NAME_RESERVED",
+      "severity": "error",
+      "pointer": "/actions/data.loadMore",
+      "message": "имя data.loadMore занято встроенным действием",
+      "params": {
+        "name": "data.loadMore"
+      }
+    }
+  ],
+  "capability-undeclared-action.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_CAPABILITY",
+      "severity": "error",
+      "pointer": "/actions/shop.buy/capabilities/0",
+      "message": "capability shop.pay не объявлена в capabilities",
+      "params": {
+        "capability": "shop.pay"
+      }
+    },
+    {
+      "code": "MANIFEST_UNKNOWN_CAPABILITY",
+      "severity": "error",
+      "pointer": "/dataSources/shop.items/capabilities/0",
+      "message": "capability shop.read не объявлена в capabilities",
+      "params": {
+        "capability": "shop.read"
+      }
+    }
+  ],
+  "capability-undeclared.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_CAPABILITY",
+      "severity": "error",
+      "pointer": "/components/ProductCard/capabilities/0",
+      "message": "capability commerce.wishlist не объявлена в capabilities",
+      "params": {
+        "capability": "commerce.wishlist"
+      }
+    }
+  ],
+  "color-default-unknown.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/accent/default",
+      "message": "цветового токена brand нет в tokens.colors"
+    }
+  ],
+  "component-also-primitive.json": [
+    {
+      "code": "MANIFEST_NAME_DUPLICATE",
+      "severity": "error",
+      "pointer": "/components/PriceTag",
+      "message": "PriceTag объявлен и как примитив, и как компонент",
+      "params": {
+        "name": "PriceTag"
+      }
+    }
+  ],
+  "content-on-number.json": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/primitives/PriceTag/props/amount/content",
+      "message": "content неприменим к типу number"
+    }
+  ],
+  "display-unknown-field.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_FIELD",
+      "severity": "error",
+      "pointer": "/schemas/Product/display/previewField",
+      "message": "поля cover нет в схеме",
+      "params": {
+        "field": "cover"
+      }
+    }
+  ],
+  "enum-default-not-in-values.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/variant/default",
+      "message": "значение по умолчанию wide не входит в values"
+    }
+  ],
+  "integer-default-fractional.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/actions/commerce.addToCart/args/quantity/default",
+      "message": "значение по умолчанию вне допустимого диапазона"
+    }
+  ],
+  "ir-version-unsupported.json": [
+    {
+      "code": "MANIFEST_IR_VERSION_UNSUPPORTED",
+      "severity": "error",
+      "pointer": "/irVersions",
+      "message": "manifest не поддерживает ни одну версию IR сервера (1.0)"
+    }
+  ],
+  "list-range-inverted.json": [
+    {
+      "code": "MANIFEST_RANGE_INVALID",
+      "severity": "error",
+      "pointer": "/components/Gallery/props/images",
+      "message": "минимум 20 больше максимума 12",
+      "params": {
+        "min": 20,
+        "max": 12
+      }
+    }
+  ],
+  "localized-on-prop.json": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/badge/localized",
+      "message": "localized допустим только у полей схем контента"
+    }
+  ],
+  "localized-outside-schemas.json": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/actions/shop.buy/args/id/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/Card/events/select/payload/id/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/Card/props/tags/of/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/components/Card/provides/item/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/dataSources/shop.items/params/q/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/dataSources/shop.items/result/localized",
+      "message": "localized допустим только у полей схем контента"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/formatters/money/args/code/localized",
+      "message": "localized допустим только у полей схем контента"
+    }
+  ],
+  "migration-from-future.json": [
+    {
+      "code": "MANIFEST_MIGRATION_INVALID",
+      "severity": "error",
+      "pointer": "/schemas/Product/migrateFrom/3",
+      "message": "миграция с версии 3 должна быть с версии меньше текущей 3",
+      "params": {
+        "from": 3,
+        "version": 3
+      }
+    }
+  ],
+  "noderef-unknown-type.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_TYPE",
+      "severity": "error",
+      "pointer": "/components/Gallery/props/focus/nodeType",
+      "message": "тип узла Thumb не объявлен",
+      "params": {
+        "type": "Thumb"
+      }
+    }
+  ],
+  "number-default-out-of-range.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/actions/commerce.addToCart/args/quantity/default",
+      "message": "значение по умолчанию вне допустимого диапазона"
+    }
+  ],
+  "number-range-inverted.json": [
+    {
+      "code": "MANIFEST_RANGE_INVALID",
+      "severity": "error",
+      "pointer": "/dataSources/commerce.products.list/params/limit",
+      "message": "минимум 50 больше максимума 48",
+      "params": {
+        "min": 50,
+        "max": 48
+      }
+    },
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/dataSources/commerce.products.list/params/limit/default",
+      "message": "значение по умолчанию вне допустимого диапазона"
+    }
+  ],
+  "primitive-name-reserved.json": [
+    {
+      "code": "MANIFEST_NAME_RESERVED",
+      "severity": "error",
+      "pointer": "/components/Image",
+      "message": "имя Image занято встроенным примитивом",
+      "params": {
+        "name": "Image"
+      }
+    }
+  ],
+  "reference-unknown-schema.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_SCHEMA",
+      "severity": "error",
+      "pointer": "/actions/commerce.addToCart/args/product/schema",
+      "message": "схема Sku не объявлена в schemas",
+      "params": {
+        "schema": "Sku"
+      }
+    }
+  ],
+  "schema-bad-action-name.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/actions/addToCart",
+      "message": "имя поля не соответствует схеме",
+      "params": {
+        "keyword": "propertyNames",
+        "propertyName": "addToCart"
+      }
+    }
+  ],
+  "schema-bad-length.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/tokens/spacing/md",
+      "message": "должно соответствовать образцу \"^(0|-?[0-9]+(\\.[0-9]+)?(px|rem|em|%|vw|vh|ch))$\"",
+      "params": {
+        "keyword": "pattern",
+        "pattern": "^(0|-?[0-9]+(\\.[0-9]+)?(px|rem|em|%|vw|vh|ch))$"
+      }
+    }
+  ],
+  "schema-bad-migration-op.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/schemas/Product/migrateFrom/2/0/op",
+      "message": "значение поля \"op\" должно быть в одной из oneOf схем ",
+      "params": {
+        "keyword": "discriminator",
+        "error": "mapping",
+        "tag": "op",
+        "tagValue": "split"
+      }
+    }
+  ],
+  "schema-bad-schema-name.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/schemas/product",
+      "message": "имя поля не соответствует схеме",
+      "params": {
+        "keyword": "propertyNames",
+        "propertyName": "product"
+      }
+    }
+  ],
+  "schema-bad-token-name.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/tokens/spacing/2xl",
+      "message": "имя поля не соответствует схеме",
+      "params": {
+        "keyword": "propertyNames",
+        "propertyName": "2xl"
+      }
+    }
+  ],
+  "schema-color-bad-value.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/tokens/colors/brand/value",
+      "message": "должно быть string",
+      "params": {
+        "keyword": "type",
+        "type": "string"
+      }
+    }
+  ],
+  "schema-color-not-string.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/tokens/colors/brand",
+      "message": "должно быть string",
+      "params": {
+        "keyword": "type",
+        "type": "string"
+      }
+    }
+  ],
+  "schema-deprecated-empty.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/components/Card/deprecated",
+      "message": "должно иметь обязательное поле since",
+      "params": {
+        "keyword": "required",
+        "missingProperty": "since"
+      }
+    }
+  ],
+  "schema-field-reserved.json": [
+    {
+      "code": "MANIFEST_FIELD_RESERVED",
+      "severity": "error",
+      "pointer": "/schemas/Product/fields/createdAt",
+      "message": "имя поля createdAt зарезервировано (CNT-001)",
+      "params": {
+        "field": "createdAt"
+      }
+    }
+  ],
+  "schema-missing-app.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "",
+      "message": "должно иметь обязательное поле app",
+      "params": {
+        "keyword": "required",
+        "missingProperty": "app"
+      }
+    }
+  ],
+  "schema-two-errors.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/breakpoints/md",
+      "message": "должно быть >= 1",
+      "params": {
+        "keyword": "minimum",
+        "comparison": ">=",
+        "limit": 1
+      }
+    },
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/tokens/spacing/md",
+      "message": "должно соответствовать образцу \"^(0|-?[0-9]+(\\.[0-9]+)?(px|rem|em|%|vw|vh|ch))$\"",
+      "params": {
+        "keyword": "pattern",
+        "pattern": "^(0|-?[0-9]+(\\.[0-9]+)?(px|rem|em|%|vw|vh|ch))$"
+      }
+    }
+  ],
+  "schema-unknown-modifier.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/badge/placeholder",
+      "message": "не должно иметь непроверенных полей",
+      "params": {
+        "keyword": "unevaluatedProperties",
+        "unevaluatedProperty": "placeholder"
+      }
+    }
+  ],
+  "schema-unknown-section.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/extras",
+      "message": "не должно иметь дополнительных полей",
+      "params": {
+        "keyword": "additionalProperties",
+        "additionalProperty": "extras"
+      }
+    }
+  ],
+  "schema-unknown-type.json": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/badge/type",
+      "message": "значение поля \"type\" должно быть в одной из oneOf схем ",
+      "params": {
+        "keyword": "discriminator",
+        "error": "mapping",
+        "tag": "type",
+        "tagValue": "html"
+      }
+    }
+  ],
+  "slot-range-inverted.json": [
+    {
+      "code": "MANIFEST_RANGE_INVALID",
+      "severity": "error",
+      "pointer": "/components/ProductCard/slots/footer",
+      "message": "минимум 3 больше максимума 2",
+      "params": {
+        "min": 3,
+        "max": 2
+      }
+    }
+  ],
+  "slot-unknown-type.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_TYPE",
+      "severity": "error",
+      "pointer": "/components/ProductCard/slots/footer/allowedTypes/1",
+      "message": "тип узла Badge не объявлен",
+      "params": {
+        "type": "Badge"
+      }
+    }
+  ],
+  "string-default-too-short.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/primitives/PriceTag/props/currency/default",
+      "message": "значение по умолчанию не укладывается в ограничения длины"
+    }
+  ],
+  "string-length-inverted.json": [
+    {
+      "code": "MANIFEST_RANGE_INVALID",
+      "severity": "error",
+      "pointer": "/primitives/PriceTag/props/currency",
+      "message": "минимум 4 больше максимума 3",
+      "params": {
+        "min": 4,
+        "max": 3
+      }
+    },
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/primitives/PriceTag/props/currency/default",
+      "message": "значение по умолчанию не укладывается в ограничения длины"
+    }
+  ],
+  "text-default-too-long.json": [
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "severity": "error",
+      "pointer": "/components/ProductCard/props/badge/default",
+      "message": "значение по умолчанию длиннее maxLength"
+    }
+  ],
+  "typography-unknown-breakpoint.json": [
+    {
+      "code": "MANIFEST_UNKNOWN_BREAKPOINT",
+      "severity": "error",
+      "pointer": "/tokens/typography/display/fontSize/xxl",
+      "message": "breakpoint xxl не объявлен в breakpoints",
+      "params": {
+        "breakpoint": "xxl"
+      }
+    }
+  ],
+  "unique-nested.json": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/dataSources/commerce.products.list/result/of/fields/slug/unique",
+      "message": "unique допустим только у полей схем контента типов string, text, number"
+    }
+  ],
+  "unique-on-asset.json": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "severity": "error",
+      "pointer": "/schemas/Product/fields/image/unique",
+      "message": "unique допустим только у полей схем контента типов string, text, number"
+    }
+  ]
+}

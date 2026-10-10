@@ -1,0 +1,108 @@
+{
+  "description": "localized вне полей схем контента: аргументы, параметры, результат, payload, provides, элемент списка",
+  "expect": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/actions/shop.buy/args/id/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/components/Card/events/select/payload/id/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/components/Card/props/tags/of/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/components/Card/provides/item/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/dataSources/shop.items/params/q/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/dataSources/shop.items/result/localized"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/formatters/money/args/code/localized"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {},
+    "components": {
+      "Card": {
+        "events": {
+          "select": {
+            "payload": {
+              "id": {
+                "type": "string",
+                "localized": true
+              }
+            }
+          }
+        },
+        "provides": {
+          "item": {
+            "type": "string",
+            "localized": true
+          }
+        },
+        "props": {
+          "tags": {
+            "type": "list",
+            "of": {
+              "type": "string",
+              "localized": true
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "shop.buy": {
+        "args": {
+          "id": {
+            "type": "string",
+            "localized": true
+          }
+        }
+      }
+    },
+    "dataSources": {
+      "shop.items": {
+        "params": {
+          "q": {
+            "type": "string",
+            "localized": true
+          }
+        },
+        "result": {
+          "type": "string",
+          "localized": true
+        }
+      }
+    },
+    "formatters": {
+      "money": {
+        "input": ["number"],
+        "args": {
+          "code": {
+            "type": "string",
+            "localized": true
+          }
+        }
+      }
+    }
+  }
+}

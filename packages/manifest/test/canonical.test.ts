@@ -15,6 +15,13 @@ describe("canonicalJson", () => {
     expect(canonicalJson(0.1)).toBe("0.1");
   });
 
+  it("уже упорядоченные и обратные ключи дают один порядок", () => {
+    const keys = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+    const sorted = `{${keys.map((k) => `"${k}":0`).join(",")}}`;
+    expect(canonicalJson(Object.fromEntries(keys.map((k) => [k, 0])))).toBe(sorted);
+    expect(canonicalJson(Object.fromEntries([...keys].reverse().map((k) => [k, 0])))).toBe(sorted);
+  });
+
   it("порядок ключей по кодовым единицам UTF-16", () => {
     expect(canonicalJson({ "￿": 1, "😀": 2, b: 3 })).toBe('{"b":3,"😀":2,"￿":1}');
   });

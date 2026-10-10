@@ -24,8 +24,8 @@ type Error struct {
 }
 
 // Collect сводит дерево ошибок к одной, самой конкретной ошибке на место в документе и
-// убирает расплывчатые ошибки мест, у потомков которых есть свои ошибки. Порядок —
-// порядок обхода дерева ошибок.
+// убирает расплывчатые ошибки мест, у потомков которых есть свои ошибки. Ошибки
+// упорядочены по pointer: порядок обхода дерева в jsonschema зависит от итерации map.
 func Collect(instance any, root *jsonschema.ValidationError) []Error {
 	var leaves []schemaError
 	collectLeaves(instance, nil, root, &leaves)
@@ -51,6 +51,7 @@ func Collect(instance any, root *jsonschema.ValidationError) []Error {
 		return false
 	}
 
+	sort.Strings(order)
 	var out []Error
 	for _, ptr := range order {
 		e := byPointer[ptr]

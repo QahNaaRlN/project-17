@@ -122,8 +122,9 @@ function errorPointer(error: ErrorObject): string {
 
 // --- Семантика ----------------------------------------------------------------
 
-function sortedEntries<T>(record: Record<string, T> | undefined): [string, T][] {
-  return Object.entries(record ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+// Порядок обхода не важен: диагностики сортируются в конце validateManifest.
+function entries<T>(record: Record<string, T> | undefined): [string, T][] {
+  return Object.entries(record ?? {});
 }
 
 class Checker {
@@ -162,8 +163,8 @@ class Checker {
         `manifest не поддерживает ни одну версию IR сервера (${SUPPORTED_IR_VERSIONS.join(", ")})`,
       );
     }
-    for (const [name, typo] of sortedEntries(m.tokens.typography)) {
-      for (const [bp] of sortedEntries(typo.fontSize)) {
+    for (const [name, typo] of entries(m.tokens.typography)) {
+      for (const [bp] of entries(typo.fontSize)) {
         if (bp !== "base" && !(bp in m.breakpoints)) {
           this.add(
             DiagnosticCode.UnknownBreakpoint,
@@ -178,7 +179,7 @@ class Checker {
       ["primitives", m.primitives],
       ["components", m.components],
     ] as const) {
-      for (const [name, component] of sortedEntries(record)) {
+      for (const [name, component] of entries(record)) {
         const ptr = pointer(section, name);
         if ((BUILTIN_PRIMITIVES as readonly string[]).includes(name)) {
           this.add(DiagnosticCode.NameReserved, ptr, `имя ${name} занято встроенным примитивом`, {
@@ -196,7 +197,7 @@ class Checker {
         this.component(ptr, component);
       }
     }
-    for (const [name, action] of sortedEntries(m.actions)) {
+    for (const [name, action] of entries(m.actions)) {
       const ptr = pointer("actions", name);
       if ((BUILTIN_ACTIONS as readonly string[]).includes(name)) {
         this.add(DiagnosticCode.NameReserved, ptr, `имя ${name} занято встроенным действием`, {
@@ -206,18 +207,18 @@ class Checker {
       this.fields(ptr + "/args", action.args, false);
       this.capabilityRefs(ptr, action.capabilities);
     }
-    for (const [name, source] of sortedEntries(m.dataSources)) {
+    for (const [name, source] of entries(m.dataSources)) {
       const ptr = pointer("dataSources", name);
       this.fields(ptr + "/params", source.params, false);
       this.type(ptr + "/result", source.result, false);
       this.capabilityRefs(ptr, source.capabilities);
     }
-    for (const [name, formatter] of sortedEntries(m.formatters)) {
+    for (const [name, formatter] of entries(m.formatters)) {
       this.fields(pointer("formatters", name) + "/args", formatter.args, false);
     }
-    for (const [name, schema] of sortedEntries(m.schemas)) {
+    for (const [name, schema] of entries(m.schemas)) {
       const ptr = pointer("schemas", name);
-      for (const [field] of sortedEntries(schema.fields)) {
+      for (const [field] of entries(schema.fields)) {
         if ((RESERVED_FIELDS as readonly string[]).includes(field)) {
           this.add(
             DiagnosticCode.FieldReserved,
@@ -239,7 +240,7 @@ class Checker {
           );
         }
       }
-      for (const [from] of sortedEntries(schema.migrateFrom)) {
+      for (const [from] of entries(schema.migrateFrom)) {
         if (Number(from) >= schema.version) {
           this.add(
             DiagnosticCode.MigrationInvalid,
@@ -255,7 +256,7 @@ class Checker {
 
   private component(ptr: string, c: Component) {
     this.fields(ptr + "/props", c.props, false);
-    for (const [name, slot] of sortedEntries(c.slots)) {
+    for (const [name, slot] of entries(c.slots)) {
       const slotPtr = `${ptr}/slots${pointer(name)}`;
       slot.allowedTypes?.forEach((t, i) => {
         if (!this.types.has(t)) {
@@ -269,7 +270,7 @@ class Checker {
       });
       this.range(slotPtr, slot.min, slot.max);
     }
-    for (const [name, event] of sortedEntries(c.events)) {
+    for (const [name, event] of entries(c.events)) {
       this.fields(`${ptr}/events${pointer(name)}/payload`, event.payload, false);
     }
     this.fields(ptr + "/provides", c.provides, false);
@@ -290,7 +291,7 @@ class Checker {
   }
 
   private fields(ptr: string, fields: Fields | undefined, schemaField: boolean) {
-    for (const [name, type] of sortedEntries(fields)) {
+    for (const [name, type] of entries(fields)) {
       this.type(ptr + pointer(name), type, schemaField);
     }
   }

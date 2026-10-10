@@ -1,0 +1,30 @@
+{
+  "description": "Две независимые ошибки схемы — обе в результате",
+  "expect": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "pointer": "/breakpoints/md"
+    },
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "pointer": "/tokens/spacing/md"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {
+      "md": 0
+    },
+    "tokens": {
+      "spacing": {
+        "md": "16"
+      }
+    }
+  }
+}

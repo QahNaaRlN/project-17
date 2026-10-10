@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DiagnosticCode, validateManifest } from "../src/index.js";
+import { pointer } from "../src/diagnostics.js";
 
 const store = JSON.parse(
   readFileSync(fileURLToPath(new URL("../fixtures/valid/store.json", import.meta.url)), "utf8"),
@@ -125,5 +126,11 @@ describe("validateManifest", () => {
       [DiagnosticCode.UnknownSchema, "/components/ProductCard/events/select/payload/item/schema"],
       [DiagnosticCode.DefaultInvalid, "/components/ProductCard/provides/extra/default"],
     ]);
+  });
+});
+
+describe("pointer", () => {
+  it("экранирует ~ и / (RFC 6901)", () => {
+    expect(pointer("a~b/c", 0)).toBe("/a~0b~1c/0");
   });
 });
