@@ -15,6 +15,12 @@ import (
 
 var uuid = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+// ValidateValue checks a literal against a manifest field contract in its document.
+func ValidateValue(document, app, schema, value any) bool {
+	c := checker{doc: asObject(document), app: asObject(app)}
+	return c.value(asObject(schema), value, 0)
+}
+
 func numeric(v any) (float64, bool) {
 	switch x := v.(type) {
 	case json.Number:
@@ -143,7 +149,12 @@ func (c *checker) link(v any) bool {
 	obj := asObject(v)
 	switch obj["kind"] {
 	case "url":
-		return c.value(object{"type": "url", "required": true}, obj["url"], 0)
+		s, ok := obj["url"].(string)
+		if !ok {
+			return false
+		}
+		u, err := url.Parse(s)
+		return err == nil && ((strings.HasPrefix(s, "/") && u.Scheme == "") || (u.IsAbs() && slices.Contains([]string{"http", "https", "mailto", "tel"}, u.Scheme)))
 	case "page":
 		id, _ := obj["page"].(string)
 		return uuid.MatchString(id)
