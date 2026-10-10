@@ -1,0 +1,6 @@
+{
+  "minimal.json": "sha256:b1145213fbae38c49a5f3fbf1247abc522591e58a2c5b5f892ab57e8fb81bfdf",
+  "optional-modifiers.json": "sha256:e7d25439c0afac118ca9f2c31d6e193f35428722a86052a8f670332fe4511ce2",
+  "store.json": "sha256:b5afb01d335a53bf67b81ac2b14444e1d72758939c142da4adc17404e0fb154c",
+  "unicode-strings.json": "sha256:8a114f491000afd7b29a7b042df37d6e0da21f8067adc56c3d883c1510372e76"
+}

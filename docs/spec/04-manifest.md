@@ -129,6 +129,15 @@
 
 Ключ capability — точечное имя. Capability считается доступной в окружении, если она объявлена в активном manifest и хотя бы один компонент или действие на неё ссылается.
 
+### 2.6. Реализация формата (этап M1)
+
+- Формат описан JSON Schema `packages/manifest/schema/manifest-1.0.schema.json` — единственный источник истины. Пакет `@cms/manifest` (TypeScript) и `apps/server/internal/composition/manifest` (Go) валидируют manifest одинаково; совпадение проверяют общие фикстуры `packages/manifest/fixtures` (MF-001).
+- Система типов §4 — `$defs/Type` с дискриминатором `type`; модификаторы `required`, `responsive`, `localized`, `unique`, `content`, `description`, `deprecated` допустимы у любого типа, но семантическая проверка ограничивает `content` типами `text`, `richText`, `asset`, `link`, а `localized` и `unique` — полями схем контента верхнего уровня (`unique` — у `string`, `text`, `number`, CNT-003).
+- Форматтер (§2, `formatters`): `{ description?, input: [типы входного значения], args?: поля, sourceRef? }`. Операции `migrateFrom` описаны точно по 05 §4.2.
+- Семантические проверки выполняются для структурно корректного manifest; коды: `MANIFEST_IR_VERSION_UNSUPPORTED`, `MANIFEST_NAME_RESERVED` (имя встроенного примитива или действия), `MANIFEST_NAME_DUPLICATE` (примитив и компонент с одним именем), `MANIFEST_UNKNOWN_TYPE` (слоты, `nodeRef`), `MANIFEST_UNKNOWN_SCHEMA`, `MANIFEST_UNKNOWN_CAPABILITY`, `MANIFEST_UNKNOWN_BREAKPOINT` (размеры шрифтов), `MANIFEST_UNKNOWN_FIELD` (`display`), `MANIFEST_DEFAULT_INVALID`, `MANIFEST_RANGE_INVALID`, `MANIFEST_MODIFIER_INVALID`, `MANIFEST_FIELD_RESERVED` (CNT-001), `MANIFEST_MIGRATION_INVALID`; нарушения схемы — `MANIFEST_SCHEMA_VIOLATION`. Диагностики отсортированы по указателю и коду.
+- `manifestHash` (MF-002) — `sha256:` + SHA-256 канонического JSON: ключи по возрастанию кодовых единиц UTF-16, без пробелов, строки и числа — как у `JSON.stringify`. Обе реализации дают одинаковый хэш на фикстурах (`fixtures/valid/hashes.json`).
+- Синтаксис `pattern` в типах `string` не проверяется: регулярные выражения JavaScript и RE2 (Go) различаются; проверка значений по `pattern` появится вместе с валидацией контента.
+
 ## 3. API определения в коде
 
 ```ts

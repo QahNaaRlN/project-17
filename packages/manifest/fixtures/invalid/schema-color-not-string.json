@@ -1,0 +1,24 @@
+{
+  "description": "Цвет — число: одна ошибка на месте, а не по ветке anyOf",
+  "expect": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "pointer": "/tokens/colors/brand"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {
+      "colors": {
+        "brand": 7
+      }
+    }
+  }
+}

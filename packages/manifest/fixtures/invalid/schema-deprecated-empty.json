@@ -1,0 +1,25 @@
+{
+  "description": "Пустой deprecated: отсутствующее поле важнее несовпадения типа null",
+  "expect": [
+    {
+      "code": "MANIFEST_SCHEMA_VIOLATION",
+      "pointer": "/components/Card/deprecated"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {},
+    "components": {
+      "Card": {
+        "deprecated": {}
+      }
+    }
+  }
+}

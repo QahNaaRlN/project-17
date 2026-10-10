@@ -1,0 +1,37 @@
+{
+  "description": "Действие и источник данных ссылаются на необъявленные capability",
+  "expect": [
+    {
+      "code": "MANIFEST_UNKNOWN_CAPABILITY",
+      "pointer": "/actions/shop.buy/capabilities/0"
+    },
+    {
+      "code": "MANIFEST_UNKNOWN_CAPABILITY",
+      "pointer": "/dataSources/shop.items/capabilities/0"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {},
+    "actions": {
+      "shop.buy": {
+        "capabilities": ["shop.pay"]
+      }
+    },
+    "dataSources": {
+      "shop.items": {
+        "result": {
+          "type": "string"
+        },
+        "capabilities": ["shop.read"]
+      }
+    }
+  }
+}
