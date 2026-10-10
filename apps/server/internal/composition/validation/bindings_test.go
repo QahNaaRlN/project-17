@@ -34,6 +34,7 @@ func expectDiagnostic(t *testing.T, err error, code string) {
 func TestDraftBindingWarningsAndUndo(t *testing.T) {
 	e := setup(t)
 	cs := newCS(e)
+	e.Exec(`UPDATE projects SET settings=settings || '{"defaultMode":"CODE","maxMode":"CODE"}' WHERE id=$1`, e.Admin.ProjectID)
 	var result changes.ApplyResult
 	e.Must(e.Admin, "apply-operations", map[string]any{"changesetId": cs, "expectedSeq": 0, "operations": []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "root": map[string]any{"id": "n_root", "type": "Button", "bindings": map[string]any{"label": "$item.title"}, "on": map[string]any{"click": map[string]any{"action": "pending:0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11"}}}}}}}, &result)
 	id := result.Operations[0].Target

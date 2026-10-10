@@ -34,7 +34,7 @@ VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateWorkingVersion :exec
-UPDATE object_versions SET path = $2, body = $3, body_hash = $4 WHERE id = $1 AND state = 'working';
+UPDATE object_versions SET path = $2, body = $3, body_hash = $4, certified = $5 WHERE id = $1 AND state = 'working';
 
 -- name: GetVersion :one
 SELECT * FROM object_versions WHERE id = $1;
@@ -44,7 +44,7 @@ INSERT INTO changeset_objects (changeset_id, object_id, base_version_id, working
 VALUES ($1, $2, $3, $4);
 
 -- name: GetChangesetObject :one
-SELECT co.*, v.path AS working_path, v.body AS working_body
+SELECT co.*, v.path AS working_path, v.body AS working_body, v.certified AS working_certified
 FROM changeset_objects co
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1 AND co.object_id = $2;

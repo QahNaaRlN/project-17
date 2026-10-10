@@ -42,7 +42,7 @@ func (e *env) rebase(cs uuid.UUID, resolutions map[uuid.UUID]string) changes.Reb
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	res, err := changes.Rebase(ctx, e.q, row, resolutions)
+	res, err := changes.Rebase(ctx, e.q, row, resolutions, e.actor)
 	if err != nil {
 		e.t.Fatal(err)
 	}

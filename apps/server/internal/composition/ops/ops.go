@@ -518,6 +518,10 @@ func mapSetter(field string) func(map[string]any, json.RawMessage, ir.IDGenerato
 
 func opTypeForField(field string) string {
 	switch field {
+	case "zone":
+		return NodeSetZone
+	case "locked":
+		return NodeSetLocked
 	case "props":
 		return NodeSetProps
 	case "design":

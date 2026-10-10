@@ -12,7 +12,7 @@ UPDATE operations SET status = $2 WHERE id = $1;
 UPDATE operations SET status = 'applied', before = $2, after = $3, inverse = $4 WHERE id = $1;
 
 -- name: RebaseWorkingVersion :exec
-UPDATE object_versions SET parent_version_id = $2, path = $3, body = $4, body_hash = $5
+UPDATE object_versions SET parent_version_id = $2, path = $3, body = $4, body_hash = $5, certified = $6
 WHERE id = $1 AND state = 'working';
 
 -- name: SetChangesetObjectBase :exec

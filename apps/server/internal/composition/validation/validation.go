@@ -1,4 +1,4 @@
-// Package validation supplies the project/environment/Change Set context for L1–L4.
+// Package validation supplies the project/environment/Change Set context for L1–L6.
 // All reads use the caller's transaction. It never writes content or activates manifests.
 package validation
 
@@ -17,12 +17,14 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifestdoc"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/policydoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
 type Document struct {
 	ObjectID  uuid.UUID
 	VersionID uuid.UUID
+	Certified bool
 	Body      []byte
 	Path      *string
 }
@@ -36,6 +38,7 @@ type Context struct {
 	ManifestHash string
 	Candidate    *store.ValidationCandidateRow
 	app          any
+	project      map[string]any
 	// Overrides is the prospective publication, including promotion's exact versions.
 	Overrides map[uuid.UUID]Document
 	UseHead   bool
@@ -67,6 +70,14 @@ func Load(ctx context.Context, q *store.Queries, project uuid.UUID, environment 
 		return nil, err
 	}
 	c := &Context{q: q, ProjectID: project, Environment: env, ChangesetID: cs, ManifestID: env.ActiveManifestID, Overrides: map[uuid.UUID]Document{}}
+	settings, err := q.GetProjectSettings(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	c.project, err = decode(settings)
+	if err != nil {
+		return nil, err
+	}
 	var raw []byte
 	if cs != nil {
 		change, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: *cs, ProjectID: project})
@@ -147,7 +158,7 @@ func (c *Context) resolve(ctx context.Context, ref map[string]any) (Document, bo
 	if err != nil {
 		return Document{}, false, err
 	}
-	return Document{ObjectID: id, VersionID: row.ID, Body: row.Body, Path: row.Path}, true, nil
+	return Document{ObjectID: id, VersionID: row.ID, Body: row.Body, Path: row.Path, Certified: row.Certified}, true, nil
 }
 
 // Validate checks every exact transitive component version, detects cycles by object
@@ -155,6 +166,7 @@ func (c *Context) resolve(ctx context.Context, ref map[string]any) (Document, bo
 func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 	stack := map[uuid.UUID]bool{}
 	count := 0
+	requirements := map[uuid.UUID]policydoc.Mode{}
 	var visit func(Document, int) (ir.Result, error)
 	visit = func(d Document, depth int) (ir.Result, error) {
 		count++
@@ -168,10 +180,16 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		stack[d.ObjectID] = true
 		defer delete(stack, d.ObjectID)
 		resolved := map[string]map[string]any{}
+		components := map[string]policydoc.Component{}
 		extra := []ir.Diagnostic{}
 		// L1 first keeps malformed documents out of reference traversal.
 		if c.app == nil {
-			return manifestdoc.Validate(doc, nil, nil), nil
+			r := manifestdoc.Validate(doc, nil, nil)
+			if ir.ValidateDocument(doc).Valid {
+				p := policydoc.Validate(doc, nil, policydoc.Options{Project: c.project})
+				r.Diagnostics = append(r.Diagnostics, p.Diagnostics...)
+			}
+			return r, nil
 		}
 		if r := ir.ValidateDocument(doc); !r.Valid {
 			return r, nil
@@ -208,6 +226,7 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 			if err != nil {
 				return ir.Result{}, err
 			}
+			components[fmt.Sprint(ref)] = policydoc.Component{RequiredMode: requirements[child.VersionID], Certified: child.Certified}
 			for _, diag := range r.Diagnostics {
 				extra = append(extra, ir.Diagnostic{Code: diag.Code, Severity: diag.Severity, Pointer: key, NodeID: id, Message: diag.Message, Params: map[string]any{"componentId": child.ObjectID, "versionId": child.VersionID, "diagnostic": diag}})
 			}
@@ -234,6 +253,12 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		if pageError != nil {
 			return ir.Result{}, pageError
 		}
+		policy := policydoc.Validate(doc, c.app, policydoc.Options{Project: c.project, ResolveComponent: func(ref map[string]any) (policydoc.Component, bool) {
+			v, ok := components[fmt.Sprint(ref)]
+			return v, ok
+		}})
+		requirements[d.VersionID] = policy.RequiredMode
+		r.Diagnostics = append(r.Diagnostics, policy.Diagnostics...)
 		r.Diagnostics = append(r.Diagnostics, bindings.Diagnostics...)
 		r.Diagnostics = append(r.Diagnostics, extra...)
 		sort.SliceStable(r.Diagnostics, func(i, j int) bool {
@@ -274,7 +299,7 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 	}
 	all := map[uuid.UUID]Document{}
 	for _, r := range rows {
-		all[r.ObjectID] = Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path}
+		all[r.ObjectID] = Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path, Certified: r.Certified}
 	}
 	for _, d := range docs {
 		all[d.ObjectID] = d
@@ -302,5 +327,5 @@ func RequireValid(problems map[string][]ir.Diagnostic) error {
 	if len(problems) == 0 {
 		return nil
 	}
-	return commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Документы не прошли проверку", "Публикация заблокирована контрактом окружения").WithParams(map[string]any{"documents": problems})
+	return commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Документы не прошли проверку", "Изменения отклонены контрактом окружения").WithParams(map[string]any{"documents": problems})
 }

@@ -297,7 +297,7 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
 	docs := make([]validation.Document, len(versions))
 	for i, v := range versions {
-		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path}
+		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path, Certified: v.Certified}
 	}
 	environments := map[string]any{}
 	problems := map[string][]ir.Diagnostic{}
@@ -361,6 +361,11 @@ func contentHash(versions []store.ChangesetWorkingVersionsRow) []byte {
 	for _, v := range versions {
 		h.Write(v.ObjectID[:])
 		h.Write(v.BodyHash)
+		// False preserves the pre-certification hash of existing Change Sets.
+		// A trusted certificate is content and must be bound to approval.
+		if v.Certified {
+			h.Write([]byte{0, 1})
+		}
 		if v.Path != nil { // маршрут — часть содержимого: его смена сбрасывает согласования
 			h.Write([]byte(*v.Path))
 		}
