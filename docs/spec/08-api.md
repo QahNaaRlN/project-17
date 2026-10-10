@@ -107,14 +107,18 @@ X-CMS-Project: store
 | `GET /api/v1/objects/{id}/usages` | Где используется (обратные ссылки) |
 | `GET /api/v1/documents/{id}/outline?changesetId=` | Компактная структура документа (дерево типов, имена, привязки) — для агента и дерева слоёв |
 | `GET /api/v1/changesets?state=&owner=` | Список CS |
-| `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями |
+| `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями, `needsAttention` и `manifestDiagnostics` по окружениям (CHG-034); для CS схем — кандидат и исходный manifest (MF-025) |
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
 | `GET /api/v1/publications?environment=` | История публикаций |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
 | `GET /api/v1/events` (SSE) | Поток событий проекта для Studio: изменения CS, проверки, публикации, presence |
 
+Ответ `register-manifest` различает активированный manifest и сохранённого кандидата: `manifestHash`, `activation` (`active` или `pending`), для кандидата — `changesetId` (MF-025). Регистрация кандидата не меняет ответы запросов активного manifest и схем.
+
 Пагинация — курсорная (`cursor`, `limit` ≤ 100); ответ содержит `nextCursor`.
+
+При публикации кандидата смена исходного активного manifest возвращает `409 MANIFEST_BASE_CHANGED` (MF-027).
 
 ## 5. Delivery API
 

@@ -234,6 +234,28 @@ CREATE TABLE changesets (
 );
 CREATE INDEX changesets_open ON changesets (project_id, state) WHERE state NOT IN ('merged', 'abandoned');
 
+-- Кандидат привязан к одному окружению и согласуемому CS схем (MF-025).
+-- Строка и manifest неизменяемы после submit; замена требует нового согласования.
+CREATE TABLE changeset_manifest_candidates (
+  changeset_id     uuid PRIMARY KEY REFERENCES changesets(id),
+  environment_id   uuid NOT NULL REFERENCES environments(id),
+  manifest_id      uuid NOT NULL REFERENCES manifests(id),
+  base_manifest_id uuid REFERENCES manifests(id),
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- needsAttention вычисляется из этих результатов для targets, а не из state.
+CREATE TABLE changeset_manifest_diagnostics (
+  changeset_id  uuid NOT NULL REFERENCES changesets(id),
+  environment_id uuid NOT NULL REFERENCES environments(id),
+  manifest_id   uuid NOT NULL REFERENCES manifests(id),
+  content_hash  bytea NOT NULL, -- результаты привязаны к содержимому CS
+  diagnostics   jsonb NOT NULL DEFAULT '[]',
+  stale         boolean NOT NULL DEFAULT false,
+  checked_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (changeset_id, environment_id)
+);
+
 CREATE TABLE changeset_collaborators (
   changeset_id  uuid NOT NULL REFERENCES changesets(id),
   actor_id      uuid NOT NULL REFERENCES actors(id),
