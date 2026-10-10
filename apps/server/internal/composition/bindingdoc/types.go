@@ -167,6 +167,9 @@ func compatible(from, to object, depth int) bool {
 			}
 		}
 	case "enum":
+		if from["enumSource"] != nil && from["enumSource"] == to["enumSource"] {
+			return true
+		}
 		for _, v := range arr(from["values"]) {
 			found := false
 			for _, w := range arr(to["values"]) {
@@ -185,7 +188,7 @@ func compatible(from, to object, depth int) bool {
 		for k, v := range obj(to["fields"]) {
 			source := obj(obj(from["fields"])[k])
 			target := obj(v)
-			if source == nil && target["required"] != true {
+			if source == nil && (target["required"] != true || target["default"] != nil) {
 				continue
 			}
 			if !compatible(source, target, depth+1) {
