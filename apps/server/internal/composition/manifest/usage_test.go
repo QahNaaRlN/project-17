@@ -147,3 +147,18 @@ func TestUsageNestedInputPointer(t *testing.T) {
 		t.Fatalf("pointer must address actual input definition: %+v", got)
 	}
 }
+
+// MF-020: builtin properties have dependencies even though their types are not in manifest.
+func TestBuiltinPropertyImpact(t *testing.T) {
+	doc := decode(t, `{"nodes":{"n_root":{"type":"Stack","props":{"direction":{"base":"vertical","md":"horizontal"}}},"n_size":{"type":"Container","props":{"size":"prose"}}}}`)
+	active := decode(t, `{"breakpoints":{"md":768},"tokens":{"container":{"prose":"65ch"}}}`)
+	got := manifest.DocumentUses(doc, active)
+	for _, want := range []manifest.Usage{
+		{ManifestPointer: "/breakpoints/md", DocumentPointer: "/nodes/n_root/props/direction/md"},
+		{ManifestPointer: "/tokens/container/prose", DocumentPointer: "/nodes/n_size/props/size"},
+	} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("missing %+v in %+v", want, got)
+		}
+	}
+}

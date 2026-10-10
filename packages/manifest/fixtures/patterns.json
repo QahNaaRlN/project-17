@@ -1,0 +1,450 @@
+[
+  {
+    "pattern": "",
+    "valid": true,
+    "matches": [
+      ["", true],
+      ["\ud83d\ude00", true]
+    ]
+  },
+  {
+    "pattern": "^[a-z0-9-]+$",
+    "valid": true,
+    "matches": [
+      ["slug-1", true],
+      ["x\n", false],
+      ["\u0440\u0443\u0441", false]
+    ]
+  },
+  {
+    "pattern": "^.$",
+    "valid": true,
+    "matches": [
+      ["\ud83d\ude00", true],
+      ["\n", false],
+      ["ab", false]
+    ]
+  },
+  {
+    "pattern": "a",
+    "valid": true,
+    "matches": [
+      ["cat", true],
+      ["A", false]
+    ]
+  },
+  {
+    "pattern": "\\A(?:ab|cd)+\\z",
+    "valid": true,
+    "matches": [
+      ["abcd", true],
+      ["abcd\n", false]
+    ]
+  },
+  {
+    "pattern": "^\\d\\w\\s$",
+    "valid": true,
+    "matches": [
+      ["1a\t", true],
+      ["\u0661a ", false],
+      ["1\u00e9 ", false],
+      ["1a\u00a0", false],
+      ["1a\u000b", false]
+    ]
+  },
+  {
+    "pattern": "^\\D\\W\\S$",
+    "valid": true,
+    "matches": [
+      ["\u00e9\ud83d\ude00\u042f", true],
+      ["1\ud83d\ude00\u042f", false]
+    ]
+  },
+  {
+    "pattern": "^\\bword\\b$",
+    "valid": true,
+    "matches": [
+      ["word", true],
+      ["words", false]
+    ]
+  },
+  {
+    "pattern": "^a\\Ba$",
+    "valid": true,
+    "matches": [["aa", true]]
+  },
+  {
+    "pattern": "^[^0-9]+$",
+    "valid": true,
+    "matches": [
+      ["\u0416\ud83d\ude00", true],
+      ["a1", false]
+    ]
+  },
+  {
+    "pattern": "^[()?]+$",
+    "valid": true,
+    "matches": [["(?)", true]]
+  },
+  {
+    "pattern": "^\\(\\?x\\)$",
+    "valid": true,
+    "matches": [["(?x)", true]]
+  },
+  {
+    "pattern": "^a{1,3}?$",
+    "valid": true,
+    "matches": [
+      ["aa", true],
+      ["aaaa", false]
+    ]
+  },
+  {
+    "pattern": "a{0,1000}",
+    "valid": true,
+    "matches": []
+  },
+  {
+    "pattern": "^[\\a\\f\\n\\r\\t\\v]+$",
+    "valid": true,
+    "matches": [["\u0007\f\n\r\t\u000b", true]]
+  },
+  {
+    "pattern": "^(\u044f|\ud83d\ude00)*$",
+    "valid": true,
+    "matches": [["\u044f\ud83d\ude00\u044f", true]]
+  },
+  {
+    "pattern": "[",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "a{1001}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\1",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\123",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\u0041",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\x41",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\x{1F600}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\p{L}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\P{L}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\Qx\\E",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\C",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?=x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?!x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?<=x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?<!x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?P<n>x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?<n>x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?i)x",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?s:x)",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "a++",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "[[:alpha:]]",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "[[:^digit:]]",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\u0000",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "\\!",
+    "valid": true,
+    "matches": [["!", true]]
+  },
+  {
+    "pattern": "\\\"",
+    "valid": true,
+    "matches": [["\"", true]]
+  },
+  {
+    "pattern": "\\#",
+    "valid": true,
+    "matches": [["#", true]]
+  },
+  {
+    "pattern": "\\$",
+    "valid": true,
+    "matches": [["$", true]]
+  },
+  {
+    "pattern": "\\%",
+    "valid": true,
+    "matches": [["%", true]]
+  },
+  {
+    "pattern": "\\&",
+    "valid": true,
+    "matches": [["&", true]]
+  },
+  {
+    "pattern": "\\'",
+    "valid": true,
+    "matches": [["'", true]]
+  },
+  {
+    "pattern": "\\(",
+    "valid": true,
+    "matches": [["(", true]]
+  },
+  {
+    "pattern": "\\)",
+    "valid": true,
+    "matches": [[")", true]]
+  },
+  {
+    "pattern": "\\*",
+    "valid": true,
+    "matches": [["*", true]]
+  },
+  {
+    "pattern": "\\+",
+    "valid": true,
+    "matches": [["+", true]]
+  },
+  {
+    "pattern": "\\,",
+    "valid": true,
+    "matches": [[",", true]]
+  },
+  {
+    "pattern": "\\-",
+    "valid": true,
+    "matches": [["-", true]]
+  },
+  {
+    "pattern": "\\.",
+    "valid": true,
+    "matches": [[".", true]]
+  },
+  {
+    "pattern": "\\/",
+    "valid": true,
+    "matches": [["/", true]]
+  },
+  {
+    "pattern": "\\:",
+    "valid": true,
+    "matches": [[":", true]]
+  },
+  {
+    "pattern": "\\;",
+    "valid": true,
+    "matches": [[";", true]]
+  },
+  {
+    "pattern": "\\<",
+    "valid": true,
+    "matches": [["<", true]]
+  },
+  {
+    "pattern": "\\=",
+    "valid": true,
+    "matches": [["=", true]]
+  },
+  {
+    "pattern": "\\>",
+    "valid": true,
+    "matches": [[">", true]]
+  },
+  {
+    "pattern": "\\?",
+    "valid": true,
+    "matches": [["?", true]]
+  },
+  {
+    "pattern": "\\@",
+    "valid": true,
+    "matches": [["@", true]]
+  },
+  {
+    "pattern": "\\[",
+    "valid": true,
+    "matches": [["[", true]]
+  },
+  {
+    "pattern": "\\\\",
+    "valid": true,
+    "matches": [["\\", true]]
+  },
+  {
+    "pattern": "\\]",
+    "valid": true,
+    "matches": [["]", true]]
+  },
+  {
+    "pattern": "\\^",
+    "valid": true,
+    "matches": [["^", true]]
+  },
+  {
+    "pattern": "\\_",
+    "valid": true,
+    "matches": [["_", true]]
+  },
+  {
+    "pattern": "\\`",
+    "valid": true,
+    "matches": [["`", true]]
+  },
+  {
+    "pattern": "\\{",
+    "valid": true,
+    "matches": [["{", true]]
+  },
+  {
+    "pattern": "\\|",
+    "valid": true,
+    "matches": [["|", true]]
+  },
+  {
+    "pattern": "\\}",
+    "valid": true,
+    "matches": [["}", true]]
+  },
+  {
+    "pattern": "\\~",
+    "valid": true,
+    "matches": [["~", true]]
+  },
+  {
+    "pattern": "a{2,1}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "a{1000,1001}",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "(?",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "[][:alpha:]]",
+    "valid": false,
+    "matches": []
+  },
+  {
+    "pattern": "[](?i)]+",
+    "valid": true,
+    "matches": [["](i)", true]]
+  },
+  {
+    "pattern": "[^](?]",
+    "valid": true,
+    "matches": [
+      ["a", true],
+      ["(", false]
+    ]
+  },
+  {
+    "pattern": "[[]",
+    "valid": true,
+    "matches": [["[", true]]
+  }
+]

@@ -10,4 +10,6 @@ export {
   UNIQUE_TYPES,
 } from "./builtins.js";
 export { validateManifest, type ValidationResult } from "./validate.js";
+export { builtinCatalogue } from "./generated/builtins.js";
+export { compilePattern } from "./pattern.js";
 export { canonicalJson, manifestHash } from "./canonical.js";

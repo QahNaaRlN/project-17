@@ -35,5 +35,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(outPath, schema, 0o644)
+	if err := os.WriteFile(outPath, schema, 0o644); err != nil {
+		return err
+	}
+	catalogue, err := os.ReadFile("../../packages/manifest/schema/builtin-catalogue.json")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile("internal/composition/manifest/catalogue_gen.json", catalogue, 0o644)
 }

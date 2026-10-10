@@ -1,0 +1,55 @@
+{
+  "description": "MF-001: portable pattern syntax, string default, nested property declarations",
+  "expect": [
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/components/Test/props/unsupported/pattern"
+    },
+    {
+      "code": "MANIFEST_DEFAULT_INVALID",
+      "pointer": "/components/Test/props/default/default"
+    },
+    {
+      "code": "MANIFEST_MODIFIER_INVALID",
+      "pointer": "/components/Test/props/nested/fields/items/of/pattern"
+    }
+  ],
+  "manifest": {
+    "manifestVersion": "1.0",
+    "app": {
+      "id": "store-web",
+      "version": "1.0.0",
+      "framework": "react"
+    },
+    "irVersions": ["1.0"],
+    "breakpoints": {},
+    "tokens": {},
+    "components": {
+      "Test": {
+        "props": {
+          "unsupported": {
+            "type": "string",
+            "pattern": "(?=a)"
+          },
+          "default": {
+            "type": "string",
+            "pattern": "^a+$",
+            "default": "b"
+          },
+          "nested": {
+            "type": "object",
+            "fields": {
+              "items": {
+                "type": "list",
+                "of": {
+                  "type": "string",
+                  "pattern": "\\p{L}"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

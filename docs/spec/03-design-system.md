@@ -36,7 +36,7 @@ Design Runtime — ограниченная декларативная сред�
 | `Flex` | Layout | да | `wrap: bool` (responsive) | — | — |
 | `Grid` | Layout | да | — | — | — |
 | `Container` | Layout | да | `size: container-токен` | — | — |
-| `Divider` | Layout | нет | `orientation` | — | — |
+| `Divider` | Layout | нет | `orientation: horizontal\|vertical` | — | — |
 | `Modal` | Layout | да | `size: sm\|md\|lg\|full`, `dismissible: bool` | `title: text` | `close` |
 | `Heading` | Typography | нет | `level: 1..6` | `text: text` | — |
 | `Text` | Typography | нет | `as: p\|span` | `text: text` | — |
@@ -45,11 +45,15 @@ Design Runtime — ограниченная декларативная сред�
 | `Image` | Media | нет | `fit: cover\|contain`, `loading: lazy\|eager`, `decorative: bool` | `src: asset(image)`, `alt: text` | — |
 | `Video` | Media | нет | `autoplay`, `muted`, `loop`, `controls` | `src: asset(video)`, `poster: asset(image)`, `caption: text` | — |
 | `Icon` | Media | нет | `name: enum из manifest.icons`, `size: sm\|md\|lg` | `label: text` | — |
-| `Button` | Actions | нет | `variant: enum из manifest`, `size`, `disabled` | `label: text` | `click` |
+| `Button` | Actions | нет | `variant: default\|primary\|secondary\|ghost`, `size: sm\|md\|lg`, `disabled: bool` | `label: text` | `click` |
 | `Link` | Actions | да | `to: Link`, `newTab: bool` | `label: text` | `click` |
 | `Repeat` | Structural | да (шаблон) | `as: string`, `limit: 1..200`, `key: path` | `items` (только привязка, тип `list`) | — |
 | `Slot` | Structural | нет | `name: string` | — | — |
 | `Composed` | Structural | слоты | входы компонента | входы с `content: true` | — |
+
+Источник встроенных контрактов — `packages/manifest/schema/builtin-catalogue.json`; из него генерируются каталоги Go и TypeScript.
+
+Каталог встроенных свойств фиксирован для MVP: `Button.variant` — `default`, `primary`, `secondary`, `ghost`; `Button.size` — `sm`, `md`, `lg`; `Divider.orientation` — `horizontal`, `vertical`. Manifest не переопределяет встроенные примитивы. Произвольные варианты оформляются своим native-компонентом (например, `AppButton`). Отсутствие необязательного свойства не добавляет значение по умолчанию в IR.
 
 `Repeat` дополнительно поддерживает слот `empty` — узлы, рендерящиеся при пустом списке.
 
