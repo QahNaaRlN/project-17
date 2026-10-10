@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/a11ydoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
@@ -274,7 +275,43 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		}
 		return r, nil
 	}
-	return visit(d, 0)
+	r, err := visit(d, 0)
+	if err != nil {
+		return r, err
+	}
+	doc, err := decode(d.Body)
+	if err != nil || !ir.ValidateDocument(doc).Valid || c.app == nil {
+		return r, nil
+	}
+	var resolveErr error
+	a := a11ydoc.Validate(doc, c.app, func(ref map[string]any) (map[string]any, bool) {
+		child, ok, err := c.resolve(ctx, ref)
+		if err != nil {
+			resolveErr = err
+			return nil, false
+		}
+		if !ok {
+			return nil, false
+		}
+		body, err := decode(child.Body)
+		if err != nil {
+			resolveErr = err
+			return nil, false
+		}
+		return body, true
+	})
+	if resolveErr != nil {
+		return ir.Result{}, resolveErr
+	}
+	r.Diagnostics = append(r.Diagnostics, a.Diagnostics...)
+	sort.SliceStable(r.Diagnostics, func(i, j int) bool {
+		if r.Diagnostics[i].Pointer == r.Diagnostics[j].Pointer {
+			return r.Diagnostics[i].Code < r.Diagnostics[j].Code
+		}
+		return r.Diagnostics[i].Pointer < r.Diagnostics[j].Pointer
+	})
+	r.Valid = r.Valid && a.Valid
+	return r, nil
 }
 
 func sortedKeys(m map[string]any) []string {
@@ -316,7 +353,7 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 		if err != nil {
 			return nil, err
 		}
-		if !r.Valid {
+		if len(r.Diagnostics) > 0 {
 			out[id.String()] = r.Diagnostics
 		}
 	}
@@ -324,8 +361,19 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 }
 
 func RequireValid(problems map[string][]ir.Diagnostic) error {
-	if len(problems) == 0 {
+	if !HasErrors(problems) {
 		return nil
 	}
 	return commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Документы не прошли проверку", "Изменения отклонены контрактом окружения").WithParams(map[string]any{"documents": problems})
+}
+
+func HasErrors(problems map[string][]ir.Diagnostic) bool {
+	for _, ds := range problems {
+		for _, d := range ds {
+			if d.Severity == ir.SeverityError {
+				return true
+			}
+		}
+	}
+	return false
 }

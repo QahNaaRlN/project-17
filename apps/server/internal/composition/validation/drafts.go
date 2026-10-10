@@ -97,7 +97,7 @@ func DraftWarnings(ctx context.Context, q *store.Queries, project, cs uuid.UUID,
 					fatal[e.Name+":"+d.ObjectID.String()] = append(fatal[e.Name+":"+d.ObjectID.String()], diag)
 					continue
 				}
-				if !strings.HasPrefix(string(diag.Code), "BINDING_") && !strings.HasPrefix(string(diag.Code), "ACTION_") {
+				if !strings.HasPrefix(string(diag.Code), "BINDING_") && !strings.HasPrefix(string(diag.Code), "ACTION_") && !strings.HasPrefix(string(diag.Code), "A11Y_") {
 					continue
 				}
 				diag.Severity = ir.SeverityWarning

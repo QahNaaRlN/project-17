@@ -138,7 +138,7 @@ func TestActionPageResolution(t *testing.T) {
 	cs := newCS(e)
 	target := create(e, cs, 0, "page", map[string]any{"type": "Box"})
 	e.Exec(`UPDATE object_versions SET path='/products/:slug' WHERE changeset_id=$1 AND object_id=$2`, cs, target)
-	page := create(e, cs, 1, "page", map[string]any{"type": "Button", "on": map[string]any{"click": map[string]any{"action": "navigate", "args": map[string]any{"to": map[string]any{"kind": "page", "page": target.String(), "params": map[string]any{"slug": "$context.locale"}}}}}})
+	page := create(e, cs, 1, "page", map[string]any{"type": "Button", "bindings": map[string]any{"label": "$context.locale"}, "on": map[string]any{"click": map[string]any{"action": "navigate", "args": map[string]any{"to": map[string]any{"kind": "page", "page": target.String(), "params": map[string]any{"slug": "$context.locale"}}}}}})
 	if r := validate(e, cs, page, "staging"); !r.Valid {
 		t.Fatal(r)
 	}

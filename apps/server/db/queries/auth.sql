@@ -34,6 +34,6 @@ UPDATE api_tokens SET last_used_at = now() WHERE id = $1;
 -- name: ActorCapabilities :many
 SELECT DISTINCT unnest(r.capabilities)::text AS capability
 FROM role_bindings b
-JOIN roles r ON r.id = b.role_id
+JOIN roles r ON r.id = b.role_id AND r.project_id = b.project_id
 WHERE b.project_id = $1 AND b.actor_id = $2
 ORDER BY 1;

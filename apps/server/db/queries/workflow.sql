@@ -57,3 +57,12 @@ SELECT settings FROM projects WHERE id = $1;
 
 -- name: SetProjectSettings :exec
 UPDATE projects SET settings = $2 WHERE id = $1;
+
+-- name: ValidApprovalActors :many
+SELECT DISTINCT a.id FROM approvals p JOIN actors a ON a.id=p.approver_id
+WHERE p.changeset_id=$1 AND p.content_hash=$2 AND p.decision='approve'
+AND p.invalidated_at IS NULL AND a.kind='human' AND a.disabled_at IS NULL;
+
+-- name: ActorRoleNames :many
+SELECT r.name FROM role_bindings b JOIN roles r ON r.id=b.role_id AND r.project_id=b.project_id
+WHERE b.project_id=$1 AND b.actor_id=$2 ORDER BY r.name;

@@ -11,6 +11,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const actorRoleNames = `-- name: ActorRoleNames :many
+SELECT r.name FROM role_bindings b JOIN roles r ON r.id=b.role_id AND r.project_id=b.project_id
+WHERE b.project_id=$1 AND b.actor_id=$2 ORDER BY r.name
+`
+
+type ActorRoleNamesParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	ActorID   uuid.UUID `json:"actorId"`
+}
+
+func (q *Queries) ActorRoleNames(ctx context.Context, arg ActorRoleNamesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, actorRoleNames, arg.ProjectID, arg.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const changesetAuthors = `-- name: ChangesetAuthors :many
 SELECT a.actor_id AS author_id FROM operations a WHERE a.changeset_id = $1::uuid
 UNION
@@ -355,4 +385,35 @@ func (q *Queries) SubmitChangeset(ctx context.Context, arg SubmitChangesetParams
 		arg.Targets,
 	)
 	return err
+}
+
+const validApprovalActors = `-- name: ValidApprovalActors :many
+SELECT DISTINCT a.id FROM approvals p JOIN actors a ON a.id=p.approver_id
+WHERE p.changeset_id=$1 AND p.content_hash=$2 AND p.decision='approve'
+AND p.invalidated_at IS NULL AND a.kind='human' AND a.disabled_at IS NULL
+`
+
+type ValidApprovalActorsParams struct {
+	ChangesetID uuid.UUID `json:"changesetId"`
+	ContentHash []byte    `json:"contentHash"`
+}
+
+func (q *Queries) ValidApprovalActors(ctx context.Context, arg ValidApprovalActorsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, validApprovalActors, arg.ChangesetID, arg.ContentHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

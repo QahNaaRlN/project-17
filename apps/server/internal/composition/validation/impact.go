@@ -78,7 +78,7 @@ func AnalyzeImpact(ctx context.Context, q *store.Queries, project uuid.UUID, env
 		if err != nil {
 			return nil, err
 		}
-		if len(used) > 0 || !r.Valid {
+		if len(used) > 0 || len(r.Diagnostics) > 0 {
 			out = append(out, Impact{row.ObjectID, row.VersionID, row.Stage, row.ChangesetID, used, r.Diagnostics})
 		}
 	}
