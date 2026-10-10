@@ -123,3 +123,39 @@ func TestDeliveryKeysRoute(t *testing.T) {
 	resp, body = e.do(t, "GET", "/api/v1/delivery-keys", "", e.authed(nil))
 	expectProblem(t, resp, body, 403, "FORBIDDEN")
 }
+
+func TestDeliveryDraft(t *testing.T) {
+	e := setup(t)
+	_, product := publishedSite(t, e)
+	cs := e.command(t, "create-changeset", `{"title":"draft"}`)["id"].(string)
+	e.command(t, "apply-operations", `{"changesetId":"`+cs+`","expectedSeq":0,"operations":[{"type":"document.setRoute","target":"`+product+`","payload":{"path":"/items/:slug"}}]}`)
+	token := e.command(t, "create-preview-token", `{"environment":"staging","changesetId":"`+cs+`"}`)["token"].(string)
+	preview := map[string]string{"Authorization": "Preview " + token}
+
+	resp, body := e.do(t, "GET", "/delivery/v1/store/staging/page?path=/items/shirt&changesetId="+cs, "", preview)
+	if resp.StatusCode != 200 || body["page"].(map[string]any)["path"] != "/items/:slug" || body["diagnostics"] == nil {
+		t.Fatalf("черновая страница: %d %v", resp.StatusCode, body)
+	}
+	if resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("ETag") != "" {
+		t.Errorf("черновик не кэшируется: %v", resp.Header)
+	}
+	// Опубликованная версия по ключу доставки — прежний маршрут.
+	resp, _ = e.do(t, "GET", "/delivery/v1/store/staging/page?path=/items/shirt", "", bearer(e.command(t, "create-delivery-key", `{"environment":"staging","name":"k"}`)["key"].(string)))
+	if resp.StatusCode != 404 {
+		t.Errorf("published не видит черновик: %d", resp.StatusCode)
+	}
+
+	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/page?path=/items/shirt&changesetId=0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", preview)
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
+	resp, body = e.do(t, "GET", "/delivery/v1/store/production/routes", "", preview)
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
+	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/routes", "", map[string]string{"Authorization": "Preview broken"})
+	expectProblem(t, resp, body, 401, "UNAUTHENTICATED")
+
+	// Токен без Change Set не читает черновик по changesetId; ключ доставки — тоже.
+	headToken := e.command(t, "create-preview-token", `{"environment":"staging"}`)["token"].(string)
+	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/routes?changesetId="+cs, "", map[string]string{"Authorization": "Preview " + headToken})
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
+	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/routes?changesetId="+cs, "", bearer(e.command(t, "create-delivery-key", `{"environment":"staging","name":"k2"}`)["key"].(string)))
+	expectProblem(t, resp, body, 400, "PARAM_INVALID")
+}

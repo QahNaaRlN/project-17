@@ -121,7 +121,7 @@ func (q *Queries) DeleteRoute(ctx context.Context, arg DeleteRouteParams) error 
 }
 
 const getEnvironmentByName = `-- name: GetEnvironmentByName :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at FROM environments WHERE project_id = $1 AND name = $2
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key FROM environments WHERE project_id = $1 AND name = $2
 `
 
 type GetEnvironmentByNameParams struct {
@@ -141,6 +141,7 @@ func (q *Queries) GetEnvironmentByName(ctx context.Context, arg GetEnvironmentBy
 		&i.AppUrl,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PreviewKey,
 	)
 	return i, err
 }

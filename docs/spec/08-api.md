@@ -167,7 +167,7 @@ Authorization: Bearer cms_pub_…
 - Реализованы `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`. Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
 - Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
 - Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` (ID объектов; у `/routes` — ещё ключ `routes`); на совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
-- Пока не реализованы: черновой режим и preview-токены (§5.3), локали и fallback (API-032), сущности и ассеты, кэш Redis и инвалидация CDN по `Surrogate-Key` (PUB-021), лимиты запросов.
+- Пока не реализованы: локали и fallback (API-032), сущности и ассеты, кэш Redis и инвалидация CDN по `Surrogate-Key` (PUB-021), лимиты запросов.
 
 ### 5.3. Черновой режим
 
@@ -183,6 +183,13 @@ Authorization: Preview eyJhbGciOi…
 | API-040 | В черновом режиме объекты CS берутся из рабочих версий, остальные — из head (а не из published). Ответ содержит `Cache-Control: no-store`. |
 | API-041 | Preview-токен — JWT (HS256, ключ окружения), поля `prj`, `env`, `cs`, `sub`, `exp` (≤ 15 мин). Studio обновляет его до истечения. |
 | API-042 | Черновые ответы содержат `diagnostics` текущего состояния CS. |
+
+#### 5.3.1. Реализация (этап M2, вторая итерация Delivery API)
+
+- `create-preview-token {environment, changesetId?}` (право `content.read`) выпускает JWT HS256 на 15 минут с полями `prj`, `env`, `cs`, `sub`, `exp`. Ключ подписи — `environments.preview_key` (32 случайных байта на окружение); смена ключа делает недействительными все токены окружения.
+- Запросы с `Authorization: Preview <JWT>` читают черновик: объекты Change Set `cs` — из рабочих версий (с их маршрутами), остальные — из head, а не из published (API-040). Токен без `cs` даёт чтение head. Параметр `changesetId` необязателен, но если передан — должен совпадать с `cs` токена (`403 FORBIDDEN`); с ключом доставки он запрещён (`400 PARAM_INVALID`).
+- Черновые `/page` и `/document` содержат `diagnostics` — результат валидации IR документа (пока уровень L1); ответы идут с `Cache-Control: no-store` без `ETag` и `Surrogate-Key`.
+- Таблица маршрутов черновика — маршруты head, переопределённые рабочими версиями Change Set (в том числе снятые маршруты и новые страницы).
 
 ## 6. Ошибки
 

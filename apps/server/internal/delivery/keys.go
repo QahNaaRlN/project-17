@@ -42,6 +42,11 @@ func Register(bus *commandbus.Bus) {
 		Right:  auth.ProjectAdmin,
 		Handle: handleRevokeKey,
 	})
+	commandbus.Register(bus, commandbus.Command[previewPayload, PreviewToken]{
+		Name:   "create-preview-token",
+		Right:  auth.ContentRead,
+		Handle: handleCreatePreviewToken,
+	})
 }
 
 type createKeyPayload struct {
@@ -113,6 +118,10 @@ type Access struct {
 	ProjectSlug   string
 	EnvironmentID uuid.UUID
 	Environment   string
+	// Draft — черновой режим по preview-токену (08 §5.3): объекты Change Set ChangesetID
+	// берутся из рабочих версий, остальные — из head.
+	Draft       bool
+	ChangesetID *uuid.UUID
 }
 
 // ErrUnauthenticated — ключ не передан, не найден или отозван.

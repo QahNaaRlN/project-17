@@ -14,7 +14,7 @@ import (
 const createEnvironment = `-- name: CreateEnvironment :one
 INSERT INTO environments (id, project_id, name, kind, app_url)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at
+RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key
 `
 
 type CreateEnvironmentParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		&i.AppUrl,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.PreviewKey,
 	)
 	return i, err
 }
@@ -89,7 +90,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at FROM environments WHERE project_id = $1 ORDER BY name
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key FROM environments WHERE project_id = $1 ORDER BY name
 `
 
 func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]Environment, error) {
@@ -110,6 +111,7 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 			&i.AppUrl,
 			&i.ExpiresAt,
 			&i.CreatedAt,
+			&i.PreviewKey,
 		); err != nil {
 			return nil, err
 		}
