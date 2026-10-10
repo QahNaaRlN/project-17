@@ -16,7 +16,7 @@ jobs:
     # Тесты сервера на каждого мутанта — одна база-сервер вместо контейнера на каждый прогон.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: mirror.gcr.io/library/postgres:16-alpine
         env:
           POSTGRES_PASSWORD: postgres
         ports:
