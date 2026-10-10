@@ -1,4 +1,4 @@
-// Package validation supplies the project/environment/Change Set context for L1–L3.
+// Package validation supplies the project/environment/Change Set context for L1–L4.
 // All reads use the caller's transaction. It never writes content or activates manifests.
 package validation
 
@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifestdoc"
@@ -23,6 +24,7 @@ type Document struct {
 	ObjectID  uuid.UUID
 	VersionID uuid.UUID
 	Body      []byte
+	Path      *string
 }
 
 type Context struct {
@@ -145,7 +147,7 @@ func (c *Context) resolve(ctx context.Context, ref map[string]any) (Document, bo
 	if err != nil {
 		return Document{}, false, err
 	}
-	return Document{ObjectID: id, VersionID: row.ID, Body: row.Body}, true, nil
+	return Document{ObjectID: id, VersionID: row.ID, Body: row.Body, Path: row.Path}, true, nil
 }
 
 // Validate checks every exact transitive component version, detects cycles by object
@@ -211,6 +213,28 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 			}
 		}
 		r := manifestdoc.Validate(doc, c.app, func(ref map[string]any) (map[string]any, bool) { m, ok := resolved[fmt.Sprint(ref)]; return m, ok })
+		var pageError error
+		bindings := bindingdoc.Validate(doc, c.app, bindingdoc.Options{Path: d.Path,
+			ResolveComponent: func(ref map[string]any) (map[string]any, bool) { m, ok := resolved[fmt.Sprint(ref)]; return m, ok },
+			ResolvePage: func(raw string) (*string, bool) {
+				id, err := uuid.Parse(raw)
+				if err != nil {
+					return nil, false
+				}
+				if page, ok := c.Overrides[id]; ok {
+					body, err := decode(page.Body)
+					return page.Path, err == nil && body["kind"] == "page"
+				}
+				row, err := c.q.ValidationPage(ctx, store.ValidationPageParams{ProjectID: c.ProjectID, ObjectID: id, ChangesetID: c.ChangesetID, UseHead: c.UseHead, EnvironmentID: c.Environment.ID})
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					pageError = err
+				}
+				return row, err == nil
+			}})
+		if pageError != nil {
+			return ir.Result{}, pageError
+		}
+		r.Diagnostics = append(r.Diagnostics, bindings.Diagnostics...)
 		r.Diagnostics = append(r.Diagnostics, extra...)
 		sort.SliceStable(r.Diagnostics, func(i, j int) bool {
 			if r.Diagnostics[i].Pointer == r.Diagnostics[j].Pointer {
@@ -250,7 +274,7 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 	}
 	all := map[uuid.UUID]Document{}
 	for _, r := range rows {
-		all[r.ObjectID] = Document{r.ObjectID, r.VersionID, r.Body}
+		all[r.ObjectID] = Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path}
 	}
 	for _, d := range docs {
 		all[d.ObjectID] = d

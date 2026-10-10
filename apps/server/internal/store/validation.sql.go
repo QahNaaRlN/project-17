@@ -51,7 +51,7 @@ func (q *Queries) ValidationCandidate(ctx context.Context, arg ValidationCandida
 }
 
 const validationComponent = `-- name: ValidationComponent :one
-SELECT v.id, v.body FROM objects o
+SELECT v.id, v.body, v.path FROM objects o
 JOIN object_versions v ON v.object_id = o.id AND v.project_id = o.project_id
 WHERE o.project_id = $1 AND o.id = $2
 AND o.kind = 'document' AND o.doc_kind = 'component' AND o.deleted_at IS NULL
@@ -77,6 +77,7 @@ type ValidationComponentParams struct {
 type ValidationComponentRow struct {
 	ID   uuid.UUID `json:"id"`
 	Body []byte    `json:"body"`
+	Path *string   `json:"path"`
 }
 
 func (q *Queries) ValidationComponent(ctx context.Context, arg ValidationComponentParams) (ValidationComponentRow, error) {
@@ -89,12 +90,47 @@ func (q *Queries) ValidationComponent(ctx context.Context, arg ValidationCompone
 		arg.EnvironmentID,
 	)
 	var i ValidationComponentRow
-	err := row.Scan(&i.ID, &i.Body)
+	err := row.Scan(&i.ID, &i.Body, &i.Path)
 	return i, err
 }
 
+const validationPage = `-- name: ValidationPage :one
+SELECT v.path FROM objects o
+JOIN object_versions v ON v.object_id = o.id AND v.project_id = o.project_id
+WHERE o.project_id = $1 AND o.id = $2
+AND o.kind = 'document' AND o.doc_kind = 'page' AND o.deleted_at IS NULL
+AND v.id = COALESCE(
+ (SELECT co.working_version_id FROM changeset_objects co JOIN changesets cs ON cs.id = co.changeset_id
+  WHERE co.object_id = o.id AND co.changeset_id = $3::uuid AND cs.project_id = o.project_id
+    AND cs.state NOT IN ('merged', 'abandoned')),
+ CASE WHEN $4::boolean THEN o.head_version_id ELSE
+ (SELECT pp.version_id FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
+  WHERE pp.object_id = o.id AND e.id = $5 AND e.project_id = o.project_id) END)
+`
+
+type ValidationPageParams struct {
+	ProjectID     uuid.UUID  `json:"projectId"`
+	ObjectID      uuid.UUID  `json:"objectId"`
+	ChangesetID   *uuid.UUID `json:"changesetId"`
+	UseHead       bool       `json:"useHead"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+}
+
+func (q *Queries) ValidationPage(ctx context.Context, arg ValidationPageParams) (*string, error) {
+	row := q.db.QueryRow(ctx, validationPage,
+		arg.ProjectID,
+		arg.ObjectID,
+		arg.ChangesetID,
+		arg.UseHead,
+		arg.EnvironmentID,
+	)
+	var path *string
+	err := row.Scan(&path)
+	return path, err
+}
+
 const validationPublishedVersions = `-- name: ValidationPublishedVersions :many
-SELECT o.id AS object_id, v.id AS version_id, v.body
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
@@ -111,6 +147,7 @@ type ValidationPublishedVersionsRow struct {
 	ObjectID  uuid.UUID `json:"objectId"`
 	VersionID uuid.UUID `json:"versionId"`
 	Body      []byte    `json:"body"`
+	Path      *string   `json:"path"`
 }
 
 func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg ValidationPublishedVersionsParams) ([]ValidationPublishedVersionsRow, error) {
@@ -122,7 +159,12 @@ func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg Validatio
 	var items []ValidationPublishedVersionsRow
 	for rows.Next() {
 		var i ValidationPublishedVersionsRow
-		if err := rows.Scan(&i.ObjectID, &i.VersionID, &i.Body); err != nil {
+		if err := rows.Scan(
+			&i.ObjectID,
+			&i.VersionID,
+			&i.Body,
+			&i.Path,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -297,7 +297,7 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
 	docs := make([]validation.Document, len(versions))
 	for i, v := range versions {
-		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body}
+		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path}
 	}
 	environments := map[string]any{}
 	problems := map[string][]ir.Diagnostic{}

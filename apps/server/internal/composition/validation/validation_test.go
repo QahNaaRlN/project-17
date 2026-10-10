@@ -62,7 +62,7 @@ func doc(e *cmstest.Env, cs, id uuid.UUID) validation.Document {
 	if err != nil {
 		e.T.Fatal(err)
 	}
-	return validation.Document{ObjectID: id, VersionID: d.VersionID, Body: d.Body}
+	return validation.Document{ObjectID: id, VersionID: d.VersionID, Body: d.Body, Path: d.Path}
 }
 func validate(e *cmstest.Env, cs, id uuid.UUID, environment string) ir.Result {
 	c, err := validation.Load(context.Background(), e.Q, e.Admin.ProjectID, environment, &cs)

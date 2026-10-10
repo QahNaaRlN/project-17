@@ -67,7 +67,7 @@ func AnalyzeImpact(ctx context.Context, q *store.Queries, project uuid.UUID, env
 			}
 			return nil
 		}
-		d := Document{row.ObjectID, row.VersionID, row.Body}
+		d := Document{ObjectID: row.ObjectID, VersionID: row.VersionID, Body: row.Body, Path: row.Path}
 		if err := collect(d, 0); err != nil {
 			return nil, err
 		}

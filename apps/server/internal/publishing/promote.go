@@ -98,7 +98,7 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 		if err != nil {
 			return Publication{}, err
 		}
-		docs = append(docs, validation.Document{ObjectID: it.ObjectID, VersionID: v.ID, Body: v.Body})
+		docs = append(docs, validation.Document{ObjectID: it.ObjectID, VersionID: v.ID, Body: v.Body, Path: v.Path})
 	}
 	problems, err := check.CheckPublication(ctx, docs)
 	if err != nil {

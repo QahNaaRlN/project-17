@@ -23,6 +23,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -215,8 +216,9 @@ type AppliedOperation struct {
 
 // ApplyResult — ответ apply-operations и undo.
 type ApplyResult struct {
-	Changeset  Changeset          `json:"changeset"`
-	Operations []AppliedOperation `json:"operations"`
+	Changeset  Changeset                             `json:"changeset"`
+	Operations []AppliedOperation                    `json:"operations"`
+	Warnings   map[string]map[string][]ir.Diagnostic `json:"warnings,omitempty"`
 }
 
 func authorizeApply(actor auth.Actor, p applyPayload) error {
@@ -372,6 +374,9 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 
 func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayload) (ApplyResult, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return ApplyResult{}, err
+	}
 	cs, err := lockOpen(ctx, q, actor, p.ChangesetID)
 	if err != nil {
 		return ApplyResult{}, err
@@ -411,7 +416,19 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 		return ApplyResult{}, err
 	}
 	s.cs.UpdatedAt = time.Now()
-	return ApplyResult{Changeset: toChangeset(s.cs), Operations: applied}, nil
+	docs := []validation.Document{}
+	for id, d := range s.docs {
+		raw, err := json.Marshal(d.body)
+		if err != nil {
+			return ApplyResult{}, err
+		}
+		docs = append(docs, validation.Document{ObjectID: id, VersionID: d.versionID, Body: raw, Path: d.path})
+	}
+	warnings, err := validation.DraftWarnings(s.ctx, s.q, s.actor.ProjectID, s.cs.ID, s.cs.Targets, docs)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	return ApplyResult{Changeset: toChangeset(s.cs), Operations: applied, Warnings: warnings}, nil
 }
 
 func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, error) {
@@ -519,6 +536,9 @@ type seqPayload struct {
 // история не переписывается.
 func handleUndo(ctx context.Context, tx pgx.Tx, actor auth.Actor, p seqPayload) (ApplyResult, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return ApplyResult{}, err
+	}
 	cs, err := lockOpen(ctx, q, actor, p.ChangesetID)
 	if err != nil {
 		return ApplyResult{}, err
