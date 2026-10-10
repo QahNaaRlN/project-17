@@ -49,6 +49,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/rebase-changeset` | Перенести Change Set на текущий head; конфликты и их разрешение (`mine`/`theirs`) |
 | `POST` | `/api/v1/commands/set-approval-policy` | Число согласований по риску |
 | `POST` | `/api/v1/commands/publish` | Опубликовать согласованный Change Set в окружение |
+| `POST` | `/api/v1/commands/promote` | Перенести версии публикации в другое окружение |
 | `POST` | `/api/v1/commands/rollback` | Откатить публикацию |
 | `GET` | `/api/v1/environments` | Окружения |
 | `GET` | `/api/v1/changesets?state=` | Change Set'ы проекта |
@@ -89,7 +90,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `internal/projects` | Проекты, окружения, команда `create-environment`, bootstrap |
 | `internal/changes` | Change Set, рабочие версии, журнал операций, undo, переигрывание операций при rebase |
 | `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований, rebase |
-| `internal/publishing` | Публикация в окружение, head и опубликованные указатели, откат |
+| `internal/publishing` | Публикация в окружение, продвижение между окружениями, head и опубликованные указатели, откат |
 | `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |
 | `internal/store` | Запросы sqlc (сгенерировано из `db/queries`) |
