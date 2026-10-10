@@ -11,7 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -86,6 +88,8 @@ type Page struct {
 	Components  map[string]any  `json:"components"`
 	Data        map[string]any  `json:"data"`
 	DataSources map[string]any  `json:"dataSources"`
+	// Diagnostics — диагностика документа в черновом режиме (API-042).
+	Diagnostics []ir.Diagnostic `json:"diagnostics,omitzero"`
 }
 
 // Document — ответ /document/{id}.
@@ -94,6 +98,8 @@ type Document struct {
 	VersionID uuid.UUID       `json:"versionId"`
 	Path      *string         `json:"path"`
 	Document  json.RawMessage `json:"document"`
+	// Diagnostics — диагностика документа в черновом режиме (API-042).
+	Diagnostics []ir.Diagnostic `json:"diagnostics,omitzero"`
 }
 
 func notFound(detail string) error {
@@ -102,7 +108,7 @@ func notFound(detail string) error {
 
 // GetPage возвращает опубликованную страницу по пути запроса.
 func GetPage(ctx context.Context, q *store.Queries, a Access, path string) (Page, error) {
-	routes, err := publishing.ListRoutes(ctx, q, a.ProjectID, a.Environment)
+	routes, err := GetRoutes(ctx, q, a)
 	if err != nil {
 		return Page{}, err
 	}
@@ -117,11 +123,15 @@ func GetPage(ctx context.Context, q *store.Queries, a Access, path string) (Page
 	return Page{
 		Page:     PageRef{ObjectID: d.ObjectID, VersionID: d.VersionID, Path: route.Path, Params: params},
 		Document: d.Document, Components: map[string]any{}, Data: map[string]any{}, DataSources: map[string]any{},
+		Diagnostics: d.Diagnostics,
 	}, nil
 }
 
 // GetDocument возвращает опубликованный в окружении документ.
 func GetDocument(ctx context.Context, q *store.Queries, a Access, id uuid.UUID) (Document, error) {
+	if a.Draft {
+		return draftDocument(ctx, q, a, id)
+	}
 	d, err := q.GetDeliveredDocument(ctx, store.GetDeliveredDocumentParams{EnvironmentID: a.EnvironmentID, ObjectID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Document{}, notFound(fmt.Sprintf("Документ %s не опубликован в окружении %q", id, a.Environment))
@@ -134,5 +144,32 @@ func GetDocument(ctx context.Context, q *store.Queries, a Access, id uuid.UUID) 
 
 // GetRoutes — таблица маршрутов окружения (08 §5.2).
 func GetRoutes(ctx context.Context, q *store.Queries, a Access) ([]publishing.Route, error) {
-	return publishing.ListRoutes(ctx, q, a.ProjectID, a.Environment)
+	if !a.Draft {
+		return publishing.ListRoutes(ctx, q, a.ProjectID, a.Environment)
+	}
+	rows, err := q.ListDraftRoutes(ctx, store.ListDraftRoutesParams{ChangesetID: a.ChangesetID, ProjectID: a.ProjectID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]publishing.Route, len(rows))
+	for i, r := range rows {
+		out[i] = publishing.Route{Path: r.Path, ObjectID: r.ObjectID, VersionID: r.VersionID}
+	}
+	return out, nil
+}
+
+// draftDocument — документ чернового режима: рабочая версия в Change Set или head (API-040)
+// с диагностикой валидации (API-042).
+func draftDocument(ctx context.Context, q *store.Queries, a Access, id uuid.UUID) (Document, error) {
+	d, err := changes.GetDocument(ctx, q, a.ProjectID, id, a.ChangesetID)
+	if err != nil {
+		return Document{}, err
+	}
+	var body any
+	_ = json.Unmarshal(d.Body, &body) // тело версии записывает сервер
+	diagnostics := ir.ValidateDocument(body).Diagnostics
+	if diagnostics == nil {
+		diagnostics = []ir.Diagnostic{}
+	}
+	return Document{ObjectID: d.ID, VersionID: d.VersionID, Path: d.Path, Document: d.Body, Diagnostics: diagnostics}, nil
 }

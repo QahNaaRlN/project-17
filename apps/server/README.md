@@ -59,6 +59,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/create-delivery-key` | Ключ доставки `cms_pub_…` окружения (показывается один раз) |
 | `POST` | `/api/v1/commands/revoke-delivery-key` | Отозвать ключ доставки |
 | `GET` | `/api/v1/delivery-keys` | Ключи доставки проекта |
+| `POST` | `/api/v1/commands/create-preview-token` | Preview-токен (15 мин) для чернового чтения Delivery API |
 | `GET` | `/api/v1/publications?environment=` | История публикаций |
 | `GET` | `/api/v1/publications/{id}` | Публикация с перемещёнными указателями |
 | `GET` | `/api/v1/documents/{id}?changesetId=` | Документ: рабочая версия в Change Set или head |
@@ -84,6 +85,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 
 Чтение опубликованного приложением по ключу доставки окружения (`Authorization: Bearer cms_pub_…`).
 Ответы кэшируются CDN: `ETag`, `Cache-Control: public, s-maxage=300, …`, `Surrogate-Key`.
+С `Authorization: Preview <токен>` (и необязательным `?changesetId=`) те же запросы читают черновик:
+Change Set — из рабочих версий, остальное — из head; ответы с `diagnostics` и `Cache-Control: no-store`.
 
 | Метод | Путь | Назначение |
 |---|---|---|

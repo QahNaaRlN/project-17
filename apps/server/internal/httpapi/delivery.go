@@ -74,6 +74,12 @@ func deliver(w http.ResponseWriter, r *http.Request, d Deps, v any, err error, s
 		writeError(w, r, d.Log, err)
 		return
 	}
+	if accessFrom(r.Context()).Draft {
+		// Черновые ответы не кэшируются (API-040).
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -110,11 +116,17 @@ func authenticateDelivery(d Deps) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-store")
-			a, err := delivery.Authenticate(r.Context(), store.New(d.Pool), r.Header.Get("Authorization"))
+			authorization := r.Header.Get("Authorization")
+			authenticate := delivery.Authenticate
+			if strings.HasPrefix(authorization, "Preview ") {
+				authenticate = delivery.AuthenticatePreview
+			}
+			a, err := authenticate(r.Context(), store.New(d.Pool), authorization)
 			if errors.Is(err, delivery.ErrUnauthenticated) {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="cms-delivery"`)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="cms-delivery", Preview realm="cms-delivery"`)
 				writeError(w, r, d.Log, commandbus.NewError(http.StatusUnauthorized, "UNAUTHENTICATED",
-					"Требуется ключ доставки", "Передайте действующий ключ cms_pub_… в заголовке Authorization: Bearer"))
+					"Требуется ключ доставки или preview-токен",
+					"Передайте действующий ключ cms_pub_… (Authorization: Bearer) или preview-токен (Authorization: Preview)"))
 				return
 			}
 			if err != nil {
@@ -126,7 +138,28 @@ func authenticateDelivery(d Deps) func(http.Handler) http.Handler {
 					fmt.Sprintf("Ключ действует для %s/%s", a.ProjectSlug, a.Environment)))
 				return
 			}
+			if err := checkChangeset(r, a); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), accessKey{}, a)))
 		})
 	}
+}
+
+// checkChangeset сверяет параметр changesetId с Change Set preview-токена (08 §5.3):
+// черновик читается только по токену, выпущенному для этого Change Set.
+func checkChangeset(r *http.Request, a delivery.Access) error {
+	param := r.URL.Query().Get("changesetId")
+	if param == "" {
+		return nil
+	}
+	if !a.Draft {
+		return badParam("changesetId", "только с preview-токеном (Authorization: Preview)")
+	}
+	if a.ChangesetID == nil || a.ChangesetID.String() != param {
+		return commandbus.NewError(http.StatusForbidden, "FORBIDDEN", "Токен выдан для другого Change Set",
+			"Параметр changesetId должен совпадать с Change Set preview-токена")
+	}
+	return nil
 }

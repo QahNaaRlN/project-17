@@ -112,6 +112,38 @@ func (q *Queries) GetDeliveredDocument(ctx context.Context, arg GetDeliveredDocu
 	return i, err
 }
 
+const getEnvironmentPreviewKey = `-- name: GetEnvironmentPreviewKey :one
+SELECT e.id, e.name, e.preview_key, p.id AS project_id, p.slug AS project_slug
+FROM environments e JOIN projects p ON p.id = e.project_id
+WHERE p.slug = $1 AND e.name = $2
+`
+
+type GetEnvironmentPreviewKeyParams struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+type GetEnvironmentPreviewKeyRow struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	PreviewKey  []byte    `json:"previewKey"`
+	ProjectID   uuid.UUID `json:"projectId"`
+	ProjectSlug string    `json:"projectSlug"`
+}
+
+func (q *Queries) GetEnvironmentPreviewKey(ctx context.Context, arg GetEnvironmentPreviewKeyParams) (GetEnvironmentPreviewKeyRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentPreviewKey, arg.Slug, arg.Name)
+	var i GetEnvironmentPreviewKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PreviewKey,
+		&i.ProjectID,
+		&i.ProjectSlug,
+	)
+	return i, err
+}
+
 const listDeliveryKeys = `-- name: ListDeliveryKeys :many
 SELECT k.id, k.name, k.created_by, k.created_at, k.revoked_at, e.name AS environment_name
 FROM delivery_keys k JOIN environments e ON e.id = k.environment_id
@@ -145,6 +177,53 @@ func (q *Queries) ListDeliveryKeys(ctx context.Context, projectID uuid.UUID) ([]
 			&i.RevokedAt,
 			&i.EnvironmentName,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDraftRoutes = `-- name: ListDraftRoutes :many
+WITH ws AS (
+  SELECT co.object_id, v.id AS version_id, v.path
+  FROM changeset_objects co JOIN object_versions v ON v.id = co.working_version_id
+  WHERE co.changeset_id = $1::uuid
+)
+SELECT ws.path::text AS path, ws.object_id, ws.version_id FROM ws WHERE ws.path IS NOT NULL
+UNION ALL
+SELECT o.head_path::text, o.id, o.head_version_id::uuid
+FROM objects o
+WHERE o.project_id = $2 AND o.head_path IS NOT NULL AND o.deleted_at IS NULL
+  AND o.id NOT IN (SELECT object_id FROM ws)
+ORDER BY 1
+`
+
+type ListDraftRoutesParams struct {
+	ChangesetID *uuid.UUID `json:"changesetId"`
+	ProjectID   uuid.UUID  `json:"projectId"`
+}
+
+type ListDraftRoutesRow struct {
+	Path      string    `json:"path"`
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+// Маршруты чернового режима (API-040): объекты Change Set — из рабочих версий, остальные — из head.
+func (q *Queries) ListDraftRoutes(ctx context.Context, arg ListDraftRoutesParams) ([]ListDraftRoutesRow, error) {
+	rows, err := q.db.Query(ctx, listDraftRoutes, arg.ChangesetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDraftRoutesRow
+	for rows.Next() {
+		var i ListDraftRoutesRow
+		if err := rows.Scan(&i.Path, &i.ObjectID, &i.VersionID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

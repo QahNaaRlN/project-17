@@ -106,6 +106,7 @@ type Environment struct {
 	AppUrl           *string    `json:"appUrl"`
 	ExpiresAt        *time.Time `json:"expiresAt"`
 	CreatedAt        time.Time  `json:"createdAt"`
+	PreviewKey       []byte     `json:"previewKey"`
 }
 
 type IdempotencyKey struct {

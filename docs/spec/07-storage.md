@@ -33,6 +33,7 @@ CREATE TABLE environments (
   active_manifest_id  uuid,
   app_url             text,                                  -- базовый URL приложения (preview, SSR-проверки)
   expires_at          timestamptz,                           -- для preview
+  preview_key         bytea NOT NULL,                        -- ключ подписи preview-токенов (08 API-041), 32 байта
   created_at          timestamptz NOT NULL DEFAULT now(),
   UNIQUE (project_id, name)
 );
