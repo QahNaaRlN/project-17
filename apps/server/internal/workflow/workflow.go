@@ -268,12 +268,7 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	if err != nil {
 		return evaluation{}, err
 	}
-	if len(requirements.Roles) > 0 || requirements.Strict {
-		h := sha256.New()
-		h.Write(hash)
-		h.Write(mustJSON(map[string]any{"roles": requirements.Roles, "strict": requirements.Strict}))
-		hash = h.Sum(nil)
-	}
+	hash = bindZoneHash(hash, requirements)
 	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err

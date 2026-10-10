@@ -338,3 +338,47 @@ func TestZoneRoleProjectBoundary(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+// PUB-001/004: changing the required-role contract invalidates an earlier approval hash,
+// even when the same reviewer happens to hold both the old and new roles.
+func TestZonePublicationRoleContractDrift(t *testing.T) {
+	e := setup(t)
+	reviewer := e.Human("first", auth.ContentPublish)
+	ctx := context.Background()
+	role, err := e.Q.CreateRole(ctx, store.CreateRoleParams{ID: uuid.New(), ProjectID: e.Admin.ProjectID, Name: "second", Capabilities: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Q.BindRole(ctx, store.BindRoleParams{ProjectID: e.Admin.ProjectID, ActorID: reviewer.ID, RoleID: role.ID}); err != nil {
+		t.Fatal(err)
+	}
+	cs := newCS(e)
+	leaf := create(e, cs, 0, "component", map[string]any{"type": "Text"})
+	submit(e, cs, 1, "staging")
+	publish(e, cs)
+	cs = newCS(e)
+	n := ref(leaf, "live")
+	n["zone"] = map[string]any{"id": "zone", "mode": "SYSTEM", "requiredApprovalRole": "role-first"}
+	page := create(e, cs, 0, "page", n)
+	submit(e, cs, 1, "staging")
+	approveZone(e, reviewer, cs)
+	publish(e, cs)
+	pending := newCS(e)
+	if err := applyPolicy(e, e.Admin, pending, 0, operation(leaf, "node.rename", map[string]any{"nodeId": "n_root", "name": "changed"})); err != nil {
+		t.Fatal(err)
+	}
+	submit(e, pending, 1, "staging")
+	approveZone(e, reviewer, pending)
+	cs = newCS(e)
+	if err := applyPolicy(e, e.Admin, cs, 0, operation(page, "node.setZone", map[string]any{"nodeId": "n_root", "zone": map[string]any{"id": "zone", "mode": "SYSTEM", "requiredApprovalRole": "second"}})); err != nil {
+		t.Fatal(err)
+	}
+	submit(e, cs, 1, "staging")
+	approveZone(e, reviewer, cs)
+	publish(e, cs)
+	before := pubState(e)
+	err = e.Do(e.Admin, "publish", map[string]any{"changesetId": pending, "environment": "staging"}, nil)
+	if cmstest.Code(err) != "CHANGESET_CONTENT_CHANGED" || before != pubState(e) {
+		t.Fatal(err)
+	}
+}

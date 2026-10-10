@@ -2,13 +2,16 @@ package workflow
 
 import (
 	"context"
+	"crypto/sha256"
+	"net/http"
+	"slices"
+
 	"github.com/google/uuid"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/zonepolicy"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
-	"net/http"
-	"slices"
 )
 
 type approvalCoverage struct {
@@ -59,6 +62,17 @@ func coverage(ctx context.Context, q *store.Queries, project, cs uuid.UUID, hash
 	return out, nil
 }
 
+// bindZoneHash preserves legacy hashes for changes with no zone requirements.
+func bindZoneHash(hash []byte, r zonepolicy.Result) []byte {
+	if len(r.Roles) == 0 && !r.Strict {
+		return hash
+	}
+	h := sha256.New()
+	h.Write(hash)
+	h.Write(mustJSON(map[string]any{"roles": r.Roles, "strict": r.Strict}))
+	return h.Sum(nil)
+}
+
 // RequireZoneApprovals rechecks current human membership before any publication writes.
 func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Changeset, target string) error {
 	targets := slices.Clone(cs.Targets)
@@ -69,8 +83,15 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 	if err != nil {
 		return err
 	}
-	if len(requirements.Roles) == 0 {
+	if len(requirements.Roles) == 0 && !requirements.Strict {
 		return nil
+	}
+	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+	if err != nil {
+		return err
+	}
+	if string(bindZoneHash(contentHash(versions), requirements)) != string(cs.ContentHash) {
+		return commandbus.NewError(http.StatusConflict, "CHANGESET_CONTENT_CHANGED", "Требования согласования изменились", "Повторно подайте Change Set с действующими требованиями зон").WithParams(map[string]any{"requiredRoles": requirements.Roles, "strict": requirements.Strict})
 	}
 	status, err := coverage(ctx, q, cs.ProjectID, cs.ID, cs.ContentHash, requirements.Roles)
 	if err != nil {
