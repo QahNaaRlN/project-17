@@ -362,7 +362,7 @@ func TestAtomicWriteFailures(t *testing.T) {
 // CNT-022/MF-027/PUB-033: broken published bindings must be repaired under the candidate in the same CS.
 func TestSchemaAndBindingRepairTogether(t *testing.T) {
 	e := setup(t)
-	owner := author(e)
+	owner := e.Human("repair", auth.SchemaApply, auth.DesignCompose, auth.ContentWrite, auth.ContentPublish, auth.SchemaRead, auth.DesignRead)
 	r := register(e, manifest("1", "text"), "staging")
 	claim(e, owner, *r.ChangesetID)
 	review(e, owner, *r.ChangesetID)
@@ -370,8 +370,11 @@ func TestSchemaAndBindingRepairTogether(t *testing.T) {
 	publish(e, owner, *r.ChangesetID)
 	var cs changes.Changeset
 	e.Must(owner, "create-changeset", map[string]any{"title": "binding"}, &cs)
+	var entity changes.ApplyResult
+	e.Must(owner, "apply-operations", map[string]any{"changesetId": cs.ID, "expectedSeq": 0, "operations": []any{map[string]any{"type": "entity.create", "payload": map[string]any{"schema": "Product", "environment": "staging", "data": map[string]any{"title": "Product"}}}}}, &entity)
+	entityID := entity.Operations[0].Target
 	var created changes.ApplyResult
-	e.Must(owner, "apply-operations", map[string]any{"changesetId": cs.ID, "expectedSeq": 0, "operations": []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "content": map[string]any{"schema": "Product", "resolve": map[string]any{"by": "entity", "entityId": uuid.NewString()}}, "root": map[string]any{"id": "n_root", "type": "Text", "bindings": map[string]any{"text": "$content.title"}}}}}}, &created)
+	e.Must(owner, "apply-operations", map[string]any{"changesetId": cs.ID, "expectedSeq": 1, "operations": []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "content": map[string]any{"schema": "Product", "resolve": map[string]any{"by": "entity", "entityId": entityID.String()}}, "root": map[string]any{"id": "n_root", "type": "Text", "bindings": map[string]any{"text": "$content.title"}}}}}}, &created)
 	initialReview := review(e, owner, cs.ID)
 	if initialReview.Changeset.State != "approved" {
 		raw, _ := json.Marshal(initialReview.Checks)
@@ -389,6 +392,7 @@ func TestSchemaAndBindingRepairTogether(t *testing.T) {
 	e.Must(owner, "apply-operations", map[string]any{"changesetId": *r.ChangesetID, "expectedSeq": 1, "operations": []any{
 		map[string]any{"type": "node.setBinding", "target": created.Operations[0].Target, "payload": map[string]any{"nodeId": "n_root", "prop": "text", "binding": "$content.name"}},
 		map[string]any{"type": "node.rename", "target": created.Operations[0].Target, "payload": map[string]any{"nodeId": "n_root", "name": "fixed"}},
+		map[string]any{"type": "entity.setFields", "target": entityID, "payload": map[string]any{"set": map[string]any{"name": "Product"}, "unset": []string{"title"}}},
 	}}, nil)
 	fixed := review(e, owner, *r.ChangesetID)
 	if fixed.Changeset.State != "in_review" {
@@ -397,10 +401,16 @@ func TestSchemaAndBindingRepairTogether(t *testing.T) {
 	}
 	e.Must(a, "approve-changeset", map[string]any{"changesetId": *r.ChangesetID}, nil)
 	p := publish(e, owner, *r.ChangesetID)
-	if *active(e) == previous || len(p.Items) != 1 || count(e, "schema_versions") != 2 {
+	if *active(e) == previous || len(p.Items) != 2 || count(e, "schema_versions") != 2 {
 		t.Fatal(p)
 	}
+	if _, err := changes.GetContent(context.Background(), e.Q, e.Admin.ProjectID, entityID, "staging", r.ChangesetID); err != nil {
+		t.Fatal("merged content history", err)
+	}
 	e.Must(owner, "rollback", map[string]any{"publicationId": p.ID}, nil)
+	if _, err := changes.GetContent(context.Background(), e.Q, e.Admin.ProjectID, entityID, "staging", r.ChangesetID); err != nil {
+		t.Fatal("rolled back content history", err)
+	}
 	if *active(e) != previous || count(e, "schema_versions") != 2 {
 		t.Fatal("joint rollback failed")
 	}
@@ -513,6 +523,9 @@ func TestKnownVersionReuseAndClaimFailureRollback(t *testing.T) {
 func TestMigrationDownPreservesSchemaAudit(t *testing.T) {
 	e := setup(t)
 	r := register(e, manifest("1", "text"), "staging")
+	if err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	} // remove the empty content migration first
 	err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err == nil || !strings.Contains(err.Error(), "schema publication data prevents downgrade") {
 		t.Fatal(err)

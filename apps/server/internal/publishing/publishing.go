@@ -408,7 +408,7 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 		}
 		out = append(out, back)
 	}
-	if src.ManifestChanged {
+	{
 		c, err := validation.Load(ctx, q, actor.ProjectID, src.EnvironmentName, nil)
 		if err != nil {
 			return Publication{}, err
@@ -420,8 +420,10 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 		if err := validation.RequireValid(problems); err != nil {
 			return Publication{}, err
 		}
-		if err := manifestregistry.Refresh(ctx, q, actor.ProjectID, src.EnvironmentName); err != nil {
-			return Publication{}, err
+		if src.ManifestChanged {
+			if err := manifestregistry.Refresh(ctx, q, actor.ProjectID, src.EnvironmentName); err != nil {
+				return Publication{}, err
+			}
 		}
 	}
 	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, src.EnvironmentName, out, src.ManifestChanged); err != nil {

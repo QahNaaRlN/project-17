@@ -160,6 +160,38 @@ func NewRouter(d Deps) http.Handler {
 			pub, err := publishing.GetPublication(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
 			respond(w, r, d, pub, err)
 		})
+
+		for _, kind := range []string{"entities", "assets"} {
+			r.Get("/"+kind+"/{id}", func(w http.ResponseWriter, r *http.Request) {
+				actor := actorFrom(r.Context())
+				if err := commandbus.Require(actor, auth.ContentRead); err != nil {
+					writeError(w, r, d.Log, err)
+					return
+				}
+				id, ok := uuidParam(w, r, d, "id")
+				if !ok {
+					return
+				}
+				var cs *uuid.UUID
+				if raw := r.URL.Query().Get("changesetId"); raw != "" {
+					v, err := uuid.Parse(raw)
+					if err != nil {
+						writeError(w, r, d.Log, badParam("changesetId", "UUID"))
+						return
+					}
+					cs = &v
+				}
+				value, err := changes.GetContent(r.Context(), store.New(d.Pool), actor.ProjectID, id, r.URL.Query().Get("environment"), cs)
+				expected := "entity"
+				if kind == "assets" {
+					expected = "asset"
+				}
+				if err == nil && value.Kind != expected {
+					err = commandbus.NewError(404, "NOT_FOUND", "Контент не найден", id.String())
+				}
+				respond(w, r, d, value, err)
+			})
+		}
 		r.Get("/documents/{id}", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.DesignRead); err != nil {

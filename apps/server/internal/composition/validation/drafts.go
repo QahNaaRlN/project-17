@@ -84,6 +84,7 @@ func DraftWarnings(ctx context.Context, q *store.Queries, project, cs uuid.UUID,
 		if err != nil {
 			return nil, err
 		}
+		c.Draft = true
 		for _, d := range docs {
 			c.Overrides[d.ObjectID] = d
 		}
@@ -97,7 +98,13 @@ func DraftWarnings(ctx context.Context, q *store.Queries, project, cs uuid.UUID,
 					fatal[e.Name+":"+d.ObjectID.String()] = append(fatal[e.Name+":"+d.ObjectID.String()], diag)
 					continue
 				}
-				if !strings.HasPrefix(string(diag.Code), "BINDING_") && !strings.HasPrefix(string(diag.Code), "ACTION_") && !strings.HasPrefix(string(diag.Code), "A11Y_") {
+				if strings.HasPrefix(string(diag.Code), "CONTENT_") || strings.HasPrefix(string(diag.Code), "SCHEMA_") {
+					if diag.Code != "CONTENT_REQUIRED" && diag.Code != "CONTENT_REFERENCE_UNPUBLISHED" {
+						fatal[e.Name+":"+d.ObjectID.String()] = append(fatal[e.Name+":"+d.ObjectID.String()], diag)
+						continue
+					}
+				}
+				if !strings.HasPrefix(string(diag.Code), "CONTENT_") && !strings.HasPrefix(string(diag.Code), "BINDING_") && !strings.HasPrefix(string(diag.Code), "ACTION_") && !strings.HasPrefix(string(diag.Code), "A11Y_") {
 					continue
 				}
 				diag.Severity = ir.SeverityWarning

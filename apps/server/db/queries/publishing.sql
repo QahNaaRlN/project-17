@@ -14,7 +14,8 @@ WHERE id = $1 AND state = 'working';
 -- name: SetHead :exec
 -- Head и маршрут head (из пути версии; NULL — снять).
 UPDATE objects o SET head_version_id = sqlc.narg(version_id)::uuid,
-  head_path = (SELECT v.path FROM object_versions v WHERE v.id = sqlc.narg(version_id)::uuid)
+  head_path = (SELECT v.path FROM object_versions v WHERE v.id = sqlc.narg(version_id)::uuid),
+  deleted_at = CASE WHEN (SELECT v.deleted FROM object_versions v WHERE v.id=sqlc.narg(version_id)::uuid) THEN now() ELSE NULL END
 WHERE o.id = sqlc.arg(id);
 
 -- name: GetPublishedPointer :one

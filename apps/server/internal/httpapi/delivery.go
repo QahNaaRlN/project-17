@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
@@ -59,6 +61,25 @@ func deliveryRoutes(d Deps) func(chi.Router) {
 			doc, err := delivery.GetDocument(r.Context(), store.New(d.Pool), a, id)
 			deliver(w, r, d, doc, err, surrogate(a, id.String()))
 		})
+
+		for _, kind := range []string{"entity", "asset"} {
+			r.Get("/"+kind+"/{id}", func(w http.ResponseWriter, r *http.Request) {
+				id, ok := uuidParam(w, r, d, "id")
+				if !ok {
+					return
+				}
+				a := accessFrom(r.Context())
+				var cs *uuid.UUID
+				if a.Draft {
+					cs = a.ChangesetID
+				}
+				value, err := changes.GetContent(r.Context(), store.New(d.Pool), a.ProjectID, id, a.Environment, cs, a.Draft && cs == nil)
+				if err == nil && value.Kind != kind {
+					err = commandbus.NewError(404, "NOT_FOUND", "Контент не найден", id.String())
+				}
+				deliver(w, r, d, value, err, surrogate(a, id.String()), surrogate(a, "manifest"))
+			})
+		}
 		r.Get("/routes", func(w http.ResponseWriter, r *http.Request) {
 			a := accessFrom(r.Context())
 			routes, err := delivery.GetRoutes(r.Context(), store.New(d.Pool), a)

@@ -232,3 +232,12 @@ Authorization: Preview eyJhbGciOi…
 | Сервисный токен | 20 команд/с |
 | Агентская сессия | 5 команд/с, квота операций на сессию (по умолчанию 2 000) |
 | Delivery API (origin) | 500 запросов/с на ключ доставки |
+
+### Подключённое чтение сущностей и метаданных ассетов
+
+`GET /api/v1/entities/{id}` и `/assets/{id}` (content.read) принимают `environment`
+или `changesetId`; без окружения читается head. Delivery endpoints —
+`/delivery/v1/{project}/{env}/entity/{id}` и `/asset/{id}`. Они используют
+существующие ключи доступа, preview, ETag и surrogate keys. Метаданные ассета
+не заменяют endpoint бинарного файла CNT-050. Подробности и оставшиеся проверки:
+[сущности и ссылки](../entities-assets.md).
