@@ -98,8 +98,8 @@ X-CMS-Project: store
 
 | Запрос | Описание |
 |---|---|
-| `GET /api/v1/schemas?environment=` | Схемы активного manifest окружения |
-| `GET /api/v1/manifest?environment=` | Активный manifest |
+| `GET /api/v1/schemas?environment=` | Схемы активного manifest окружения; до первой активации — `409 MANIFEST_NOT_READY` |
+| `GET /api/v1/manifest?environment=` | Активный manifest; до первой активации — `409 MANIFEST_NOT_READY` |
 | `GET /api/v1/objects?kind=&schema=&q=&cursor=` | Поиск объектов (head); `q` — полнотекстовый |
 | `GET /api/v1/objects/{id}?changesetId=` | Объект: head или рабочая версия в CS |
 | `GET /api/v1/objects/{id}/versions` | Список версий |
@@ -107,14 +107,18 @@ X-CMS-Project: store
 | `GET /api/v1/objects/{id}/usages` | Где используется (обратные ссылки) |
 | `GET /api/v1/documents/{id}/outline?changesetId=` | Компактная структура документа (дерево типов, имена, привязки) — для агента и дерева слоёв |
 | `GET /api/v1/changesets?state=&owner=` | Список CS |
-| `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями |
+| `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями, `needsAttention` и `manifestDiagnostics` по окружениям (CHG-034); для CS схем — кандидат и исходный manifest (MF-025) |
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
-| `GET /api/v1/publications?environment=` | История публикаций |
+| `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
 | `GET /api/v1/events` (SSE) | Поток событий проекта для Studio: изменения CS, проверки, публикации, presence |
 
+Ответ `register-manifest` различает активированный manifest и сохранённого кандидата: `manifestHash`, `activation` (`active` или `pending`), для кандидата — `changesetId` (MF-025). Регистрация кандидата не меняет ответы запросов активного manifest и схем.
+
 Пагинация — курсорная (`cursor`, `limit` ≤ 100); ответ содержит `nextCursor`.
+
+При публикации кандидата смена исходного активного manifest возвращает `409 MANIFEST_BASE_CHANGED` (MF-027).
 
 ## 5. Delivery API
 
@@ -214,7 +218,7 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
-| 409 | `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
+| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
 | 413 | `LIMIT_EXCEEDED` |
 | 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |
