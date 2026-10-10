@@ -18,6 +18,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -156,6 +157,9 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := q.MergeChangeset(ctx, cs.ID); err != nil {
 		return Publication{}, err
 	}
+	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, env.Name, items); err != nil {
+		return Publication{}, err
+	}
 	return toPublication(pub, env.Name, items), nil
 }
 
@@ -199,6 +203,16 @@ func movePointer(ctx context.Context, q *store.Queries, envID, publicationID uui
 		PublicationID: publicationID, ObjectID: item.ObjectID,
 		PreviousVersionID: item.PreviousVersionID, CurrentVersionID: item.CurrentVersionID,
 	})
+}
+
+// enqueuePurge ставит в outbox purge CDN по объектам публикации и таблице маршрутов окружения
+// (06 §7.1 п. 6, PUB-021): задача появится, только если транзакция публикации зафиксирована.
+func enqueuePurge(ctx context.Context, tx pgx.Tx, project, env string, items []Item) error {
+	keys := []string{jobs.SurrogateKey(project, env, "routes")}
+	for _, it := range items {
+		keys = append(keys, jobs.SurrogateKey(project, env, it.ObjectID.String()))
+	}
+	return jobs.Enqueue(ctx, tx, jobs.PurgeArgs{Keys: keys})
 }
 
 // syncRoute приводит маршрут объекта в окружении к пути опубликованной версии.
@@ -298,6 +312,9 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 			}
 		}
 		out = append(out, back)
+	}
+	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, src.EnvironmentName, out); err != nil {
+		return Publication{}, err
 	}
 	return toPublication(pub, src.EnvironmentName, out), nil
 }

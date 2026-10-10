@@ -15,6 +15,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
@@ -43,6 +44,11 @@ func New(t *testing.T, register ...func(*commandbus.Bus)) *Env {
 		t.Fatal(err)
 	}
 	bus := commandbus.New(pool)
+	queue, err := jobs.NewInserter(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
 	changes.Register(bus)
 	for _, r := range register {

@@ -15,6 +15,8 @@ type Config struct {
 	DatabaseURL     string        // CMS_DATABASE_URL, обязательно
 	LogLevel        slog.Level    // CMS_LOG_LEVEL: debug | info | warn | error
 	ShutdownTimeout time.Duration // CMS_SHUTDOWN_TIMEOUT, по умолчанию 15s
+	CDNPurgeURL     string        // CMS_CDN_PURGE_URL — вебхук purge CDN; пусто — purge только в журнал
+	CDNPurgeToken   string        // CMS_CDN_PURGE_TOKEN — Bearer-токен вебхука
 }
 
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
@@ -23,6 +25,8 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		HTTPAddr:        valueOr(getenv("CMS_HTTP_ADDR"), ":8080"),
 		DatabaseURL:     getenv("CMS_DATABASE_URL"),
 		ShutdownTimeout: 15 * time.Second,
+		CDNPurgeURL:     getenv("CMS_CDN_PURGE_URL"),
+		CDNPurgeToken:   getenv("CMS_CDN_PURGE_TOKEN"),
 	}
 	var errs []error
 	if cfg.DatabaseURL == "" {

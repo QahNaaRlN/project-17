@@ -15,6 +15,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -44,26 +45,32 @@ func deliveryRoutes(d Deps) func(chi.Router) {
 			if path != "/" {
 				path = strings.TrimSuffix(path, "/")
 			}
-			page, err := delivery.GetPage(r.Context(), store.New(d.Pool), accessFrom(r.Context()), path)
-			deliver(w, r, d, page, err, page.Page.ObjectID.String())
+			a := accessFrom(r.Context())
+			page, err := delivery.GetPage(r.Context(), store.New(d.Pool), a, path)
+			// Страница зависит и от объекта, и от таблицы маршрутов (смена маршрута меняет ответ).
+			deliver(w, r, d, page, err, surrogate(a, page.Page.ObjectID.String()), surrogate(a, "routes"))
 		})
 		r.Get("/document/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id, ok := uuidParam(w, r, d, "id")
 			if !ok {
 				return
 			}
-			doc, err := delivery.GetDocument(r.Context(), store.New(d.Pool), accessFrom(r.Context()), id)
-			deliver(w, r, d, doc, err, id.String())
+			a := accessFrom(r.Context())
+			doc, err := delivery.GetDocument(r.Context(), store.New(d.Pool), a, id)
+			deliver(w, r, d, doc, err, surrogate(a, id.String()))
 		})
 		r.Get("/routes", func(w http.ResponseWriter, r *http.Request) {
-			routes, err := delivery.GetRoutes(r.Context(), store.New(d.Pool), accessFrom(r.Context()))
-			keys := []string{"routes"}
-			for _, rt := range routes {
-				keys = append(keys, rt.ObjectID.String())
-			}
+			a := accessFrom(r.Context())
+			routes, err := delivery.GetRoutes(r.Context(), store.New(d.Pool), a)
+			keys := []string{surrogate(a, "routes")}
 			deliver(w, r, d, map[string]any{"items": routes}, err, keys...)
 		})
 	}
+}
+
+// surrogate — Surrogate-Key объекта в окружении ключа (совпадает с ключами purge после публикации).
+func surrogate(a delivery.Access, object string) string {
+	return jobs.SurrogateKey(a.ProjectSlug, a.Environment, object)
 }
 
 // deliver отдаёт опубликованный ответ с ETag, Cache-Control и Surrogate-Key (API-033)

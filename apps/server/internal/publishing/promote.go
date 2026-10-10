@@ -97,6 +97,9 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 			return Publication{}, err
 		}
 	}
+	if err := enqueuePurge(ctx, tx, actor.ProjectSlug, env.Name, moves); err != nil {
+		return Publication{}, err
+	}
 	return toPublication(pub, env.Name, moves), nil
 }
 

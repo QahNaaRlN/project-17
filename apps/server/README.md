@@ -16,7 +16,9 @@
 | `CMS_DATABASE_URL` | — (обязательна) | Строка подключения PostgreSQL 16+ |
 | `CMS_HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
 | `CMS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; журнал — JSON в stdout |
-| `CMS_SHUTDOWN_TIMEOUT` | `15s` | Время на завершение запросов при остановке |
+| `CMS_SHUTDOWN_TIMEOUT` | `15s` | Время на завершение запросов и фоновых задач при остановке |
+| `CMS_CDN_PURGE_URL` | — | Вебхук purge CDN: `POST {"keys": [...]}`; не задан — purge только пишется в журнал |
+| `CMS_CDN_PURGE_TOKEN` | — | Токен вебхука (`Authorization: Bearer`) |
 
 ## Быстрый старт
 
@@ -108,6 +110,7 @@ Change Set — из рабочих версий, остальное — из hea
 | `internal/changes` | Change Set, рабочие версии, журнал операций, undo, переигрывание операций при rebase |
 | `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований, rebase |
 | `internal/delivery` | Delivery API: ключи доставки, страница по маршруту, документ, таблица маршрутов |
+| `internal/jobs` | Фоновые задачи на очереди River: purge CDN по `Surrogate-Key` после публикации |
 | `internal/publishing` | Публикация в окружение, продвижение между окружениями, head и опубликованные указатели, откат |
 | `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |

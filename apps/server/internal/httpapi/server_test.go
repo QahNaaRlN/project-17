@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
+	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
@@ -47,6 +48,11 @@ func setup(t *testing.T) env {
 		t.Fatal(err)
 	}
 	bus := commandbus.New(pool)
+	queue, err := jobs.NewInserter(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
 	changes.Register(bus)
 	workflow.Register(bus)

@@ -23,11 +23,13 @@ func TestCustomValues(t *testing.T) {
 	cfg, err := FromEnv(env(map[string]string{
 		"CMS_DATABASE_URL": "postgres://x", "CMS_HTTP_ADDR": "127.0.0.1:9000",
 		"CMS_LOG_LEVEL": "debug", "CMS_SHUTDOWN_TIMEOUT": "3s",
+		"CMS_CDN_PURGE_URL": "https://cdn.example/purge", "CMS_CDN_PURGE_TOKEN": "t",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.HTTPAddr != "127.0.0.1:9000" || cfg.LogLevel != slog.LevelDebug || cfg.ShutdownTimeout != 3*time.Second {
+	if cfg.HTTPAddr != "127.0.0.1:9000" || cfg.LogLevel != slog.LevelDebug || cfg.ShutdownTimeout != 3*time.Second ||
+		cfg.CDNPurgeURL != "https://cdn.example/purge" || cfg.CDNPurgeToken != "t" {
 		t.Errorf("конфигурация: %+v", cfg)
 	}
 }

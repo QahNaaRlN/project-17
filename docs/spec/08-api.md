@@ -166,8 +166,8 @@ Authorization: Bearer cms_pub_…
 - Ключ доставки `cms_pub_<random>` выдаёт команда `create-delivery-key {environment, name}`; секрет показывается один раз, хранится SHA-256. `revoke-delivery-key {id}` отзывает ключ, `GET /api/v1/delivery-keys` — список ключей проекта (право `project.admin`). Ключ действует только для своего проекта и окружения: чужие `{project}/{env}` в пути — `403 FORBIDDEN`, неизвестный или отозванный ключ — `401 UNAUTHENTICATED`.
 - Реализованы `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`. Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
 - Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
-- Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` (ID объектов; у `/routes` — ещё ключ `routes`); на совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
-- Пока не реализованы: локали и fallback (API-032), сущности и ассеты, кэш Redis и инвалидация CDN по `Surrogate-Key` (PUB-021), лимиты запросов.
+- Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` вида `{project}:{env}:{objectId}`; `/page` и `/routes` зависят также от `{project}:{env}:routes`. Ключи включают проект и окружение, чтобы purge одного окружения не задевал другие; после публикации эти ключи сбрасываются задачей `cdn_purge` (06 §7.3.1). На совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
+- Пока не реализованы: локали и fallback (API-032), сущности и ассеты, кэш ответов на origin (Redis, NFR-002 — с нагрузочными тестами M6), лимиты запросов.
 
 ### 5.3. Черновой режим
 
