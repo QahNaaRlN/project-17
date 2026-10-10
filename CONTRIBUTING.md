@@ -48,7 +48,7 @@ git push -u origin feature/ir-json-schema
 - В описании: что изменено, зачем, как проверено; ссылки на требования спецификации (`IR-041`, `PUB-020` …), если изменение их реализует.
 - Все проверки CI должны быть зелёными.
 - Заполнен чек-лист шаблона PR, включая тестирование.
-- Требуется одобрение хотя бы одного ревьюера, не являющегося автором.
+- Обязательное одобрение другого ревьюера не требуется: проект ведётся одним разработчиком. Автор проверяет diff и результаты CI перед слиянием.
 
 | Направление | Способ слияния |
 |---|---|
@@ -90,8 +90,8 @@ git push -u origin feature/ir-json-schema
 
 Защита `main` и `dev` настраивается в **Settings → Rules → Rulesets** (ruleset для обеих веток, Enforcement: Active):
 
-- Require a pull request before merging (не менее 1 одобрения);
-- Require status checks to pass (после появления CI);
+- Require a pull request before merging (0 обязательных одобрений);
+- Require status checks to pass: `Check (TS + Go)` и `Docker image`;
 - Block force pushes;
 - Restrict deletions;
 - список Bypass — пустой.
