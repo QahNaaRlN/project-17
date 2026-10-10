@@ -325,6 +325,13 @@ func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.
 		if err != nil {
 			return Check{}, nil, err
 		}
+		change, err := q.GetChangeset(ctx, store.GetChangesetParams{ProjectID: projectID, ID: cs})
+		if err != nil {
+			return Check{}, nil, err
+		}
+		if err := c.RecordDiagnostics(ctx, change, p); err != nil {
+			return Check{}, nil, err
+		}
 		environments[name] = map[string]any{"manifestHash": c.ManifestHash, "documents": p}
 		for id, ds := range p {
 			problems[id] = append(problems[id], ds...)

@@ -7,9 +7,130 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const bindManifestCandidate = `-- name: BindManifestCandidate :exec
+INSERT INTO changeset_manifest_candidates (changeset_id, project_id, environment_id, manifest_id, base_manifest_id)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type BindManifestCandidateParams struct {
+	ChangesetID    uuid.UUID  `json:"changesetId"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	EnvironmentID  uuid.UUID  `json:"environmentId"`
+	ManifestID     uuid.UUID  `json:"manifestId"`
+	BaseManifestID *uuid.UUID `json:"baseManifestId"`
+}
+
+func (q *Queries) BindManifestCandidate(ctx context.Context, arg BindManifestCandidateParams) error {
+	_, err := q.db.Exec(ctx, bindManifestCandidate,
+		arg.ChangesetID,
+		arg.ProjectID,
+		arg.EnvironmentID,
+		arg.ManifestID,
+		arg.BaseManifestID,
+	)
+	return err
+}
+
+const changesetManifestDiagnostics = `-- name: ChangesetManifestDiagnostics :many
+SELECT e.name AS environment, m.hash AS manifest_hash, d.diagnostics, d.checked_at,
+(d.checked_seq IS NULL OR d.stale OR d.checked_seq <> cs.seq
+ OR d.manifest_id IS DISTINCT FROM COALESCE(b.manifest_id,e.active_manifest_id)
+ OR (b.changeset_id IS NOT NULL AND b.base_manifest_id IS DISTINCT FROM e.active_manifest_id))::boolean AS stale
+FROM changesets cs JOIN environments e ON e.project_id = cs.project_id
+LEFT JOIN changeset_manifest_candidates b ON b.changeset_id = cs.id AND b.environment_id = e.id
+LEFT JOIN changeset_manifest_diagnostics d ON d.changeset_id = cs.id AND d.environment_id = e.id
+LEFT JOIN manifests m ON m.id = d.manifest_id
+WHERE cs.project_id = $1 AND cs.id = $2
+AND (cardinality(cs.targets) = 0 OR e.name = ANY(cs.targets))
+AND (cs.kind <> 'schema' OR b.changeset_id IS NOT NULL) ORDER BY e.name
+`
+
+type ChangesetManifestDiagnosticsParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	ID        uuid.UUID `json:"id"`
+}
+
+type ChangesetManifestDiagnosticsRow struct {
+	Environment  string     `json:"environment"`
+	ManifestHash *string    `json:"manifestHash"`
+	Diagnostics  []byte     `json:"diagnostics"`
+	CheckedAt    *time.Time `json:"checkedAt"`
+	Stale        bool       `json:"stale"`
+}
+
+func (q *Queries) ChangesetManifestDiagnostics(ctx context.Context, arg ChangesetManifestDiagnosticsParams) ([]ChangesetManifestDiagnosticsRow, error) {
+	rows, err := q.db.Query(ctx, changesetManifestDiagnostics, arg.ProjectID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChangesetManifestDiagnosticsRow
+	for rows.Next() {
+		var i ChangesetManifestDiagnosticsRow
+		if err := rows.Scan(
+			&i.Environment,
+			&i.ManifestHash,
+			&i.Diagnostics,
+			&i.CheckedAt,
+			&i.Stale,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const createManifestCandidate = `-- name: CreateManifestCandidate :one
+INSERT INTO changesets (id, project_id, kind, title, owner_id, state, targets)
+VALUES ($1, $2, 'schema', $3, $4, 'open', $5) RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at
+`
+
+type CreateManifestCandidateParams struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"projectId"`
+	Title     string    `json:"title"`
+	OwnerID   uuid.UUID `json:"ownerId"`
+	Targets   []string  `json:"targets"`
+}
+
+func (q *Queries) CreateManifestCandidate(ctx context.Context, arg CreateManifestCandidateParams) (Changeset, error) {
+	row := q.db.QueryRow(ctx, createManifestCandidate,
+		arg.ID,
+		arg.ProjectID,
+		arg.Title,
+		arg.OwnerID,
+		arg.Targets,
+	)
+	var i Changeset
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Title,
+		&i.Description,
+		&i.OwnerID,
+		&i.State,
+		&i.Risk,
+		&i.Targets,
+		&i.Seq,
+		&i.ContentHash,
+		&i.HasConflicts,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.MergedAt,
+	)
+	return i, err
+}
 
 const getManifestByHash = `-- name: GetManifestByHash :one
 SELECT id, project_id, hash, app_version, body, code_index_key, registered_by, created_at FROM manifests WHERE project_id = $1 AND hash = $2
@@ -57,6 +178,32 @@ func (q *Queries) GetManifestByID(ctx context.Context, arg GetManifestByIDParams
 		&i.CodeIndexKey,
 		&i.RegisteredBy,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getManifestEnvironment = `-- name: GetManifestEnvironment :one
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key FROM environments WHERE project_id = $1 AND name = $2
+`
+
+type GetManifestEnvironmentParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Name      string    `json:"name"`
+}
+
+func (q *Queries) GetManifestEnvironment(ctx context.Context, arg GetManifestEnvironmentParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, getManifestEnvironment, arg.ProjectID, arg.Name)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Kind,
+		&i.ActiveManifestID,
+		&i.AppUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.PreviewKey,
 	)
 	return i, err
 }
@@ -117,7 +264,7 @@ func (q *Queries) InsertManifest(ctx context.Context, arg InsertManifestParams) 
 
 const insertPreviewSchemaSnapshot = `-- name: InsertPreviewSchemaSnapshot :exec
 INSERT INTO preview_schema_snapshots (manifest_id, schema_name, version, body)
-VALUES ($1, $2, $3, $4)
+VALUES ($1, $2, $3, $4) ON CONFLICT (manifest_id, schema_name) DO NOTHING
 `
 
 type InsertPreviewSchemaSnapshotParams struct {
@@ -245,6 +392,53 @@ func (q *Queries) LockManifestEnvironment(ctx context.Context, arg LockManifestE
 	return i, err
 }
 
+const manifestChangesets = `-- name: ManifestChangesets :many
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at FROM changesets WHERE project_id = $1 AND state NOT IN ('merged', 'abandoned')
+AND (cardinality(targets) = 0 OR $2::text = ANY(targets)) ORDER BY id FOR UPDATE
+`
+
+type ManifestChangesetsParams struct {
+	ProjectID   uuid.UUID `json:"projectId"`
+	Environment string    `json:"environment"`
+}
+
+func (q *Queries) ManifestChangesets(ctx context.Context, arg ManifestChangesetsParams) ([]Changeset, error) {
+	rows, err := q.db.Query(ctx, manifestChangesets, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Changeset
+	for rows.Next() {
+		var i Changeset
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.Title,
+			&i.Description,
+			&i.OwnerID,
+			&i.State,
+			&i.Risk,
+			&i.Targets,
+			&i.Seq,
+			&i.ContentHash,
+			&i.HasConflicts,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SubmittedAt,
+			&i.MergedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const manifestImpactVersions = `-- name: ManifestImpactVersions :many
 WITH target_environment AS (
  SELECT env.id FROM environments env WHERE env.project_id = $1::uuid AND env.name = $2::text
@@ -313,6 +507,60 @@ func (q *Queries) ManifestImpactVersions(ctx context.Context, arg ManifestImpact
 		return nil, err
 	}
 	return items, nil
+}
+
+const pendingManifestCandidate = `-- name: PendingManifestCandidate :one
+SELECT cs.id FROM changesets cs JOIN changeset_manifest_candidates b ON b.changeset_id = cs.id
+WHERE b.project_id = $1 AND b.environment_id = $2 AND b.manifest_id = $3
+AND b.base_manifest_id IS NOT DISTINCT FROM $4::uuid
+AND cs.state NOT IN ('merged', 'abandoned') ORDER BY cs.created_at DESC LIMIT 1
+`
+
+type PendingManifestCandidateParams struct {
+	ProjectID      uuid.UUID  `json:"projectId"`
+	EnvironmentID  uuid.UUID  `json:"environmentId"`
+	ManifestID     uuid.UUID  `json:"manifestId"`
+	BaseManifestID *uuid.UUID `json:"baseManifestId"`
+}
+
+func (q *Queries) PendingManifestCandidate(ctx context.Context, arg PendingManifestCandidateParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, pendingManifestCandidate,
+		arg.ProjectID,
+		arg.EnvironmentID,
+		arg.ManifestID,
+		arg.BaseManifestID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const recordManifestDiagnostics = `-- name: RecordManifestDiagnostics :exec
+INSERT INTO changeset_manifest_diagnostics (changeset_id, project_id, environment_id, manifest_id, checked_seq, diagnostics)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (changeset_id, environment_id) DO UPDATE SET manifest_id = EXCLUDED.manifest_id,
+checked_seq = EXCLUDED.checked_seq, diagnostics = EXCLUDED.diagnostics, stale = false, checked_at = now()
+`
+
+type RecordManifestDiagnosticsParams struct {
+	ChangesetID   uuid.UUID  `json:"changesetId"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+	ManifestID    *uuid.UUID `json:"manifestId"`
+	CheckedSeq    int32      `json:"checkedSeq"`
+	Diagnostics   []byte     `json:"diagnostics"`
+}
+
+func (q *Queries) RecordManifestDiagnostics(ctx context.Context, arg RecordManifestDiagnosticsParams) error {
+	_, err := q.db.Exec(ctx, recordManifestDiagnostics,
+		arg.ChangesetID,
+		arg.ProjectID,
+		arg.EnvironmentID,
+		arg.ManifestID,
+		arg.CheckedSeq,
+		arg.Diagnostics,
+	)
+	return err
 }
 
 const setActiveManifest = `-- name: SetActiveManifest :execrows

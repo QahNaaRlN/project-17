@@ -21,6 +21,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -64,6 +65,24 @@ func NewRouter(d Deps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
 		r.Post("/commands/{name}", commandHandler(d))
+		r.Get("/manifest", func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			if err := commandbus.Require(actor, auth.DesignRead); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
+			active, err := manifestregistry.GetActive(r.Context(), store.New(d.Pool), actor.ProjectID, r.URL.Query().Get("environment"))
+			respond(w, r, d, active, err)
+		})
+		r.Get("/schemas", func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			if err := commandbus.Require(actor, auth.SchemaRead); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
+			schemas, err := manifestregistry.GetSchemas(r.Context(), store.New(d.Pool), actor.ProjectID, r.URL.Query().Get("environment"))
+			respond(w, r, d, schemas, err)
+		})
 		r.Get("/environments", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			envs, err := projects.ListEnvironments(r.Context(), store.New(d.Pool), actor.ProjectID)

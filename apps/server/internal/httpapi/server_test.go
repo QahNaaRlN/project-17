@@ -23,6 +23,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
+	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -68,6 +69,7 @@ func setup(t *testing.T) env {
 	workflow.Register(bus)
 	publishing.Register(bus)
 	delivery.Register(bus)
+	manifestregistry.Register(bus)
 	commandbus.Register(bus, commandbus.Command[panicPayload, string]{
 		Name: "test-panic", Right: auth.ContentRead,
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
@@ -332,4 +334,40 @@ func TestReviewAndPublicationRoutes(t *testing.T) {
 	expectProblem(t, resp, body, 404, "NOT_FOUND")
 	resp, body = e.do(t, "GET", "/api/v1/publications/0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11", "", e.authed(nil))
 	expectProblem(t, resp, body, 404, "NOT_FOUND")
+}
+
+// MF-003/004/020, API-040: registration and active queries share the authenticated project.
+func TestManifestHTTP(t *testing.T) {
+	e := setup(t)
+	for _, path := range []string{"/manifest", "/schemas"} {
+		resp, body := e.do(t, "GET", "/api/v1"+path+"?environment=staging", "", e.authed(nil))
+		if resp.StatusCode != 200 || body["manifestHash"] == nil {
+			t.Fatal(resp.StatusCode, body)
+		}
+		resp, body = e.do(t, "GET", "/api/v1"+path, "", e.authed(nil))
+		expectProblem(t, resp, body, 422, "VALIDATION_FAILED")
+	}
+	payload := `{"payload":{"environment":"staging","manifest":` + cmstest.DefaultManifest + `}}`
+	resp, body := e.do(t, "POST", "/api/v1/commands/register-manifest", payload, e.authed(map[string]string{"Idempotency-Key": "manifest-1"}))
+	if resp.StatusCode != 200 || body["result"].(map[string]any)["activation"] != "active" {
+		t.Fatal(resp.StatusCode, body)
+	}
+	resp, _ = e.do(t, "POST", "/api/v1/commands/register-manifest", payload, e.authed(map[string]string{"Idempotency-Key": "manifest-1"}))
+	if resp.Header.Get("Idempotent-Replayed") != "true" {
+		t.Fatal("registration replay")
+	}
+	if _, err := e.pool.Exec(context.Background(), "UPDATE environments SET active_manifest_id=NULL WHERE name='staging'"); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/manifest", "/schemas"} {
+		resp, body := e.do(t, "GET", "/api/v1"+path+"?environment=staging", "", e.authed(nil))
+		expectProblem(t, resp, body, 409, "MANIFEST_NOT_READY")
+	}
+	if _, err := e.pool.Exec(context.Background(), "UPDATE roles SET capabilities='{}'"); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/manifest", "/schemas"} {
+		resp, body := e.do(t, "GET", "/api/v1"+path+"?environment=production", "", e.authed(nil))
+		expectProblem(t, resp, body, 403, "FORBIDDEN")
+	}
 }

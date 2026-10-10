@@ -73,6 +73,17 @@ type ChangesetManifestCandidate struct {
 	BaseManifestID *uuid.UUID `json:"baseManifestId"`
 }
 
+type ChangesetManifestDiagnostic struct {
+	ChangesetID   uuid.UUID  `json:"changesetId"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+	ManifestID    *uuid.UUID `json:"manifestId"`
+	CheckedSeq    int32      `json:"checkedSeq"`
+	Diagnostics   []byte     `json:"diagnostics"`
+	Stale         bool       `json:"stale"`
+	CheckedAt     time.Time  `json:"checkedAt"`
+}
+
 type ChangesetObject struct {
 	ChangesetID      uuid.UUID  `json:"changesetId"`
 	ObjectID         uuid.UUID  `json:"objectId"`
