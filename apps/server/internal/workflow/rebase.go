@@ -136,7 +136,7 @@ func reevaluate(ctx context.Context, q *store.Queries, projectID uuid.UUID, cs *
 	if err != nil {
 		return nil, err
 	}
-	count, err := q.CountValidApprovals(ctx, store.CountValidApprovalsParams{ChangesetID: cs.ID, ContentHash: ev.hash})
+	status, err := coverage(ctx, q, projectID, cs.ID, ev.hash, ev.roles)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func reevaluate(ctx context.Context, q *store.Queries, projectID uuid.UUID, cs *
 		state = "failed"
 	} else if state != "changes_requested" {
 		state = "in_review"
-		if int(count) >= ev.required {
+		if status.count >= ev.required && len(status.missing) == 0 {
 			state = "approved"
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 type promotePayload struct {
@@ -108,6 +109,15 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 		return Publication{}, err
 	}
 
+	if src.ChangesetID != nil {
+		cs, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: *src.ChangesetID, ProjectID: actor.ProjectID})
+		if err != nil {
+			return Publication{}, err
+		}
+		if err := workflow.RequireZoneApprovals(ctx, q, cs, env.Name); err != nil {
+			return Publication{}, err
+		}
+	}
 	pub, err := q.CreatePublication(ctx, store.CreatePublicationParams{
 		ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, EnvironmentID: env.ID, ChangesetID: src.ChangesetID,
 		Kind: "promote", SourcePublicationID: &src.ID, ActorID: actor.ID, Reason: reasonPtr(ctx),

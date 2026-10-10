@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // Item — изменение указателя объекта в публикации.
@@ -143,6 +144,10 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		return Publication{}, err
 	}
 	if err := validation.RequireValid(problems); err != nil {
+		return Publication{}, err
+	}
+
+	if err := workflow.RequireZoneApprovals(ctx, q, cs, env.Name); err != nil {
 		return Publication{}, err
 	}
 

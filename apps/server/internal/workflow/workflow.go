@@ -75,7 +75,7 @@ func LoadApprovalPolicy(ctx context.Context, q *store.Queries, projectID uuid.UU
 var contentOps = []string{"entity.setFields", "localContent.set", "localContent.remove", "asset.updateMeta"}
 
 // Risk — уровень риска по типам операций Change Set (§5.2). Правила уровня high (зоны STRICT,
-// анализ влияния, схемы) добавятся вместе с этими функциями.
+// анализ влияния, схемы) учитывает evaluate после разрешения контекста.
 func Risk(opTypes []string) string {
 	for _, t := range opTypes {
 		if !slices.Contains(contentOps, t) {
@@ -140,11 +140,13 @@ type Check struct {
 
 // Review — состояние Change Set на проверке.
 type Review struct {
-	Changeset         changes.Changeset `json:"changeset"`
-	Risk              *string           `json:"risk"`
-	RequiredApprovals int               `json:"requiredApprovals"`
-	Approvals         int               `json:"approvals"`
-	Checks            []Check           `json:"checks"`
+	Changeset            changes.Changeset `json:"changeset"`
+	Risk                 *string           `json:"risk"`
+	RequiredApprovals    int               `json:"requiredApprovals"`
+	Approvals            int               `json:"approvals"`
+	RequiredRoles        []string          `json:"requiredRoles,omitempty"`
+	MissingRequiredRoles []string          `json:"missingRequiredRoles,omitempty"`
+	Checks               []Check           `json:"checks"`
 }
 
 // --- submit-changeset ---------------------------------------------------------------
@@ -206,7 +208,7 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 	checks, risk, hash, required := ev.checks, ev.risk, ev.hash, ev.required
 	cs.State, cs.Risk, cs.ContentHash = state, &risk, hash
 	cs.Targets = ev.targets
-	return Review{Changeset: changes.ToChangeset(cs), Risk: &risk, RequiredApprovals: required, Checks: checks}, nil
+	return Review{Changeset: changes.ToChangeset(cs), Risk: &risk, RequiredApprovals: required, Checks: checks, RequiredRoles: ev.roles, MissingRequiredRoles: ev.roles}, nil
 }
 
 // evaluation — результат pipeline проверок над текущим содержимым Change Set.
@@ -216,6 +218,7 @@ type evaluation struct {
 	risk     string
 	required int
 	targets  []string
+	roles    []string
 }
 
 // evaluate выполняет проверки (§5.1), сохраняет их и вычисляет риск и число согласований.
@@ -261,6 +264,16 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		h.Write(binding)
 		hash = h.Sum(nil)
 	}
+	requirements, err := validation.ZoneRequirements(ctx, q, projectID, changesetID, targets)
+	if err != nil {
+		return evaluation{}, err
+	}
+	if len(requirements.Roles) > 0 || requirements.Strict {
+		h := sha256.New()
+		h.Write(hash)
+		h.Write(mustJSON(map[string]any{"roles": requirements.Roles, "strict": requirements.Strict}))
+		hash = h.Sum(nil)
+	}
 	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err
@@ -284,14 +297,14 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		types[i] = a.Type
 	}
 	risk := Risk(types)
-	if len(binding) > 0 {
+	if len(binding) > 0 || requirements.Strict {
 		risk = RiskHigh
 	}
 	approvalPolicy, err := LoadApprovalPolicy(ctx, q, projectID)
 	if err != nil {
 		return evaluation{}, err
 	}
-	return evaluation{checks: checks, hash: hash, risk: risk, required: approvalPolicy.Required(risk), targets: targets}, nil
+	return evaluation{checks: checks, hash: hash, risk: risk, required: zoneRequired(approvalPolicy.Required(risk), requirements.Roles), targets: targets, roles: requirements.Roles}, nil
 }
 
 func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
@@ -326,7 +339,7 @@ func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.
 		}
 	}
 	status := "passed"
-	if len(problems) > 0 {
+	if validation.HasErrors(problems) {
 		status = "failed"
 	}
 	return Check{Stage: "ir", Status: status, Blocking: true, Details: mustJSON(map[string]any{"documents": problems, "environments": environments})}, binding, nil
@@ -448,17 +461,26 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 		return Review{}, commandbus.NewError(http.StatusForbidden, "APPROVAL_SELF", "Нельзя согласовать свои изменения",
 			"Согласующий не должен быть автором операций Change Set (PUB-002)")
 	}
+	var roles []string
 	if decision == "approve" {
 		ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID)
 		if err != nil {
 			return Review{}, err
 		}
+		roles = ev.roles
 		if failed(ev.checks) {
 			return Review{}, commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Проверки не пройдены", "Контракт окружения изменился").WithParams(map[string]any{"checks": ev.checks})
 		}
 		if string(ev.hash) != string(cs.ContentHash) {
 			return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_CONTENT_CHANGED", "Согласуемое содержимое изменилось", "Повторно подайте Change Set")
 		}
+	}
+	if decision != "approve" {
+		req, err := validation.ZoneRequirements(ctx, q, actor.ProjectID, cs.ID, cs.Targets)
+		if err != nil {
+			return Review{}, err
+		}
+		roles = req.Roles
 	}
 	if err := q.InsertApproval(ctx, store.InsertApprovalParams{
 		ID: uuid.Must(uuid.NewV7()), ChangesetID: cs.ID, ApproverID: actor.ID, Decision: decision,
@@ -471,20 +493,20 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 	if err != nil {
 		return Review{}, err
 	}
-	required := policy.Required(deref(cs.Risk))
-	count, err := q.CountValidApprovals(ctx, store.CountValidApprovalsParams{ChangesetID: cs.ID, ContentHash: cs.ContentHash})
+	required := zoneRequired(policy.Required(deref(cs.Risk)), roles)
+	status, err := coverage(ctx, q, actor.ProjectID, cs.ID, cs.ContentHash, roles)
 	if err != nil {
 		return Review{}, err
 	}
 	if decision == "request_changes" {
 		cs.State = "changes_requested"
-	} else if int(count) >= required {
+	} else if status.count >= required && len(status.missing) == 0 {
 		cs.State = "approved"
 	}
 	if err := q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: cs.State}); err != nil {
 		return Review{}, err
 	}
-	return Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: int(count)}, nil
+	return Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: status.count, RequiredRoles: roles, MissingRequiredRoles: status.missing}, nil
 }
 
 func deref(s *string) string {
@@ -604,12 +626,8 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 		return ReviewDetail{}, err
 	}
 	history := make([]Approval, len(rows))
-	count := map[uuid.UUID]bool{}
 	for i, r := range rows {
 		valid := r.InvalidatedAt == nil && cs.ContentHash != nil && string(r.ContentHash) == string(cs.ContentHash)
-		if valid && r.Decision == "approve" {
-			count[r.ApproverID] = true
-		}
 		history[i] = Approval{ApproverID: r.ApproverID, Decision: r.Decision, Comment: r.Comment, Valid: valid,
 			CreatedAt: r.CreatedAt.Format("2006-01-02T15:04:05.000Z07:00")}
 	}
@@ -617,8 +635,17 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 	if cs.Risk != nil {
 		required = policy.Required(*cs.Risk)
 	}
+	req, err := validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
+	if err != nil {
+		return ReviewDetail{}, err
+	}
+	status, err := coverage(ctx, q, projectID, cs.ID, cs.ContentHash, req.Roles)
+	if err != nil {
+		return ReviewDetail{}, err
+	}
+	required = zoneRequired(required, req.Roles)
 	return ReviewDetail{
-		Review:  Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: len(count), Checks: checks},
+		Review:  Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: status.count, Checks: checks, RequiredRoles: req.Roles, MissingRequiredRoles: status.missing},
 		History: history,
 	}, nil
 }
