@@ -23,6 +23,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/policydoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -37,7 +38,7 @@ const MaxOperationsPerCommand = 200
 // writeRights — права, любое из которых позволяет создать Change Set (08-api.md §3.2).
 var writeRights = []auth.Right{
 	auth.ContentWrite, auth.DesignCompose, auth.ComponentWrite, auth.BehaviorUse,
-	auth.SchemaPropose, auth.DesignZonesManage,
+	auth.SchemaPropose, auth.DesignZonesManage, auth.DesignComponentsCertify,
 }
 
 // Changeset — Change Set в ответах API.
@@ -173,6 +174,9 @@ func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.U
 
 // OperationRight — право, необходимое для операции данного типа.
 func OperationRight(opType string) (auth.Right, bool) {
+	if opType == ComponentCertify {
+		return auth.DesignComponentsCertify, true
+	}
 	if opType == DocumentCreate || opType == DocumentSetRoute {
 		return auth.DesignCompose, true
 	}
@@ -263,6 +267,7 @@ type session struct {
 }
 
 type workingDoc struct {
+	certified bool
 	versionID uuid.UUID
 	path      *string // маршрут страницы
 	body      map[string]any
@@ -275,7 +280,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	}
 	co, err := s.q.GetChangesetObject(s.ctx, store.GetChangesetObjectParams{ChangesetID: s.cs.ID, ObjectID: objectID})
 	if err == nil {
-		d := &workingDoc{versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody)}
+		d := &workingDoc{versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody), certified: co.WorkingCertified}
 		s.docs[objectID] = d
 		return d, nil
 	}
@@ -300,6 +305,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	if err != nil {
 		return nil, err
 	}
+	d.certified = head.Certified
 	return d, nil
 }
 
@@ -327,7 +333,7 @@ func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, path *strin
 func (s *session) flush() error {
 	for _, d := range s.docs {
 		raw, hash := encodeBody(d.body)
-		if err := s.q.UpdateWorkingVersion(s.ctx, store.UpdateWorkingVersionParams{ID: d.versionID, Path: d.path, Body: raw, BodyHash: hash}); err != nil {
+		if err := s.q.UpdateWorkingVersion(s.ctx, store.UpdateWorkingVersionParams{ID: d.versionID, Path: d.path, Body: raw, BodyHash: hash, Certified: d.certified}); err != nil {
 			return err
 		}
 	}
@@ -422,7 +428,7 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 		if err != nil {
 			return ApplyResult{}, err
 		}
-		docs = append(docs, validation.Document{ObjectID: id, VersionID: d.versionID, Body: raw, Path: d.path})
+		docs = append(docs, validation.Document{ObjectID: id, VersionID: d.versionID, Body: raw, Path: d.path, Certified: d.certified})
 	}
 	warnings, err := validation.DraftWarnings(s.ctx, s.q, s.actor.ProjectID, s.cs.ID, s.cs.Targets, docs)
 	if err != nil {
@@ -432,6 +438,14 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 }
 
 func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, error) {
+	if right, ok := OperationRight(op.Type); ok {
+		if err := commandbus.Require(s.actor, right); err != nil {
+			return recordInput{}, err
+		}
+	}
+	if op.Type == ComponentCertify {
+		return s.certify(target, op.Payload)
+	}
 	if op.Type == DocumentSetRoute {
 		return s.setRoute(target, op.Payload)
 	}
@@ -443,6 +457,12 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 	res, err := ops.Apply(next, op, nil)
 	if err != nil {
 		return recordInput{}, err
+	}
+	if r := policydoc.CheckEdit(d.body, next, s.actor.Rights.Has(auth.DesignZonesManage)); !r.Valid {
+		return recordInput{}, &ops.Error{Code: "POLICY_ZONES_MANAGE_REQUIRED", Message: "Недостаточно прав на защищённую зону", Diagnostics: r.Diagnostics}
+	}
+	if d.body["kind"] == "component" && !sameJSON(d.body, mustJSON(next)) {
+		d.certified = false
 	}
 	d.body = next
 	payload := op.Payload
@@ -471,6 +491,11 @@ func (s *session) createDocument(in OperationInput) (recordInput, error) {
 		return recordInput{}, &ops.Error{Code: "PAYLOAD_INVALID", Message: "payload document.create: " + err.Error()}
 	}
 	// kind проверяет валидатор IR ниже (допустимы page и component).
+	if len(p.Policy) > 0 && string(p.Policy) != "null" {
+		if err := commandbus.Require(s.actor, auth.DesignZonesManage); err != nil {
+			return recordInput{}, err
+		}
+	}
 	nested := map[string]any{"irVersion": "1.0", "kind": p.Kind}
 	for key, raw := range map[string]json.RawMessage{"root": p.Root, "meta": p.Meta, "policy": p.Policy, "content": p.Content} {
 		if raw != nil {
@@ -488,6 +513,9 @@ func (s *session) createDocument(in OperationInput) (recordInput, error) {
 		return recordInput{}, &ops.Error{Code: "OPERATION_INVALID", Message: "документ не проходит валидацию", Diagnostics: v.Diagnostics}
 	}
 
+	if r := policydoc.CheckEdit(map[string]any{}, doc, s.actor.Rights.Has(auth.DesignZonesManage)); !r.Valid {
+		return recordInput{}, &ops.Error{Code: "POLICY_ZONES_MANAGE_REQUIRED", Message: "Создание защищённой зоны требует права", Diagnostics: r.Diagnostics}
+	}
 	id := uuid.Must(uuid.NewV7())
 	if err := s.checkRoute(id, doc, p.Path); err != nil {
 		return recordInput{}, err

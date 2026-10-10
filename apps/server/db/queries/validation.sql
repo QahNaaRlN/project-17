@@ -5,7 +5,7 @@ JOIN changesets cs ON cs.id = b.changeset_id AND cs.project_id = b.project_id
 WHERE b.project_id = $1 AND b.changeset_id = $2;
 
 -- name: ValidationComponent :one
-SELECT v.id, v.body, v.path FROM objects o
+SELECT v.id, v.body, v.path, v.certified FROM objects o
 JOIN object_versions v ON v.object_id = o.id AND v.project_id = o.project_id
 WHERE o.project_id = sqlc.arg(project_id) AND o.id = sqlc.arg(object_id)
 AND o.kind = 'document' AND o.doc_kind = 'component' AND o.deleted_at IS NULL
@@ -19,7 +19,7 @@ AND ((sqlc.arg(number)::int > 0 AND v.state = 'committed' AND v.number = sqlc.ar
     WHERE pp.object_id = o.id AND e.id = sqlc.arg(environment_id) AND e.project_id = o.project_id) END)));
 
 -- name: ValidationPublishedVersions :many
-SELECT o.id AS object_id, v.id AS version_id, v.body, v.path
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id

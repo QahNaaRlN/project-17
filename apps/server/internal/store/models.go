@@ -166,6 +166,7 @@ type ObjectVersion struct {
 	CreatedBy       uuid.UUID  `json:"createdBy"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	CommittedAt     *time.Time `json:"committedAt"`
+	Certified       bool       `json:"certified"`
 }
 
 type Operation struct {

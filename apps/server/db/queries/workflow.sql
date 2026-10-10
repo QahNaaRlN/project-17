@@ -16,7 +16,7 @@ WHERE co.changeset_id = $1
 ORDER BY co.object_id;
 
 -- name: ChangesetWorkingVersions :many
-SELECT co.object_id, co.base_version_id, v.id AS version_id, v.path, v.body, v.body_hash
+SELECT co.object_id, co.base_version_id, v.id AS version_id, v.path, v.body, v.body_hash, v.certified
 FROM changeset_objects co
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1

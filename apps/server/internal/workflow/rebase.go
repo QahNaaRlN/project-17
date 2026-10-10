@@ -76,7 +76,7 @@ func handleRebase(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rebasePayl
 	for _, r := range p.Resolutions {
 		resolutions[r.OperationID] = r.Choice
 	}
-	res, err := changes.Rebase(ctx, q, cs, resolutions)
+	res, err := changes.Rebase(ctx, q, cs, resolutions, actor)
 	if err != nil {
 		return RebaseOutcome{}, err
 	}

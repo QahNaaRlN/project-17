@@ -136,7 +136,7 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	}
 	docs := make([]validation.Document, len(versions))
 	for i, v := range versions {
-		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path}
+		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path, Certified: v.Certified}
 	}
 	problems, err := check.CheckPublication(ctx, docs)
 	if err != nil {

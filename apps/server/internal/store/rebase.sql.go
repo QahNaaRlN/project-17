@@ -72,7 +72,7 @@ func (q *Queries) ObjectOperations(ctx context.Context, arg ObjectOperationsPara
 }
 
 const rebaseWorkingVersion = `-- name: RebaseWorkingVersion :exec
-UPDATE object_versions SET parent_version_id = $2, path = $3, body = $4, body_hash = $5
+UPDATE object_versions SET parent_version_id = $2, path = $3, body = $4, body_hash = $5, certified = $6
 WHERE id = $1 AND state = 'working'
 `
 
@@ -82,6 +82,7 @@ type RebaseWorkingVersionParams struct {
 	Path            *string    `json:"path"`
 	Body            []byte     `json:"body"`
 	BodyHash        []byte     `json:"bodyHash"`
+	Certified       bool       `json:"certified"`
 }
 
 func (q *Queries) RebaseWorkingVersion(ctx context.Context, arg RebaseWorkingVersionParams) error {
@@ -91,6 +92,7 @@ func (q *Queries) RebaseWorkingVersion(ctx context.Context, arg RebaseWorkingVer
 		arg.Path,
 		arg.Body,
 		arg.BodyHash,
+		arg.Certified,
 	)
 	return err
 }

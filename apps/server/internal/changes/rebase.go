@@ -8,7 +8,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/policydoc"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -54,19 +58,20 @@ type opPlan struct {
 // resolutions — решения по конфликтам прошлого rebase (ID операции → mine | theirs).
 // При неразрешённых конфликтах рабочие версии не меняются: операции помечаются conflict,
 // а у Change Set ставится hasConflicts. Вызывающий держит блокировку Change Set.
-func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutions map[uuid.UUID]string) (RebaseResult, error) {
+func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutions map[uuid.UUID]string, actor auth.Actor) (RebaseResult, error) {
 	res := RebaseResult{Rebased: []uuid.UUID{}, Removed: []uuid.UUID{}, Conflicts: []Conflict{}}
 	stale, err := q.ChangesetBaseMismatches(ctx, cs.ID)
 	if err != nil {
 		return res, err
 	}
 	type objectPlan struct {
-		id      uuid.UUID
-		head    *uuid.UUID
-		path    *string // маршрут на новой базе с переигранными document.setRoute
-		body    map[string]any
-		working uuid.UUID
-		ops     []opPlan
+		certified bool
+		id        uuid.UUID
+		head      *uuid.UUID
+		path      *string // маршрут на новой базе с переигранными document.setRoute
+		body      map[string]any
+		working   uuid.UUID
+		ops       []opPlan
 	}
 	var plans []objectPlan
 	for _, objectID := range stale {
@@ -99,7 +104,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 		if err != nil {
 			return res, err
 		}
-		plan.body, plan.path = decodeBody(head.Body), head.Path
+		plan.body, plan.path, plan.certified = decodeBody(head.Body), head.Path, head.Certified
 		dropped := map[uuid.UUID]bool{}
 		for _, op := range list {
 			choice := resolutions[op.ID]
@@ -108,10 +113,42 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			}
 			var step opPlan
 			var conflict *Conflict
-			if op.Type == DocumentSetRoute {
+			before := ops.Clone(plan.body)
+			if choice != ResolutionTheirs {
+				if right, ok := OperationRight(op.Type); ok {
+					if err := commandbus.Require(actor, right); err != nil {
+						return res, err
+					}
+				}
+			}
+			if op.Type == ComponentCertify {
+				if choice == ResolutionTheirs {
+					step = opPlan{op: op, status: "dropped"}
+				} else {
+					value, err := certification(op.Payload)
+					if err != nil {
+						return res, err
+					}
+					r := certificateResult(plan.certified, value, plan.body)
+					if choice != ResolutionMine && !sameJSON(r.Before, op.Before) {
+						conflict = &Conflict{OperationID: op.ID, Seq: op.Seq, Type: op.Type, Code: "BEFORE_MISMATCH", Expected: decodeNullable(op.Before), Current: r.Before}
+					} else {
+						plan.certified = value
+						step = opPlan{op: op, status: "applied", replay: &r}
+					}
+				}
+			} else if op.Type == DocumentSetRoute {
 				step, conflict = replayRoute(&plan.path, op, choice)
 			} else {
 				step, conflict = replay(plan.body, op, choice)
+			}
+			if conflict == nil && step.status == "applied" && op.Type != ComponentCertify {
+				if r := policydoc.CheckEdit(before, plan.body, actor.Rights.Has(auth.DesignZonesManage)); !r.Valid {
+					return res, operationError(int(op.Seq)-1, &ops.Error{Code: "POLICY_ZONES_MANAGE_REQUIRED", Message: "Rebase меняет защищённую зону", Diagnostics: r.Diagnostics})
+				}
+				if !sameJSON(before, mustJSON(plan.body)) && plan.body["kind"] == "component" {
+					plan.certified = false
+				}
 			}
 			if step.status == "dropped" {
 				dropped[op.ID] = true
@@ -174,13 +211,24 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			continue
 		}
 		raw, hash := encodeBody(p.body)
-		if err := q.RebaseWorkingVersion(ctx, store.RebaseWorkingVersionParams{ID: p.working, ParentVersionID: p.head, Path: p.path, Body: raw, BodyHash: hash}); err != nil {
+		if err := q.RebaseWorkingVersion(ctx, store.RebaseWorkingVersionParams{ID: p.working, ParentVersionID: p.head, Path: p.path, Body: raw, BodyHash: hash, Certified: p.certified}); err != nil {
 			return res, err
 		}
 		if err := q.SetChangesetObjectBase(ctx, store.SetChangesetObjectBaseParams{ChangesetID: cs.ID, ObjectID: p.id, BaseVersionID: p.head}); err != nil {
 			return res, err
 		}
 		res.Rebased = append(res.Rebased, p.id)
+	}
+	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+	if err != nil {
+		return res, err
+	}
+	docs := make([]validation.Document, 0, len(versions))
+	for _, v := range versions {
+		docs = append(docs, validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body, Path: v.Path, Certified: v.Certified})
+	}
+	if _, err := validation.DraftWarnings(ctx, q, cs.ProjectID, cs.ID, cs.Targets, docs); err != nil {
+		return res, err
 	}
 	return res, q.SetChangesetConflicts(ctx, store.SetChangesetConflictsParams{ID: cs.ID, HasConflicts: false})
 }

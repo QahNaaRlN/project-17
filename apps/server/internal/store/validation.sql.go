@@ -51,7 +51,7 @@ func (q *Queries) ValidationCandidate(ctx context.Context, arg ValidationCandida
 }
 
 const validationComponent = `-- name: ValidationComponent :one
-SELECT v.id, v.body, v.path FROM objects o
+SELECT v.id, v.body, v.path, v.certified FROM objects o
 JOIN object_versions v ON v.object_id = o.id AND v.project_id = o.project_id
 WHERE o.project_id = $1 AND o.id = $2
 AND o.kind = 'document' AND o.doc_kind = 'component' AND o.deleted_at IS NULL
@@ -75,9 +75,10 @@ type ValidationComponentParams struct {
 }
 
 type ValidationComponentRow struct {
-	ID   uuid.UUID `json:"id"`
-	Body []byte    `json:"body"`
-	Path *string   `json:"path"`
+	ID        uuid.UUID `json:"id"`
+	Body      []byte    `json:"body"`
+	Path      *string   `json:"path"`
+	Certified bool      `json:"certified"`
 }
 
 func (q *Queries) ValidationComponent(ctx context.Context, arg ValidationComponentParams) (ValidationComponentRow, error) {
@@ -90,7 +91,12 @@ func (q *Queries) ValidationComponent(ctx context.Context, arg ValidationCompone
 		arg.EnvironmentID,
 	)
 	var i ValidationComponentRow
-	err := row.Scan(&i.ID, &i.Body, &i.Path)
+	err := row.Scan(
+		&i.ID,
+		&i.Body,
+		&i.Path,
+		&i.Certified,
+	)
 	return i, err
 }
 
@@ -130,7 +136,7 @@ func (q *Queries) ValidationPage(ctx context.Context, arg ValidationPageParams) 
 }
 
 const validationPublishedVersions = `-- name: ValidationPublishedVersions :many
-SELECT o.id AS object_id, v.id AS version_id, v.body, v.path
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
@@ -148,6 +154,7 @@ type ValidationPublishedVersionsRow struct {
 	VersionID uuid.UUID `json:"versionId"`
 	Body      []byte    `json:"body"`
 	Path      *string   `json:"path"`
+	Certified bool      `json:"certified"`
 }
 
 func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg ValidationPublishedVersionsParams) ([]ValidationPublishedVersionsRow, error) {
@@ -164,6 +171,7 @@ func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg Validatio
 			&i.VersionID,
 			&i.Body,
 			&i.Path,
+			&i.Certified,
 		); err != nil {
 			return nil, err
 		}

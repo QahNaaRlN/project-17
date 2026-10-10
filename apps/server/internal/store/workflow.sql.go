@@ -98,7 +98,7 @@ func (q *Queries) ChangesetOperationActors(ctx context.Context, changesetID uuid
 }
 
 const changesetWorkingVersions = `-- name: ChangesetWorkingVersions :many
-SELECT co.object_id, co.base_version_id, v.id AS version_id, v.path, v.body, v.body_hash
+SELECT co.object_id, co.base_version_id, v.id AS version_id, v.path, v.body, v.body_hash, v.certified
 FROM changeset_objects co
 JOIN object_versions v ON v.id = co.working_version_id
 WHERE co.changeset_id = $1
@@ -112,6 +112,7 @@ type ChangesetWorkingVersionsRow struct {
 	Path          *string    `json:"path"`
 	Body          []byte     `json:"body"`
 	BodyHash      []byte     `json:"bodyHash"`
+	Certified     bool       `json:"certified"`
 }
 
 func (q *Queries) ChangesetWorkingVersions(ctx context.Context, changesetID uuid.UUID) ([]ChangesetWorkingVersionsRow, error) {
@@ -130,6 +131,7 @@ func (q *Queries) ChangesetWorkingVersions(ctx context.Context, changesetID uuid
 			&i.Path,
 			&i.Body,
 			&i.BodyHash,
+			&i.Certified,
 		); err != nil {
 			return nil, err
 		}
