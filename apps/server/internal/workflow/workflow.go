@@ -18,6 +18,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -151,10 +152,14 @@ type Review struct {
 type submitPayload struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
 	ExpectedSeq int32     `json:"expectedSeq"`
+	Targets     []string  `json:"targets,omitempty"`
 }
 
 func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayload) (Review, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return Review{}, err
+	}
 	cs, err := changes.Lock(ctx, q, actor.ProjectID, p.ChangesetID)
 	if err != nil {
 		return Review{}, err
@@ -185,7 +190,7 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_EMPTY", "Change Set пуст",
 			"Нечего отправлять на проверку: в Change Set нет изменённых объектов")
 	}
-	ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID)
+	ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID, p.Targets)
 	if err != nil {
 		return Review{}, err
 	}
@@ -195,11 +200,12 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 	} else if ev.required == 0 {
 		state = "approved"
 	}
-	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: []string{}}); err != nil {
+	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: ev.targets}); err != nil {
 		return Review{}, err
 	}
 	checks, risk, hash, required := ev.checks, ev.risk, ev.hash, ev.required
 	cs.State, cs.Risk, cs.ContentHash = state, &risk, hash
+	cs.Targets = ev.targets
 	return Review{Changeset: changes.ToChangeset(cs), Risk: &risk, RequiredApprovals: required, Checks: checks}, nil
 }
 
@@ -209,20 +215,57 @@ type evaluation struct {
 	hash     []byte
 	risk     string
 	required int
+	targets  []string
 }
 
 // evaluate выполняет проверки (§5.1), сохраняет их и вычисляет риск и число согласований.
-func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid.UUID) (evaluation, error) {
+func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid.UUID, requested ...[]string) (evaluation, error) {
 	versions, err := q.ChangesetWorkingVersions(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err
 	}
 	hash := contentHash(versions)
+	cs, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: changesetID, ProjectID: projectID})
+	if err != nil {
+		return evaluation{}, err
+	}
+	targets := cs.Targets
+	if len(requested) > 0 && len(requested[0]) > 0 {
+		targets = requested[0]
+	}
+	if len(targets) == 0 {
+		candidate, err := q.ValidationCandidate(ctx, store.ValidationCandidateParams{ProjectID: projectID, ChangesetID: changesetID})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return evaluation{}, err
+		}
+		envs, err := q.ListEnvironments(ctx, projectID)
+		if err != nil {
+			return evaluation{}, err
+		}
+		for _, env := range envs {
+			if env.Kind == "standard" && (candidate.ChangesetID == uuid.Nil || candidate.EnvironmentID == env.ID) {
+				targets = append(targets, env.Name)
+			}
+		}
+	}
+	targets = slices.Clone(targets)
+	slices.Sort(targets)
+	targets = slices.Compact(targets)
+	check, binding, err := environmentCheck(ctx, q, projectID, changesetID, targets, versions)
+	if err != nil {
+		return evaluation{}, err
+	}
+	if len(binding) > 0 {
+		h := sha256.New()
+		h.Write(hash)
+		h.Write(binding)
+		hash = h.Sum(nil)
+	}
 	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err
 	}
-	checks := []Check{irCheck(versions)}
+	checks := []Check{check}
 	policy, err := policyCheck(ctx, q, projectID, opActors)
 	if err != nil {
 		return evaluation{}, err
@@ -241,11 +284,52 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		types[i] = a.Type
 	}
 	risk := Risk(types)
+	if len(binding) > 0 {
+		risk = RiskHigh
+	}
 	approvalPolicy, err := LoadApprovalPolicy(ctx, q, projectID)
 	if err != nil {
 		return evaluation{}, err
 	}
-	return evaluation{checks: checks, hash: hash, risk: risk, required: approvalPolicy.Required(risk)}, nil
+	return evaluation{checks: checks, hash: hash, risk: risk, required: approvalPolicy.Required(risk), targets: targets}, nil
+}
+
+func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
+	docs := make([]validation.Document, len(versions))
+	for i, v := range versions {
+		docs[i] = validation.Document{ObjectID: v.ObjectID, VersionID: v.VersionID, Body: v.Body}
+	}
+	environments := map[string]any{}
+	problems := map[string][]ir.Diagnostic{}
+	var binding []byte
+	if len(targets) == 0 {
+		return Check{}, nil, commandbus.Validation(map[string]string{"targets": "укажите целевое окружение"})
+	}
+	for _, name := range targets {
+		c, err := validation.Load(ctx, q, projectID, name, &cs)
+		if err != nil {
+			return Check{}, nil, err
+		}
+		if c.Environment.Kind != "standard" {
+			return Check{}, nil, commandbus.Validation(map[string]string{"targets": "preview не допускает публикацию"})
+		}
+		p, err := c.CheckPublication(ctx, docs)
+		if err != nil {
+			return Check{}, nil, err
+		}
+		environments[name] = map[string]any{"manifestHash": c.ManifestHash, "documents": p}
+		for id, ds := range p {
+			problems[id] = append(problems[id], ds...)
+		}
+		if c.Candidate != nil {
+			binding = mustJSON(map[string]any{"hash": c.ManifestHash, "environmentId": c.Environment.ID, "baseManifestId": c.Candidate.BaseManifestID})
+		}
+	}
+	status := "passed"
+	if len(problems) > 0 {
+		status = "failed"
+	}
+	return Check{Stage: "ir", Status: status, Blocking: true, Details: mustJSON(map[string]any{"documents": problems, "environments": environments})}, binding, nil
 }
 
 func failed(checks []Check) bool {
@@ -285,35 +369,12 @@ func contentHash(versions []store.ChangesetWorkingVersionsRow) []byte {
 	return h.Sum(nil)
 }
 
-func decode(raw []byte) any {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		panic(err) // тела версий записывает сервер
-	}
-	return v
-}
-
 func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
 	return b
-}
-
-// irCheck — этап 2 pipeline: валидация документов (пока уровень L1).
-func irCheck(versions []store.ChangesetWorkingVersionsRow) Check {
-	problems := map[string][]ir.Diagnostic{}
-	for _, v := range versions {
-		if res := ir.ValidateDocument(decode(v.Body)); !res.Valid {
-			problems[v.ObjectID.String()] = res.Diagnostics
-		}
-	}
-	status := "passed"
-	if len(problems) > 0 {
-		status = "failed"
-	}
-	return Check{Stage: "ir", Status: status, Blocking: true, Details: mustJSON(map[string]any{"documents": problems})}
 }
 
 // policyCheck — этап 5: у каждого автора операций есть право на её тип на момент подачи.
@@ -363,6 +424,9 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 			fmt.Sprintf("Акторы вида %s не согласуют Change Set (PUB-003)", actor.Kind))
 	}
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return Review{}, err
+	}
 	cs, err := changes.Lock(ctx, q, actor.ProjectID, p.ChangesetID)
 	if err != nil {
 		return Review{}, err
@@ -378,6 +442,18 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 	if slices.Contains(authors, actor.ID) || cs.OwnerID == actor.ID {
 		return Review{}, commandbus.NewError(http.StatusForbidden, "APPROVAL_SELF", "Нельзя согласовать свои изменения",
 			"Согласующий не должен быть автором операций Change Set (PUB-002)")
+	}
+	if decision == "approve" {
+		ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID)
+		if err != nil {
+			return Review{}, err
+		}
+		if failed(ev.checks) {
+			return Review{}, commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Проверки не пройдены", "Контракт окружения изменился").WithParams(map[string]any{"checks": ev.checks})
+		}
+		if string(ev.hash) != string(cs.ContentHash) {
+			return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_CONTENT_CHANGED", "Согласуемое содержимое изменилось", "Повторно подайте Change Set")
+		}
 	}
 	if err := q.InsertApproval(ctx, store.InsertApprovalParams{
 		ID: uuid.Must(uuid.NewV7()), ChangesetID: cs.ID, ApproverID: actor.ID, Decision: decision,

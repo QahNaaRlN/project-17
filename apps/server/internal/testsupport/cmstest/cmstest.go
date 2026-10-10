@@ -15,6 +15,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -29,6 +30,8 @@ type Env struct {
 	Bus   *commandbus.Bus
 	Admin auth.Actor // сервисный администратор из bootstrap
 }
+
+const DefaultManifest = `{"manifestVersion":"1.0","app":{"id":"test","version":"1.0.0","framework":"react"},"irVersions":["1.0"],"breakpoints":{},"tokens":{}}`
 
 // New создаёт проект и шину; register регистрирует модули (projects и changes — всегда).
 func New(t *testing.T, register ...func(*commandbus.Bus)) *Env {
@@ -54,7 +57,38 @@ func New(t *testing.T, register ...func(*commandbus.Bus)) *Env {
 	for _, r := range register {
 		r(bus)
 	}
-	return &Env{T: t, Pool: pool, Q: store.New(pool), Bus: bus, Admin: admin}
+	e := &Env{T: t, Pool: pool, Q: store.New(pool), Bus: bus, Admin: admin}
+	// Command scenarios start with a ready contract. Bootstrap itself still leaves NULL.
+	for _, name := range []string{"staging", "production"} {
+		e.ActivateManifest(name, []byte(DefaultManifest))
+	}
+	return e
+}
+
+// ActivateManifest prepares immutable manifest storage without a registration command.
+func (e *Env) ActivateManifest(environment string, raw []byte) uuid.UUID {
+	e.T.Helper()
+	ctx := context.Background()
+	app, err := manifest.ParseJSON(raw)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	if r := manifest.Validate(app); !r.Valid {
+		e.T.Fatalf("invalid test manifest: %+v", r)
+	}
+	hash, err := manifest.Hash(app)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	if err := e.Q.InsertManifest(ctx, store.InsertManifestParams{ID: uuid.New(), ProjectID: e.Admin.ProjectID, Hash: hash, AppVersion: "1.0.0", Body: raw, RegisteredBy: e.Admin.ID}); err != nil {
+		e.T.Fatal(err)
+	}
+	m, err := e.Q.GetManifestByHash(ctx, store.GetManifestByHashParams{ProjectID: e.Admin.ProjectID, Hash: hash})
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	e.Exec("UPDATE environments SET active_manifest_id=$1 WHERE project_id=$2 AND name=$3", m.ID, e.Admin.ProjectID, environment)
+	return m.ID
 }
 
 // Human создаёт человека с ролью, дающей права, и возвращает его как актора.

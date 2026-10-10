@@ -25,6 +25,8 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
@@ -46,6 +48,14 @@ func setup(t *testing.T) env {
 	res, err := projects.Bootstrap(context.Background(), pool, "store", "Магазин", time.Hour)
 	if err != nil {
 		t.Fatal(err)
+	}
+	actor, err := auth.Authenticate(context.Background(), store.New(pool), "Bearer "+res.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := cmstest.Env{T: t, Pool: pool, Q: store.New(pool), Admin: actor}
+	for _, name := range []string{"staging", "production"} {
+		fixture.ActivateManifest(name, []byte(cmstest.DefaultManifest))
 	}
 	bus := commandbus.New(pool)
 	queue, err := jobs.NewInserter(pool)

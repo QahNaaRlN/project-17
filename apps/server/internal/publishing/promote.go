@@ -11,6 +11,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -83,6 +84,28 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 	if len(moves) == 0 {
 		return Publication{}, commandbus.NewError(http.StatusConflict, "PROMOTE_NOTHING", "Нечего продвигать",
 			fmt.Sprintf("В окружении %q уже опубликованы версии этой публикации", env.Name))
+	}
+	check, err := validation.Load(ctx, q, actor.ProjectID, env.Name, nil)
+	if err != nil {
+		return Publication{}, err
+	}
+	docs := make([]validation.Document, 0, len(items))
+	for _, it := range items {
+		if it.CurrentVersionID == nil {
+			continue
+		}
+		v, err := q.GetVersion(ctx, *it.CurrentVersionID)
+		if err != nil {
+			return Publication{}, err
+		}
+		docs = append(docs, validation.Document{ObjectID: it.ObjectID, VersionID: v.ID, Body: v.Body})
+	}
+	problems, err := check.CheckPublication(ctx, docs)
+	if err != nil {
+		return Publication{}, err
+	}
+	if err := validation.RequireValid(problems); err != nil {
+		return Publication{}, err
 	}
 
 	pub, err := q.CreatePublication(ctx, store.CreatePublicationParams{

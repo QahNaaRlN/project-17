@@ -96,6 +96,7 @@ func TestPromoteOrdering(t *testing.T) {
 	}
 	// Продвижение продвижения — в третье окружение.
 	e.Must(e.Admin, "create-environment", map[string]any{"name": "eu", "kind": "standard"}, nil)
+	e.ActivateManifest("eu", []byte(cmstest.DefaultManifest))
 	if _, err := promote(e, next.ID, "eu"); err != nil {
 		t.Errorf("promote из promote: %v", err)
 	}
