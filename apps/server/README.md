@@ -56,6 +56,9 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `GET` | `/api/v1/changesets/{id}` | Change Set и изменённые объекты |
 | `GET` | `/api/v1/changesets/{id}/operations?afterSeq=` | Журнал операций |
 | `GET` | `/api/v1/changesets/{id}/review` | Проверки, риск и согласования |
+| `POST` | `/api/v1/commands/create-delivery-key` | Ключ доставки `cms_pub_…` окружения (показывается один раз) |
+| `POST` | `/api/v1/commands/revoke-delivery-key` | Отозвать ключ доставки |
+| `GET` | `/api/v1/delivery-keys` | Ключи доставки проекта |
 | `GET` | `/api/v1/publications?environment=` | История публикаций |
 | `GET` | `/api/v1/publications/{id}` | Публикация с перемещёнными указателями |
 | `GET` | `/api/v1/documents/{id}?changesetId=` | Документ: рабочая версия в Change Set или head |
@@ -77,6 +80,17 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 }
 ```
 
+### Delivery API
+
+Чтение опубликованного приложением по ключу доставки окружения (`Authorization: Bearer cms_pub_…`).
+Ответы кэшируются CDN: `ETag`, `Cache-Control: public, s-maxage=300, …`, `Surrogate-Key`.
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| `GET` | `/delivery/v1/{project}/{env}/page?path=` | Страница по маршруту: документ и параметры маршрута |
+| `GET` | `/delivery/v1/{project}/{env}/document/{id}` | Опубликованный документ по ID |
+| `GET` | `/delivery/v1/{project}/{env}/routes` | Таблица маршрутов окружения |
+
 ## Устройство
 
 | Пакет | Ответственность |
@@ -90,6 +104,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `internal/projects` | Проекты, окружения, команда `create-environment`, bootstrap |
 | `internal/changes` | Change Set, рабочие версии, журнал операций, undo, переигрывание операций при rebase |
 | `internal/workflow` | Подача на проверку, проверки, риск, согласования, политика согласований, rebase |
+| `internal/delivery` | Delivery API: ключи доставки, страница по маршруту, документ, таблица маршрутов |
 | `internal/publishing` | Публикация в окружение, продвижение между окружениями, head и опубликованные указатели, откат |
 | `internal/composition/ops` | Операции над документом IR как чистые функции с обратными операциями |
 | `internal/composition/ir` | Формат IR: типы, валидатор, нормализация |

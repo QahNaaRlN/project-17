@@ -15,6 +15,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
+	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
@@ -91,6 +92,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	changes.Register(bus)
 	workflow.Register(bus)
 	publishing.Register(bus)
+	delivery.Register(bus)
 
 	srv := &http.Server{
 		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version}),

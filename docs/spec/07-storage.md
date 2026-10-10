@@ -77,6 +77,17 @@ CREATE TABLE policies (
 );
 CREATE UNIQUE INDEX policies_one_active ON policies (project_id) WHERE active;
 
+CREATE TABLE delivery_keys (                                -- ключи доставки cms_pub_… (08 §2)
+  id              uuid PRIMARY KEY,
+  project_id      uuid NOT NULL REFERENCES projects(id),
+  environment_id  uuid NOT NULL REFERENCES environments(id),
+  name            text NOT NULL,
+  token_hash      bytea NOT NULL UNIQUE,                     -- SHA-256 от секрета
+  created_by      uuid NOT NULL REFERENCES actors(id),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  revoked_at      timestamptz
+);
+
 CREATE TABLE api_tokens (
   id            uuid PRIMARY KEY,
   project_id    uuid NOT NULL REFERENCES projects(id),
