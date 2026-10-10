@@ -392,6 +392,10 @@ func contentHash(versions []store.ChangesetWorkingVersionsRow) []byte {
 	for _, v := range versions {
 		h.Write(v.ObjectID[:])
 		h.Write(v.BodyHash)
+		if v.SchemaVersion != nil || v.Deleted {
+			h.Write([]byte{0, 2})
+			h.Write(mustJSON(map[string]any{"schemaVersion": v.SchemaVersion, "deleted": v.Deleted}))
+		}
 		// False preserves the pre-certification hash of existing Change Sets.
 		// A trusted certificate is content and must be bound to approval.
 		if v.Certified {

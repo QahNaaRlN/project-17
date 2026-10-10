@@ -178,6 +178,7 @@ type ObjectVersion struct {
 	CreatedAt       time.Time  `json:"createdAt"`
 	CommittedAt     *time.Time `json:"committedAt"`
 	Certified       bool       `json:"certified"`
+	Deleted         bool       `json:"deleted"`
 }
 
 type Operation struct {

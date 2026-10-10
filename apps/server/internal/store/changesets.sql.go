@@ -108,7 +108,7 @@ func (q *Queries) CreateObject(ctx context.Context, arg CreateObjectParams) (Obj
 const createWorkingVersion = `-- name: CreateWorkingVersion :one
 INSERT INTO object_versions (id, project_id, object_id, state, changeset_id, parent_version_id, ir_version, path, body, body_hash, created_by)
 VALUES ($1, $2, $3, 'working', $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, project_id, object_id, number, state, changeset_id, parent_version_id, schema_version, ir_version, path, body, body_hash, created_by, created_at, committed_at, certified
+RETURNING id, project_id, object_id, number, state, changeset_id, parent_version_id, schema_version, ir_version, path, body, body_hash, created_by, created_at, committed_at, certified, deleted
 `
 
 type CreateWorkingVersionParams struct {
@@ -155,6 +155,7 @@ func (q *Queries) CreateWorkingVersion(ctx context.Context, arg CreateWorkingVer
 		&i.CreatedAt,
 		&i.CommittedAt,
 		&i.Certified,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -291,7 +292,7 @@ func (q *Queries) GetObject(ctx context.Context, arg GetObjectParams) (Object, e
 }
 
 const getVersion = `-- name: GetVersion :one
-SELECT id, project_id, object_id, number, state, changeset_id, parent_version_id, schema_version, ir_version, path, body, body_hash, created_by, created_at, committed_at, certified FROM object_versions WHERE id = $1
+SELECT id, project_id, object_id, number, state, changeset_id, parent_version_id, schema_version, ir_version, path, body, body_hash, created_by, created_at, committed_at, certified, deleted FROM object_versions WHERE id = $1
 `
 
 func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (ObjectVersion, error) {
@@ -314,6 +315,7 @@ func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (ObjectVersion, 
 		&i.CreatedAt,
 		&i.CommittedAt,
 		&i.Certified,
+		&i.Deleted,
 	)
 	return i, err
 }

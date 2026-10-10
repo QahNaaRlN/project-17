@@ -439,7 +439,8 @@ func (q *Queries) NextVersionNumber(ctx context.Context, objectID uuid.UUID) (in
 
 const setHead = `-- name: SetHead :exec
 UPDATE objects o SET head_version_id = $1::uuid,
-  head_path = (SELECT v.path FROM object_versions v WHERE v.id = $1::uuid)
+  head_path = (SELECT v.path FROM object_versions v WHERE v.id = $1::uuid),
+  deleted_at = CASE WHEN (SELECT v.deleted FROM object_versions v WHERE v.id=$1::uuid) THEN now() ELSE NULL END
 WHERE o.id = $2
 `
 

@@ -4,6 +4,7 @@ package cmstest
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -21,6 +22,33 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
 )
+
+// ContentFixture represents already imported, committed content; production mutations use Command Bus.
+func (e *Env) ContentFixture(kind, schema string, body any, environments ...string) uuid.UUID {
+	e.T.Helper()
+	id, version := uuid.New(), uuid.New()
+	var name *string
+	var schemaVersion *int32
+	if kind == "entity" {
+		name = &schema
+		n := int32(1)
+		schemaVersion = &n
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		e.T.Fatal(err)
+	}
+	hash := sha256.Sum256(raw)
+	e.Exec(`INSERT INTO objects(id,project_id,kind,schema_name) VALUES($1,$2,$3,$4)`, id, e.Admin.ProjectID, kind, name)
+	e.Exec(`INSERT INTO object_versions(id,project_id,object_id,number,state,schema_version,body,body_hash,created_by) VALUES($1,$2,$3,1,'committed',$4,$5,$6,$7)`, version, e.Admin.ProjectID, id, schemaVersion, raw, hash[:], e.Admin.ID)
+	e.Exec(`UPDATE objects SET head_version_id=$1 WHERE id=$2`, version, id)
+	for _, env := range environments {
+		pub := uuid.New()
+		e.Exec(`INSERT INTO publications(id,project_id,environment_id,kind,actor_id) SELECT $1,$2,id,'publish',$3 FROM environments WHERE project_id=$2 AND name=$4`, pub, e.Admin.ProjectID, e.Admin.ID, env)
+		e.Exec(`INSERT INTO published_pointers(environment_id,object_id,version_id,publication_id) SELECT id,$1,$2,$3 FROM environments WHERE project_id=$4 AND name=$5`, id, version, pub, e.Admin.ProjectID, env)
+	}
+	return id
+}
 
 // Env — стенд одного теста.
 type Env struct {

@@ -23,7 +23,7 @@ SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
-WHERE e.project_id = $1 AND e.id = $2 AND o.project_id = e.project_id AND o.kind = 'document'
+WHERE e.project_id = $1 AND e.id = $2 AND o.project_id = e.project_id
 ORDER BY o.id;
 
 -- name: ValidationPage :one

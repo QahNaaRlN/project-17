@@ -41,8 +41,10 @@ type Context struct {
 	app          any
 	project      map[string]any
 	// Overrides is the prospective publication, including promotion's exact versions.
-	Overrides map[uuid.UUID]Document
-	UseHead   bool
+	Overrides    map[uuid.UUID]Document
+	PreserveHead bool // promotion moves published pointers only
+	Draft        bool
+	UseHead      bool
 }
 
 // LockProjectEnvironments keeps the environment -> CS -> object lock order for workflow
@@ -70,7 +72,7 @@ func Load(ctx context.Context, q *store.Queries, project uuid.UUID, environment 
 	if err != nil {
 		return nil, err
 	}
-	c := &Context{q: q, ProjectID: project, Environment: env, ChangesetID: cs, ManifestID: env.ActiveManifestID, Overrides: map[uuid.UUID]Document{}}
+	c := &Context{q: q, ProjectID: project, Environment: env, ChangesetID: cs, Draft: cs != nil, ManifestID: env.ActiveManifestID, Overrides: map[uuid.UUID]Document{}}
 	settings, err := q.GetProjectSettings(ctx, project)
 	if err != nil {
 		return nil, err
@@ -165,6 +167,14 @@ func (c *Context) resolve(ctx context.Context, ref map[string]any) (Document, bo
 // Validate checks every exact transitive component version, detects cycles by object
 // identity (IR-062), and includes the originating component/version in nested diagnostics.
 func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
+	o, err := c.q.ContentIdentity(ctx, store.ContentIdentityParams{ProjectID: c.ProjectID, ID: d.ObjectID})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return ir.Result{}, err
+	}
+	if err == nil && o.Kind != "document" {
+		return c.validateContent(ctx, d, o)
+	}
+
 	stack := map[uuid.UUID]bool{}
 	count := 0
 	requirements := map[uuid.UUID]policydoc.Mode{}
@@ -261,6 +271,21 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		requirements[d.VersionID] = policy.RequiredMode
 		r.Diagnostics = append(r.Diagnostics, policy.Diagnostics...)
 		r.Diagnostics = append(r.Diagnostics, bindings.Diagnostics...)
+		refs, err := c.References(ctx, doc)
+		if err != nil {
+			return ir.Result{}, err
+		}
+		r.Diagnostics = append(r.Diagnostics, refs.Diagnostics...)
+		content := object(doc["content"])
+		resolve := object(content["resolve"])
+		if resolve["by"] == "entity" {
+			typed, err := c.TypedReferences(ctx, map[string]any{"type": "reference", "schema": content["schema"]}, resolve, "/content/resolve")
+			if err != nil {
+				return ir.Result{}, err
+			}
+			r.Diagnostics = append(r.Diagnostics, typed.Diagnostics...)
+		}
+
 		r.Diagnostics = append(r.Diagnostics, extra...)
 		sort.SliceStable(r.Diagnostics, func(i, j int) bool {
 			if r.Diagnostics[i].Pointer == r.Diagnostics[j].Pointer {
@@ -330,6 +355,8 @@ func problem(code, pointer, node string, params map[string]any) ir.Result {
 // CheckPublication validates the prospective environment, including existing consumers
 // of live components; replacements in the batch take precedence over current pointers.
 func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[string][]ir.Diagnostic, error) {
+	c.Draft = false
+	c.Overrides = map[uuid.UUID]Document{}
 	rows, err := c.q.ValidationPublishedVersions(ctx, store.ValidationPublishedVersionsParams{ProjectID: c.ProjectID, ID: c.Environment.ID})
 	if err != nil {
 		return nil, err
@@ -347,14 +374,21 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
-	out := map[string][]ir.Diagnostic{}
+	headDocs := docs
+	if c.PreserveHead {
+		headDocs = nil
+	}
+	out, err := c.HeadConstraints(ctx, headDocs)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		r, err := c.Validate(ctx, all[id])
 		if err != nil {
 			return nil, err
 		}
 		if len(r.Diagnostics) > 0 {
-			out[id.String()] = r.Diagnostics
+			out[id.String()] = append(out[id.String()], r.Diagnostics...)
 		}
 	}
 	return out, nil

@@ -38,7 +38,7 @@ const MaxOperationsPerCommand = 200
 
 // writeRights — права, любое из которых позволяет создать Change Set (08-api.md §3.2).
 var writeRights = []auth.Right{
-	auth.ContentWrite, auth.DesignCompose, auth.ComponentWrite, auth.BehaviorUse,
+	auth.ContentWrite, auth.AssetWrite, auth.ContentDelete, auth.DesignCompose, auth.ComponentWrite, auth.BehaviorUse,
 	auth.SchemaPropose, auth.DesignZonesManage, auth.DesignComponentsCertify,
 }
 
@@ -104,8 +104,9 @@ func requireAnyWrite(actor auth.Actor) error {
 // --- create-changeset --------------------------------------------------------------
 
 type createPayload struct {
-	Title       string  `json:"title"`
-	Description *string `json:"description"`
+	Targets     []string `json:"targets,omitempty"`
+	Title       string   `json:"title"`
+	Description *string  `json:"description"`
 }
 
 func validateCreate(p createPayload) error {
@@ -121,6 +122,22 @@ func handleCreate(ctx context.Context, tx pgx.Tx, actor auth.Actor, p createPayl
 	})
 	if err != nil {
 		return Changeset{}, err
+	}
+	if len(p.Targets) > 0 {
+		q := store.New(tx)
+		for _, name := range p.Targets {
+			env, err := q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: actor.ProjectID, Name: name})
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && env.Kind != "standard") {
+				return Changeset{}, commandbus.Validation(map[string]string{"targets": "нужно standard окружение"})
+			}
+			if err != nil {
+				return Changeset{}, err
+			}
+		}
+		if err := q.SetContentTargets(ctx, store.SetContentTargetsParams{ID: cs.ID, Targets: p.Targets}); err != nil {
+			return Changeset{}, err
+		}
+		cs.Targets = p.Targets
 	}
 	return toChangeset(cs), nil
 }
@@ -176,6 +193,14 @@ func lockOpen(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.U
 
 // OperationRight — право, необходимое для операции данного типа.
 func OperationRight(opType string) (auth.Right, bool) {
+	switch opType {
+	case EntityCreate, EntitySetFields:
+		return auth.ContentWrite, true
+	case EntityDelete, EntityRestore:
+		return auth.ContentDelete, true
+	case AssetUpdateMeta:
+		return auth.AssetWrite, true
+	}
 	if opType == schemaflow.Apply {
 		return auth.SchemaApply, true
 	}
@@ -258,7 +283,7 @@ func validateApply(p applyPayload) error {
 			if op.Target != nil || op.SchemaTarget == nil || op.SchemaTarget.Kind != "schema" || op.SchemaTarget.SchemaName == "" {
 				return commandbus.Validation(map[string]string{field + ".target": "нужна цель {kind: schema, schemaName}"})
 			}
-		} else if op.SchemaTarget != nil || (op.Type == DocumentCreate) != (op.Target == nil) {
+		} else if op.SchemaTarget != nil || (op.Type == DocumentCreate || op.Type == EntityCreate) != (op.Target == nil) {
 			return commandbus.Validation(map[string]string{field + ".target": "target обязателен для всех операций, кроме document.create, и запрещён для неё"})
 		}
 		if len(op.Payload) == 0 {
@@ -278,10 +303,13 @@ type session struct {
 }
 
 type workingDoc struct {
-	certified bool
-	versionID uuid.UUID
-	path      *string // маршрут страницы
-	body      map[string]any
+	kind          string
+	schemaVersion *int32
+	deleted       bool
+	certified     bool
+	versionID     uuid.UUID
+	path          *string // маршрут страницы
+	body          map[string]any
 }
 
 // load возвращает рабочую версию документа в Change Set, при первом обращении копируя head.
@@ -292,6 +320,17 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	co, err := s.q.GetChangesetObject(s.ctx, store.GetChangesetObjectParams{ChangesetID: s.cs.ID, ObjectID: objectID})
 	if err == nil {
 		d := &workingDoc{versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody), certified: co.WorkingCertified}
+		v, err := s.q.GetVersion(s.ctx, d.versionID)
+		if err != nil {
+			return nil, err
+		}
+		o, err := s.q.ContentIdentity(s.ctx, store.ContentIdentityParams{ProjectID: s.actor.ProjectID, ID: objectID})
+		if err != nil {
+			return nil, err
+		}
+		d.kind = o.Kind
+		d.schemaVersion = v.SchemaVersion
+		d.deleted = v.Deleted
 		s.docs[objectID] = d
 		return d, nil
 	}
@@ -299,7 +338,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 		return nil, err
 	}
 
-	obj, err := s.q.GetObject(s.ctx, store.GetObjectParams{ID: objectID, ProjectID: s.actor.ProjectID})
+	obj, err := s.q.ContentIdentity(s.ctx, store.ContentIdentityParams{ID: objectID, ProjectID: s.actor.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && obj.HeadVersionID == nil) {
 		// Объект без head существует только в чужом открытом Change Set — для этого он не виден.
 		return nil, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Документ не найден",
@@ -317,6 +356,9 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 		return nil, err
 	}
 	d.certified = head.Certified
+	d.kind = obj.Kind
+	d.schemaVersion = head.SchemaVersion
+	d.deleted = head.Deleted
 	return d, nil
 }
 
@@ -335,7 +377,7 @@ func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, path *strin
 	}); err != nil {
 		return nil, err
 	}
-	d := &workingDoc{versionID: v.ID, path: path, body: body}
+	d := &workingDoc{kind: "document", versionID: v.ID, path: path, body: body}
 	s.docs[objectID] = d
 	return d, nil
 }
@@ -343,6 +385,11 @@ func (s *session) createWorking(objectID uuid.UUID, base *uuid.UUID, path *strin
 // flush сохраняет рабочие версии всех документов, затронутых командой.
 func (s *session) flush() error {
 	for _, d := range s.docs {
+		if d.kind != "document" {
+			if err := s.q.SetWorkingContent(s.ctx, store.SetWorkingContentParams{ID: d.versionID, SchemaVersion: d.schemaVersion, Deleted: d.deleted}); err != nil {
+				return err
+			}
+		}
 		raw, hash := encodeBody(d.body)
 		if err := s.q.UpdateWorkingVersion(s.ctx, store.UpdateWorkingVersionParams{ID: d.versionID, Path: d.path, Body: raw, BodyHash: hash, Certified: d.certified}); err != nil {
 			return err
@@ -418,6 +465,10 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 		var err error
 		if in.Type == schemaflow.Apply {
 			rec, err = s.applySchema(in)
+		} else if in.Type == EntityCreate {
+			rec, err = s.createEntity(in)
+		} else if isContentOperation(in.Type) {
+			rec, err = s.applyContent(*in.Target, ops.Op{Type: in.Type, Payload: in.Payload})
 		} else if in.Type == DocumentCreate {
 			rec, err = s.createDocument(in)
 		} else {
@@ -464,6 +515,19 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 		if err := commandbus.Require(s.actor, right); err != nil {
 			return recordInput{}, err
 		}
+	}
+	if isContentOperation(op.Type) {
+		return s.applyContent(target, op)
+	}
+	obj, err := s.q.ContentIdentity(s.ctx, store.ContentIdentityParams{ProjectID: s.actor.ProjectID, ID: target})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordInput{}, notFound("Документ", target)
+	}
+	if err != nil {
+		return recordInput{}, err
+	}
+	if obj.Kind != "document" {
+		return recordInput{}, commandbus.Validation(map[string]string{"target": "нужен документ"})
 	}
 	if op.Type == ComponentCertify {
 		return s.certify(target, op.Payload)

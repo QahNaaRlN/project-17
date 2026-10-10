@@ -65,13 +65,16 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 		return res, err
 	}
 	type objectPlan struct {
-		certified bool
-		id        uuid.UUID
-		head      *uuid.UUID
-		path      *string // маршрут на новой базе с переигранными document.setRoute
-		body      map[string]any
-		working   uuid.UUID
-		ops       []opPlan
+		deleted       bool
+		schemaVersion *int32
+		kind          string
+		certified     bool
+		id            uuid.UUID
+		head          *uuid.UUID
+		path          *string // маршрут на новой базе с переигранными document.setRoute
+		body          map[string]any
+		working       uuid.UUID
+		ops           []opPlan
 	}
 	var plans []objectPlan
 	for _, objectID := range stale {
@@ -105,6 +108,9 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			return res, err
 		}
 		plan.body, plan.path, plan.certified = decodeBody(head.Body), head.Path, head.Certified
+		plan.deleted = head.Deleted
+		plan.schemaVersion = head.SchemaVersion
+		plan.kind = obj.Kind
 		dropped := map[uuid.UUID]bool{}
 		for _, op := range list {
 			choice := resolutions[op.ID]
@@ -121,7 +127,19 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 					}
 				}
 			}
-			if op.Type == ComponentCertify {
+			if op.Type == EntityDelete || op.Type == EntityRestore {
+				if choice == ResolutionTheirs {
+					step = opPlan{op: op, status: "dropped"}
+				} else {
+					r := deleteResult(plan.deleted, op.Type)
+					if choice != ResolutionMine && !sameJSON(r.Before, op.Before) {
+						conflict = &Conflict{OperationID: op.ID, Seq: op.Seq, Type: op.Type, Code: "BEFORE_MISMATCH", Expected: decodeNullable(op.Before), Current: r.Before}
+					} else {
+						plan.deleted = op.Type == EntityDelete
+						step = opPlan{op: op, status: "applied", replay: &r}
+					}
+				}
+			} else if op.Type == ComponentCertify {
 				if choice == ResolutionTheirs {
 					step = opPlan{op: op, status: "dropped"}
 				} else {
@@ -137,6 +155,8 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 						step = opPlan{op: op, status: "applied", replay: &r}
 					}
 				}
+			} else if plan.deleted && (op.Type == EntitySetFields || op.Type == AssetUpdateMeta) && choice != ResolutionTheirs {
+				conflict = &Conflict{OperationID: op.ID, Seq: op.Seq, Type: op.Type, Code: "OPERATION_INAPPLICABLE", Message: "Объект удалён; сначала восстановите его"}
 			} else if op.Type == DocumentSetRoute {
 				step, conflict = replayRoute(&plan.path, op, choice)
 			} else {
@@ -210,6 +230,11 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			res.Removed = append(res.Removed, p.id)
 			continue
 		}
+		if p.kind != "document" {
+			if err := q.SetWorkingContent(ctx, store.SetWorkingContentParams{ID: p.working, SchemaVersion: p.schemaVersion, Deleted: p.deleted}); err != nil {
+				return res, err
+			}
+		}
 		raw, hash := encodeBody(p.body)
 		if err := q.RebaseWorkingVersion(ctx, store.RebaseWorkingVersionParams{ID: p.working, ParentVersionID: p.head, Path: p.path, Body: raw, BodyHash: hash, Certified: p.certified}); err != nil {
 			return res, err
@@ -242,7 +267,13 @@ func replay(body map[string]any, op store.Operation, choice string) (opPlan, *Co
 		return opPlan{op: op, status: "dropped"}, nil
 	}
 	next := ops.Clone(body)
-	r, err := ops.Apply(next, ops.Op{Type: op.Type, Payload: op.Payload}, nil)
+	var r ops.Result
+	var err error
+	if op.Type == EntitySetFields || op.Type == AssetUpdateMeta {
+		r, err = contentFields(next, ops.Op{Type: op.Type, Payload: op.Payload})
+	} else {
+		r, err = ops.Apply(next, ops.Op{Type: op.Type, Payload: op.Payload}, nil)
+	}
 	if err != nil {
 		var oerr *ops.Error
 		errors.As(err, &oerr)
