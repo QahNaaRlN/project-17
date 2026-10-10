@@ -59,6 +59,9 @@ func TestDeliveryPage(t *testing.T) {
 	if resp.Header.Get("Cache-Control") != "no-store" {
 		t.Errorf("ошибки не кэшируются: %v", resp.Header)
 	}
+	// Путь предельной длины допустим (страницы нет — 404).
+	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/page?path=/"+strings.Repeat("a", httpapi.MaxDeliveryPath-1), "", bearer(key))
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
 	for _, path := range []string{"", "relative", "/" + strings.Repeat("a", httpapi.MaxDeliveryPath)} {
 		resp, body = e.do(t, "GET", "/delivery/v1/store/staging/page?path="+path, "", bearer(key))
 		expectProblem(t, resp, body, 400, "PARAM_INVALID")
