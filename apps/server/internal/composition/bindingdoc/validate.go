@@ -416,6 +416,22 @@ func builtinAction(name string) object {
 	}
 }
 func (c *checker) link(link object, p, id string, s scopes) {
+	allowed := object{"kind": true}
+	switch link["kind"] {
+	case "page":
+		allowed["page"] = true
+		allowed["params"] = true
+	case "url":
+		allowed["url"] = true
+	case "anchor":
+		allowed["node"] = true
+	}
+	for _, key := range keys(link) {
+		if allowed[key] != true {
+			c.add("ACTION_ARGS_INVALID", p+ir.Pointer(key), id, object{"unknown": key})
+			return
+		}
+	}
 	clean := copyMap(link)
 	delete(clean, "params")
 	if !manifestdoc.ValidateValue(c.doc, c.app, typ("link"), clean) {

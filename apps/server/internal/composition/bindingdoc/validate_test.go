@@ -129,6 +129,7 @@ func TestActions(t *testing.T) {
 		{"navigate", object{"to": object{"kind": "anchor", "node": "n_missing"}}, "ACTION_ARGS_INVALID"},
 		{"navigate", object{"to": object{"kind": "url", "url": "https://example.com"}}, ""},
 		{"navigate", object{"to": object{"kind": "url", "url": "/relative"}}, ""},
+		{"navigate", object{"to": object{"lit": object{"kind": "url", "url": "/relative", "extra": true}}}, "ACTION_ARGS_INVALID"},
 		{"navigate", object{"to": object{"kind": "url", "url": "javascript:alert(1)"}}, "ACTION_ARGS_INVALID"},
 		{"navigate", object{"to": object{"lit": object{"kind": "url", "url": "not-a-url"}}}, "ACTION_ARGS_INVALID"},
 		{"navigate", object{"to": object{"kind": "page", "page": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11"}}, "ACTION_ARGS_INVALID"},
