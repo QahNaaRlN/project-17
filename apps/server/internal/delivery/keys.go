@@ -120,11 +120,11 @@ var ErrUnauthenticated = errors.New("delivery: недействительный 
 
 // Authenticate проверяет заголовок Authorization: Bearer cms_pub_….
 func Authenticate(ctx context.Context, q *store.Queries, authorization string) (Access, error) {
-	secret, ok := strings.CutPrefix(authorization, "Bearer ")
-	if !ok || !strings.HasPrefix(secret, auth.DeliveryKeyPrefix) {
+	rest, ok := strings.CutPrefix(authorization, "Bearer "+auth.DeliveryKeyPrefix)
+	if !ok {
 		return Access{}, ErrUnauthenticated
 	}
-	row, err := q.AuthenticateDeliveryKey(ctx, auth.HashToken(secret))
+	row, err := q.AuthenticateDeliveryKey(ctx, auth.HashToken(auth.DeliveryKeyPrefix+rest))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Access{}, ErrUnauthenticated
 	}

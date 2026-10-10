@@ -25,33 +25,32 @@ func Match(routes []publishing.Route, path string) (publishing.Route, map[string
 	var bestParams map[string]string
 	var bestRank []bool
 	for _, r := range routes {
-		pattern := segments(r.Path)
-		if len(pattern) != len(want) {
-			continue
-		}
-		params := map[string]string{}
-		rank := make([]bool, len(pattern)) // true — литерал
-		ok := true
-		for i, seg := range pattern {
-			if name, isParam := strings.CutPrefix(seg, ":"); isParam {
-				if want[i] == "" {
-					ok = false
-					break
-				}
-				params[name] = want[i]
-				continue
-			}
-			if seg != want[i] {
-				ok = false
-				break
-			}
-			rank[i] = true
-		}
+		params, rank, ok := matchSegments(segments(r.Path), want)
 		if ok && (bestRank == nil || stronger(rank, bestRank)) {
 			best, bestParams, bestRank = r, params, rank
 		}
 	}
 	return best, bestParams, bestRank != nil
+}
+
+// matchSegments сопоставляет сегменты шаблона с сегментами пути; rank[i] — сегмент литеральный.
+func matchSegments(pattern, want []string) (map[string]string, []bool, bool) {
+	if len(pattern) != len(want) {
+		return nil, nil, false
+	}
+	params := map[string]string{}
+	rank := make([]bool, len(pattern))
+	for i, seg := range pattern {
+		name, isParam := strings.CutPrefix(seg, ":")
+		if isParam && want[i] != "" {
+			params[name] = want[i]
+		} else if isParam || seg != want[i] {
+			return nil, nil, false
+		} else {
+			rank[i] = true
+		}
+	}
+	return params, rank, true
 }
 
 // stronger — первый различающийся сегмент у a литерал, а у b параметр.

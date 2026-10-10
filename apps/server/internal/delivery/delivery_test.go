@@ -2,6 +2,7 @@ package delivery_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -95,13 +96,16 @@ func TestDeliveryKeyErrors(t *testing.T) {
 	}{
 		"нет окружения": {map[string]any{"environment": "nowhere", "name": "x"}, "NOT_FOUND"},
 		"пустое имя":    {map[string]any{"environment": "staging", "name": "  "}, "VALIDATION_FAILED"},
-		"длинное имя":   {map[string]any{"environment": "staging", "name": string(make([]rune, 101))}, "VALIDATION_FAILED"},
+		"длинное имя":   {map[string]any{"environment": "staging", "name": strings.Repeat("я", 101)}, "VALIDATION_FAILED"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := e.Do(e.Admin, "create-delivery-key", tc.payload, nil); cmstest.Code(err) != tc.code {
 				t.Errorf("%v", err)
 			}
 		})
+	}
+	if err := e.Do(e.Admin, "create-delivery-key", map[string]any{"environment": "staging", "name": strings.Repeat("я", 100)}, nil); err != nil {
+		t.Errorf("имя предельной длины: %v", err)
 	}
 	if err := e.Do(e.Human("editor", auth.ContentPublish), "create-delivery-key", map[string]any{"environment": "staging", "name": "x"}, nil); cmstest.Code(err) != "FORBIDDEN" {
 		t.Errorf("без project.admin: %v", err)
@@ -153,19 +157,21 @@ func TestPagesAndDocuments(t *testing.T) {
 
 func TestMatch(t *testing.T) {
 	route := func(path string) publishing.Route { return publishing.Route{Path: path, ObjectID: uuid.New()} }
-	routes := []publishing.Route{route("/a/:x/c"), route("/a/b/:y"), route("/:p"), route("/")}
+	routes := []publishing.Route{route("/a/:x/c"), route("/a/b/:y"), route("/:p"), route("/"), route("/:p/:q"), route("/:p/x")}
 	for path, want := range map[string]string{
 		"/a/b/c": "/a/b/:y", // первый различающийся сегмент — литерал
 		"/a/z/c": "/a/:x/c",
 		"/q":     "/:p",
 		"/":      "/",
+		"/q/x":   "/:p/x", // совпадают в параметре, различаются дальше
+		"/q/y":   "/:p/:q",
 	} {
 		r, _, ok := delivery.Match(routes, path)
 		if !ok || r.Path != want {
 			t.Errorf("%s: %s %v", path, r.Path, ok)
 		}
 	}
-	for _, path := range []string{"//", "/a//c", "/a/b"} {
+	for _, path := range []string{"//", "/a//c", "/a/z/d", "/q/r/s/t"} {
 		if r, _, ok := delivery.Match(routes, path); ok {
 			t.Errorf("%s не должен совпасть: %s", path, r.Path)
 		}
