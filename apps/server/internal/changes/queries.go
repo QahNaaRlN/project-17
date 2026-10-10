@@ -13,6 +13,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -59,6 +60,9 @@ func GetChangeset(ctx context.Context, q *store.Queries, projectID, id uuid.UUID
 	if err != nil {
 		return ChangesetDetail{}, err
 	}
+	if cs.State == "merged" || cs.State == "abandoned" {
+		attention = false
+	}
 	out := ChangesetDetail{Changeset: toChangeset(cs), Objects: objects, NeedsAttention: attention, ManifestDiagnostics: diagnostics}
 	if cs.Kind == "schema" {
 		candidate, err := q.ValidationCandidate(ctx, store.ValidationCandidateParams{ProjectID: projectID, ChangesetID: id})
@@ -88,20 +92,21 @@ func ListChangesets(ctx context.Context, q *store.Queries, projectID uuid.UUID, 
 
 // Operation — запись журнала операций.
 type Operation struct {
-	ID         uuid.UUID       `json:"id"`
-	Seq        int32           `json:"seq"`
-	ActorID    uuid.UUID       `json:"actorId"`
-	Source     string          `json:"source"`
-	Target     uuid.UUID       `json:"target"`
-	Type       string          `json:"type"`
-	Payload    json.RawMessage `json:"payload"`
-	Before     json.RawMessage `json:"before"`
-	After      json.RawMessage `json:"after"`
-	Reason     *string         `json:"reason"`
-	ClientOpID *string         `json:"clientOpId"`
-	UndoOf     *uuid.UUID      `json:"undoOf"`
-	Status     string          `json:"status"` // applied | conflict | dropped (rebase, 06 §4)
-	CreatedAt  time.Time       `json:"createdAt"`
+	ID           uuid.UUID          `json:"id"`
+	Seq          int32              `json:"seq"`
+	ActorID      uuid.UUID          `json:"actorId"`
+	Source       string             `json:"source"`
+	Target       uuid.UUID          `json:"-"`
+	SchemaTarget *schemaflow.Target `json:"-"`
+	Type         string             `json:"type"`
+	Payload      json.RawMessage    `json:"payload"`
+	Before       json.RawMessage    `json:"before"`
+	After        json.RawMessage    `json:"after"`
+	Reason       *string            `json:"reason"`
+	ClientOpID   *string            `json:"clientOpId"`
+	UndoOf       *uuid.UUID         `json:"undoOf"`
+	Status       string             `json:"status"` // applied | conflict | dropped (rebase, 06 §4)
+	CreatedAt    time.Time          `json:"createdAt"`
 }
 
 // ListOperations — операции Change Set с seq > afterSeq (до 500).
@@ -115,9 +120,14 @@ func ListOperations(ctx context.Context, q *store.Queries, projectID, changesetI
 	}
 	out := make([]Operation, len(rows))
 	for i, r := range rows {
-		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Target: r.TargetObjectID, Status: r.Status,
+		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Status: r.Status,
 			Type: r.Type, Payload: r.Payload, Before: r.Before, After: r.After, Reason: r.Reason,
 			ClientOpID: r.ClientOpID, UndoOf: r.UndoOf, CreatedAt: r.CreatedAt}
+		if r.TargetObjectID != nil {
+			out[i].Target = *r.TargetObjectID
+		} else if r.TargetSchemaName != nil {
+			out[i].SchemaTarget = &schemaflow.Target{Kind: "schema", SchemaName: *r.TargetSchemaName}
+		}
 	}
 	return out, nil
 }

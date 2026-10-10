@@ -2,12 +2,10 @@
 package manifestregistry
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"sort"
 
@@ -18,6 +16,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -35,6 +34,7 @@ type Registration struct {
 }
 
 func Register(bus *commandbus.Bus) {
+	schemaflow.Register(bus)
 	commandbus.Register(bus, commandbus.Command[Payload, Registration]{Name: "register-manifest", Authorize: authorize, Validate: validate, Handle: handle})
 }
 func authorize(actor auth.Actor, _ Payload) error {
@@ -99,9 +99,17 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 		if item.Stage != "published" {
 			continue
 		}
-		blocked := len(manifest.BreakingChanges(item.Changes)) > 0
-		for _, d := range item.Diagnostics {
-			blocked = blocked || d.Severity == ir.SeverityError
+		pendingSchemas := env.Kind == "standard" && manifest.SchemasChanged(changes)
+		blocked := false
+		for _, change := range manifest.BreakingChanges(item.Changes) {
+			blocked = blocked || !pendingSchemas || !change.Schema
+		}
+		// A schema candidate is not active; CNT-022 repairs its affected pages in the same CS.
+		// Breaking application contracts still require the two-phase MF-022 removal path.
+		if !pendingSchemas {
+			for _, d := range item.Diagnostics {
+				blocked = blocked || d.Severity == ir.SeverityError
+			}
 		}
 		if blocked {
 			return Registration{}, commandbus.NewError(http.StatusConflict, "MANIFEST_BREAKING_IN_USE", "Manifest нарушает опубликованный контракт", "Сначала измените использующие контракт документы").WithParams(map[string]any{"changes": changes, "impact": impact})
@@ -112,7 +120,7 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 		schemas = s
 	}
 	if env.Kind == "standard" {
-		if err := checkSchemas(ctx, q, actor.ProjectID, schemas); err != nil {
+		if err := schemaflow.CheckVersions(ctx, q, actor.ProjectID, app); err != nil {
 			return Registration{}, err
 		}
 	}
@@ -141,6 +149,9 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 			}
 			id = cs.ID
 			err = q.BindManifestCandidate(ctx, store.BindManifestCandidateParams{ChangesetID: id, ProjectID: actor.ProjectID, EnvironmentID: env.ID, ManifestID: m.ID, BaseManifestID: env.ActiveManifestID})
+			if err == nil {
+				err = schemaflow.Prepare(ctx, q, actor, cs)
+			}
 		}
 		if err != nil {
 			return Registration{}, err
@@ -151,7 +162,7 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 	}
 	if env.Kind == "preview" {
 		for _, name := range keys(schemas) {
-			version, raw, err := schema(schemas[name])
+			version, raw, err := schemaflow.Schema(schemas[name])
 			if err != nil {
 				return Registration{}, err
 			}
@@ -163,7 +174,7 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 	if _, err := q.SetActiveManifest(ctx, store.SetActiveManifestParams{ProjectID: actor.ProjectID, ID: env.ID, ActiveManifestID: &m.ID}); err != nil {
 		return Registration{}, err
 	}
-	if err := refresh(ctx, q, actor.ProjectID, env.Name); err != nil {
+	if err := Refresh(ctx, q, actor.ProjectID, env.Name); err != nil {
 		return Registration{}, err
 	}
 	return result, nil
@@ -176,52 +187,9 @@ func keys(m map[string]any) []string {
 	sort.Strings(out)
 	return out
 }
-func schema(v any) (int32, []byte, error) {
-	number, err := v.(map[string]any)["version"].(json.Number).Float64()
-	if err != nil || number < 1 || number > math.MaxInt32 || math.Trunc(number) != number {
-		return 0, nil, commandbus.Validation(map[string]string{"schemas": "version вне диапазона PostgreSQL integer"})
-	}
-	raw, err := manifest.CanonicalJSON(v)
-	return int32(number), raw, err
-}
-func checkSchemas(ctx context.Context, q *store.Queries, project uuid.UUID, schemas map[string]any) error {
-	for _, name := range keys(schemas) {
-		version, raw, err := schema(schemas[name])
-		if err != nil {
-			return err
-		}
-		row, err := q.GetStandardSchemaVersion(ctx, store.GetStandardSchemaVersionParams{ProjectID: project, SchemaName: name, Version: version})
-		if err == nil {
-			stored, err := manifest.ParseJSON(row.Body)
-			if err != nil {
-				return err
-			}
-			canonical, err := manifest.CanonicalJSON(stored)
-			if err != nil {
-				return err
-			}
-			if bytes.Equal(raw, canonical) {
-				continue
-			}
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		} else {
-			latest, e := q.LatestStandardSchemaVersion(ctx, store.LatestStandardSchemaVersionParams{ProjectID: project, SchemaName: name})
-			if errors.Is(e, pgx.ErrNoRows) {
-				continue
-			}
-			if e != nil {
-				return e
-			}
-			if version > latest.Version {
-				continue
-			}
-		}
-		return commandbus.NewError(http.StatusConflict, "SCHEMA_VERSION_CONFLICT", "Версия схемы уже закреплена", "Изменённое тело требует новой возрастающей версии").WithParams(map[string]any{"schema": name, "version": version})
-	}
-	return nil
-}
-func refresh(ctx context.Context, q *store.Queries, project uuid.UUID, environment string) error {
+
+// Refresh replaces diagnostics only for unfinished ordinary Change Sets of this environment.
+func Refresh(ctx context.Context, q *store.Queries, project uuid.UUID, environment string) error {
 	rows, err := q.ManifestChangesets(ctx, store.ManifestChangesetsParams{ProjectID: project, Environment: environment})
 	if err != nil {
 		return err

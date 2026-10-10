@@ -52,7 +52,7 @@ func (q *Queries) CommitVersion(ctx context.Context, arg CommitVersionParams) er
 const createPublication = `-- name: CreatePublication :one
 INSERT INTO publications (id, project_id, environment_id, changeset_id, kind, source_publication_id, actor_id, reason)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, project_id, environment_id, changeset_id, kind, source_publication_id, actor_id, reason, created_at
+RETURNING id, project_id, environment_id, changeset_id, kind, source_publication_id, actor_id, reason, created_at, previous_manifest_id, current_manifest_id, manifest_changed
 `
 
 type CreatePublicationParams struct {
@@ -88,6 +88,9 @@ func (q *Queries) CreatePublication(ctx context.Context, arg CreatePublicationPa
 		&i.ActorID,
 		&i.Reason,
 		&i.CreatedAt,
+		&i.PreviousManifestID,
+		&i.CurrentManifestID,
+		&i.ManifestChanged,
 	)
 	return i, err
 }
@@ -147,7 +150,7 @@ func (q *Queries) GetEnvironmentByName(ctx context.Context, arg GetEnvironmentBy
 }
 
 const getPublication = `-- name: GetPublication :one
-SELECT p.id, p.project_id, p.environment_id, p.changeset_id, p.kind, p.source_publication_id, p.actor_id, p.reason, p.created_at, e.name AS environment_name
+SELECT p.id, p.project_id, p.environment_id, p.changeset_id, p.kind, p.source_publication_id, p.actor_id, p.reason, p.created_at, p.previous_manifest_id, p.current_manifest_id, p.manifest_changed, e.name AS environment_name
 FROM publications p JOIN environments e ON e.id = p.environment_id
 WHERE p.id = $1 AND p.project_id = $2
 `
@@ -167,6 +170,9 @@ type GetPublicationRow struct {
 	ActorID             uuid.UUID  `json:"actorId"`
 	Reason              *string    `json:"reason"`
 	CreatedAt           time.Time  `json:"createdAt"`
+	PreviousManifestID  *uuid.UUID `json:"previousManifestId"`
+	CurrentManifestID   *uuid.UUID `json:"currentManifestId"`
+	ManifestChanged     bool       `json:"manifestChanged"`
 	EnvironmentName     string     `json:"environmentName"`
 }
 
@@ -183,6 +189,9 @@ func (q *Queries) GetPublication(ctx context.Context, arg GetPublicationParams) 
 		&i.ActorID,
 		&i.Reason,
 		&i.CreatedAt,
+		&i.PreviousManifestID,
+		&i.CurrentManifestID,
+		&i.ManifestChanged,
 		&i.EnvironmentName,
 	)
 	return i, err
@@ -294,7 +303,7 @@ func (q *Queries) ListPublicationItems(ctx context.Context, publicationID uuid.U
 }
 
 const listPublications = `-- name: ListPublications :many
-SELECT p.id, p.project_id, p.environment_id, p.changeset_id, p.kind, p.source_publication_id, p.actor_id, p.reason, p.created_at, e.name AS environment_name
+SELECT p.id, p.project_id, p.environment_id, p.changeset_id, p.kind, p.source_publication_id, p.actor_id, p.reason, p.created_at, p.previous_manifest_id, p.current_manifest_id, p.manifest_changed, e.name AS environment_name
 FROM publications p JOIN environments e ON e.id = p.environment_id
 WHERE p.project_id = $1 AND ($2::text IS NULL OR e.name = $2)
 ORDER BY p.created_at DESC, p.id DESC
@@ -316,6 +325,9 @@ type ListPublicationsRow struct {
 	ActorID             uuid.UUID  `json:"actorId"`
 	Reason              *string    `json:"reason"`
 	CreatedAt           time.Time  `json:"createdAt"`
+	PreviousManifestID  *uuid.UUID `json:"previousManifestId"`
+	CurrentManifestID   *uuid.UUID `json:"currentManifestId"`
+	ManifestChanged     bool       `json:"manifestChanged"`
 	EnvironmentName     string     `json:"environmentName"`
 }
 
@@ -338,6 +350,9 @@ func (q *Queries) ListPublications(ctx context.Context, arg ListPublicationsPara
 			&i.ActorID,
 			&i.Reason,
 			&i.CreatedAt,
+			&i.PreviousManifestID,
+			&i.CurrentManifestID,
+			&i.ManifestChanged,
 			&i.EnvironmentName,
 		); err != nil {
 			return nil, err

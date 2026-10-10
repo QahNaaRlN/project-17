@@ -12,6 +12,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
@@ -225,10 +226,10 @@ func TestTransitiveManifestImpact(t *testing.T) {
 }
 
 // MF-027/PUB-004: schema candidate validation can bootstrap a NULL environment;
-// content cannot publish under that candidate until atomic activation is implemented.
+// content and its schema candidate activate together, preserving immutable environment binding.
 func TestCandidateBinding(t *testing.T) {
 	e := setup(t)
-	candidate := e.ActivateManifest("unused", []byte(contract))
+	candidate := e.ActivateManifest("unused", []byte(strings.TrimSuffix(contract, "}")+`,"schemas":{"Product":{"version":1,"fields":{"title":{"type":"text"}}}}}`))
 	cs := newCS(e)
 	id := create(e, cs, 0, "page", map[string]any{"type": "Native", "props": map[string]any{"title": "text"}})
 	e.Exec("UPDATE changesets SET kind='schema' WHERE id=$1", cs)
@@ -238,11 +239,20 @@ func TestCandidateBinding(t *testing.T) {
 	if r := validate(e, cs, id, "staging"); !r.Valid {
 		t.Fatal(r)
 	}
-	if r := submit(e, cs, 1, "staging"); r.Changeset.State != "approved" {
+	change, err := e.Q.GetChangeset(context.Background(), store.GetChangesetParams{ProjectID: e.Admin.ProjectID, ID: cs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schemaflow.Prepare(context.Background(), e.Q, e.Admin, change); err != nil {
+		t.Fatal(err)
+	}
+	if r := submit(e, cs, 2, "staging"); r.Changeset.State != "approved" {
 		t.Fatal(r)
 	}
-	if err := e.Do(e.Admin, "publish", map[string]any{"changesetId": cs, "environment": "staging"}, nil); cmstest.Code(err) != "SCHEMA_PUBLICATION_NOT_READY" {
-		t.Fatal(err)
+	publish(e, cs)
+	active, err := e.Q.GetEnvironmentByName(context.Background(), store.GetEnvironmentByNameParams{ProjectID: e.Admin.ProjectID, Name: "staging"})
+	if err != nil || active.ActiveManifestID == nil || *active.ActiveManifestID != candidate {
+		t.Fatal(active, err)
 	}
 	if _, err := validation.Load(context.Background(), e.Q, e.Admin.ProjectID, "production", &cs); cmstest.Code(err) != "MANIFEST_CANDIDATE_MISMATCH" {
 		t.Fatal(err)

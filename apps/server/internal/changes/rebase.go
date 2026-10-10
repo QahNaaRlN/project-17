@@ -83,7 +83,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 		if err != nil {
 			return res, err
 		}
-		list, err := q.ObjectOperations(ctx, store.ObjectOperationsParams{ChangesetID: cs.ID, TargetObjectID: objectID})
+		list, err := q.ObjectOperations(ctx, store.ObjectOperationsParams{ChangesetID: cs.ID, TargetObjectID: &objectID})
 		if err != nil {
 			return res, err
 		}

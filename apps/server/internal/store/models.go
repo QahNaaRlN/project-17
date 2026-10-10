@@ -181,24 +181,25 @@ type ObjectVersion struct {
 }
 
 type Operation struct {
-	ID             uuid.UUID  `json:"id"`
-	ProjectID      uuid.UUID  `json:"projectId"`
-	ChangesetID    uuid.UUID  `json:"changesetId"`
-	Seq            int32      `json:"seq"`
-	ActorID        uuid.UUID  `json:"actorId"`
-	OnBehalfOf     *uuid.UUID `json:"onBehalfOf"`
-	Source         string     `json:"source"`
-	TargetObjectID uuid.UUID  `json:"targetObjectId"`
-	Type           string     `json:"type"`
-	Payload        []byte     `json:"payload"`
-	Before         []byte     `json:"before"`
-	After          []byte     `json:"after"`
-	Inverse        []byte     `json:"inverse"`
-	Reason         *string    `json:"reason"`
-	ClientOpID     *string    `json:"clientOpId"`
-	UndoOf         *uuid.UUID `json:"undoOf"`
-	Status         string     `json:"status"`
-	CreatedAt      time.Time  `json:"createdAt"`
+	ID               uuid.UUID  `json:"id"`
+	ProjectID        uuid.UUID  `json:"projectId"`
+	ChangesetID      uuid.UUID  `json:"changesetId"`
+	Seq              int32      `json:"seq"`
+	ActorID          uuid.UUID  `json:"actorId"`
+	OnBehalfOf       *uuid.UUID `json:"onBehalfOf"`
+	Source           string     `json:"source"`
+	TargetObjectID   *uuid.UUID `json:"targetObjectId"`
+	Type             string     `json:"type"`
+	Payload          []byte     `json:"payload"`
+	Before           []byte     `json:"before"`
+	After            []byte     `json:"after"`
+	Inverse          []byte     `json:"inverse"`
+	Reason           *string    `json:"reason"`
+	ClientOpID       *string    `json:"clientOpId"`
+	UndoOf           *uuid.UUID `json:"undoOf"`
+	Status           string     `json:"status"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	TargetSchemaName *string    `json:"targetSchemaName"`
 }
 
 type PreviewSchemaSnapshot struct {
@@ -226,6 +227,9 @@ type Publication struct {
 	ActorID             uuid.UUID  `json:"actorId"`
 	Reason              *string    `json:"reason"`
 	CreatedAt           time.Time  `json:"createdAt"`
+	PreviousManifestID  *uuid.UUID `json:"previousManifestId"`
+	CurrentManifestID   *uuid.UUID `json:"currentManifestId"`
+	ManifestChanged     bool       `json:"manifestChanged"`
 }
 
 type PublicationItem struct {
@@ -259,6 +263,14 @@ type Route struct {
 	EnvironmentID uuid.UUID `json:"environmentId"`
 	Path          string    `json:"path"`
 	ObjectID      uuid.UUID `json:"objectId"`
+}
+
+type SchemaChangesetClaim struct {
+	ID              uuid.UUID `json:"id"`
+	ChangesetID     uuid.UUID `json:"changesetId"`
+	PreviousOwnerID uuid.UUID `json:"previousOwnerId"`
+	OwnerID         uuid.UUID `json:"ownerId"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 type SchemaVersion struct {

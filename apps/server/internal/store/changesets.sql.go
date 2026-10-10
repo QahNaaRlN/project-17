@@ -357,27 +357,28 @@ func (q *Queries) GetWorkingDocument(ctx context.Context, arg GetWorkingDocument
 
 const insertOperation = `-- name: InsertOperation :one
 INSERT INTO operations (id, project_id, changeset_id, seq, actor_id, source, target_object_id, type,
-                        payload, before, after, inverse, reason, client_op_id, undo_of)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at
+                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name
 `
 
 type InsertOperationParams struct {
-	ID             uuid.UUID  `json:"id"`
-	ProjectID      uuid.UUID  `json:"projectId"`
-	ChangesetID    uuid.UUID  `json:"changesetId"`
-	Seq            int32      `json:"seq"`
-	ActorID        uuid.UUID  `json:"actorId"`
-	Source         string     `json:"source"`
-	TargetObjectID uuid.UUID  `json:"targetObjectId"`
-	Type           string     `json:"type"`
-	Payload        []byte     `json:"payload"`
-	Before         []byte     `json:"before"`
-	After          []byte     `json:"after"`
-	Inverse        []byte     `json:"inverse"`
-	Reason         *string    `json:"reason"`
-	ClientOpID     *string    `json:"clientOpId"`
-	UndoOf         *uuid.UUID `json:"undoOf"`
+	ID               uuid.UUID  `json:"id"`
+	ProjectID        uuid.UUID  `json:"projectId"`
+	ChangesetID      uuid.UUID  `json:"changesetId"`
+	Seq              int32      `json:"seq"`
+	ActorID          uuid.UUID  `json:"actorId"`
+	Source           string     `json:"source"`
+	TargetObjectID   *uuid.UUID `json:"targetObjectId"`
+	Type             string     `json:"type"`
+	Payload          []byte     `json:"payload"`
+	Before           []byte     `json:"before"`
+	After            []byte     `json:"after"`
+	Inverse          []byte     `json:"inverse"`
+	Reason           *string    `json:"reason"`
+	ClientOpID       *string    `json:"clientOpId"`
+	UndoOf           *uuid.UUID `json:"undoOf"`
+	TargetSchemaName *string    `json:"targetSchemaName"`
 }
 
 func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams) (Operation, error) {
@@ -397,6 +398,7 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		arg.Reason,
 		arg.ClientOpID,
 		arg.UndoOf,
+		arg.TargetSchemaName,
 	)
 	var i Operation
 	err := row.Scan(
@@ -418,12 +420,13 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		&i.UndoOf,
 		&i.Status,
 		&i.CreatedAt,
+		&i.TargetSchemaName,
 	)
 	return i, err
 }
 
 const lastUndoableOperation = `-- name: LastUndoableOperation :one
-SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at FROM operations o
+SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at, o.target_schema_name FROM operations o
 WHERE o.changeset_id = $1 AND o.undo_of IS NULL AND o.status = 'applied'
   AND NOT EXISTS (SELECT 1 FROM operations u WHERE u.undo_of = o.id)
 ORDER BY o.seq DESC
@@ -453,6 +456,7 @@ func (q *Queries) LastUndoableOperation(ctx context.Context, changesetID uuid.UU
 		&i.UndoOf,
 		&i.Status,
 		&i.CreatedAt,
+		&i.TargetSchemaName,
 	)
 	return i, err
 }
@@ -547,7 +551,7 @@ func (q *Queries) ListChangesets(ctx context.Context, arg ListChangesetsParams) 
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
 `
 
 type ListOperationsParams struct {
@@ -583,6 +587,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 			&i.UndoOf,
 			&i.Status,
 			&i.CreatedAt,
+			&i.TargetSchemaName,
 		); err != nil {
 			return nil, err
 		}

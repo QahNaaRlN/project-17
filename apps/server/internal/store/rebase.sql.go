@@ -21,14 +21,14 @@ func (q *Queries) DeleteWorkingVersion(ctx context.Context, id uuid.UUID) error 
 }
 
 const objectOperations = `-- name: ObjectOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at FROM operations
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name FROM operations
 WHERE changeset_id = $1 AND target_object_id = $2 AND status <> 'dropped'
 ORDER BY seq
 `
 
 type ObjectOperationsParams struct {
-	ChangesetID    uuid.UUID `json:"changesetId"`
-	TargetObjectID uuid.UUID `json:"targetObjectId"`
+	ChangesetID    uuid.UUID  `json:"changesetId"`
+	TargetObjectID *uuid.UUID `json:"targetObjectId"`
 }
 
 // Операции Change Set над объектом в порядке seq (кроме исключённых при rebase).
@@ -60,6 +60,7 @@ func (q *Queries) ObjectOperations(ctx context.Context, arg ObjectOperationsPara
 			&i.UndoOf,
 			&i.Status,
 			&i.CreatedAt,
+			&i.TargetSchemaName,
 		); err != nil {
 			return nil, err
 		}

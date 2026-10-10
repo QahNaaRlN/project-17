@@ -19,6 +19,8 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/zonepolicy"
+	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -187,7 +189,7 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 	if err != nil {
 		return Review{}, err
 	}
-	if len(objects) == 0 {
+	if len(objects) == 0 && cs.Kind != "schema" {
 		// Операций нет или все исключены при rebase.
 		return Review{}, commandbus.NewError(http.StatusConflict, "CHANGESET_EMPTY", "Change Set пуст",
 			"Нечего отправлять на проверку: в Change Set нет изменённых объектов")
@@ -232,6 +234,14 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	if err != nil {
 		return evaluation{}, err
 	}
+	if cs.Kind == "schema" {
+		if err := schemaflow.RequireOwnerRight(ctx, q, cs); err != nil {
+			return evaluation{}, err
+		}
+		if err := schemaflow.Verify(ctx, q, projectID, changesetID); err != nil {
+			return evaluation{}, err
+		}
+	}
 	targets := cs.Targets
 	if len(requested) > 0 && len(requested[0]) > 0 {
 		targets = requested[0]
@@ -269,6 +279,12 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		return evaluation{}, err
 	}
 	hash = bindZoneHash(hash, requirements)
+	var checkDetails map[string]any
+	if err := json.Unmarshal(check.Details, &checkDetails); err != nil {
+		return evaluation{}, err
+	}
+	checkDetails["zoneRequirements"] = requirements
+	check.Details = mustJSON(checkDetails)
 	opActors, err := q.ChangesetOperationActors(ctx, changesetID)
 	if err != nil {
 		return evaluation{}, err
@@ -412,6 +428,9 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 			rights[oa.ActorID] = set
 		}
 		right, _ := changes.OperationRight(oa.Type)
+		if oa.Type == schemaflow.Apply && oa.Source == "import" {
+			right = auth.ManifestRegister
+		}
 		if !set.Has(right) {
 			violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(right)})
 		}
@@ -637,9 +656,25 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 	if cs.Risk != nil {
 		required = policy.Required(*cs.Risk)
 	}
-	req, err := validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
-	if err != nil {
-		return ReviewDetail{}, err
+	var req zonepolicy.Result
+	if cs.Kind == "schema" {
+		// Reading the approved/merged history must not validate its obsolete candidate base.
+		for _, check := range checks {
+			if check.Stage == "ir" {
+				var snapshot struct {
+					ZoneRequirements zonepolicy.Result `json:"zoneRequirements"`
+				}
+				if err := json.Unmarshal(check.Details, &snapshot); err != nil {
+					return ReviewDetail{}, err
+				}
+				req = snapshot.ZoneRequirements
+			}
+		}
+	} else {
+		req, err = validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
+		if err != nil {
+			return ReviewDetail{}, err
+		}
 	}
 	status, err := coverage(ctx, q, projectID, cs.ID, cs.ContentHash, req.Roles)
 	if err != nil {
@@ -650,4 +685,40 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 		Review:  Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: status.count, Checks: checks, RequiredRoles: req.Roles, MissingRequiredRoles: status.missing},
 		History: history,
 	}, nil
+}
+
+// RequireSchemaApprovals repeats all checks and current human authorization before activation.
+func RequireSchemaApprovals(ctx context.Context, q *store.Queries, cs store.Changeset) error {
+	ev, err := evaluate(ctx, q, cs.ProjectID, cs.ID)
+	if err != nil {
+		return err
+	}
+	if failed(ev.checks) {
+		return commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Схемный pipeline не пройден", "Повторите проверки и согласование")
+	}
+	if string(ev.hash) != string(cs.ContentHash) {
+		return commandbus.NewError(http.StatusConflict, "CHANGESET_CONTENT_CHANGED", "Содержимое согласования изменилось", "Повторно подайте Change Set")
+	}
+	actors, err := q.ValidApprovalActors(ctx, store.ValidApprovalActorsParams{ChangesetID: cs.ID, ContentHash: cs.ContentHash})
+	if err != nil {
+		return err
+	}
+	n := 0
+	for _, id := range actors {
+		caps, err := q.ActorCapabilities(ctx, store.ActorCapabilitiesParams{ProjectID: cs.ProjectID, ActorID: id})
+		if err != nil {
+			return err
+		}
+		if auth.EffectiveRights(caps, []string{auth.ScopeAll}).Has(auth.ContentPublish) {
+			n++
+		}
+	}
+	status, err := coverage(ctx, q, cs.ProjectID, cs.ID, cs.ContentHash, ev.roles)
+	if err != nil {
+		return err
+	}
+	if n < ev.required || len(status.missing) > 0 {
+		return commandbus.NewError(http.StatusConflict, "APPROVAL_ROLES_MISSING", "Нужны действующие согласования", "Согласующие должны сохранять content.publish")
+	}
+	return nil
 }
