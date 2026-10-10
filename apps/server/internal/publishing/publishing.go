@@ -53,6 +53,11 @@ func Register(bus *commandbus.Bus) {
 		Right:  auth.ContentPublish,
 		Handle: handleRollback,
 	})
+	commandbus.Register(bus, commandbus.Command[promotePayload, Publication]{
+		Name:   "promote",
+		Right:  auth.ContentPublish,
+		Handle: handlePromote,
+	})
 }
 
 type publishPayload struct {
@@ -245,7 +250,8 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 	if err != nil {
 		return Publication{}, err
 	}
-	resetHead := p.ResetHead == nil || *p.ResetHead
+	// Head сдвигает только publish; promote и rollback его не трогали — и их откат тоже.
+	resetHead := (p.ResetHead == nil || *p.ResetHead) && src.Kind == "publish"
 	out := make([]Item, 0, len(items))
 	for _, it := range items {
 		back := Item{ObjectID: it.ObjectID, PreviousVersionID: it.CurrentVersionID, CurrentVersionID: it.PreviousVersionID}
