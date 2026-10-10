@@ -78,37 +78,32 @@ func handleRebase(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rebasePayl
 	}
 	submitted := cs.State != "open"
 	nothing := len(res.Rebased) == 0 && len(res.Removed) == 0 && len(res.Conflicts) == 0
+	cs.HasConflicts = len(res.Conflicts) > 0
+	out := RebaseOutcome{RebaseResult: res}
 
-	switch {
-	case len(res.Conflicts) > 0:
-		cs.HasConflicts = true
+	if cs.HasConflicts {
 		if submitted {
 			if err := reopen(ctx, q, &cs); err != nil {
 				return RebaseOutcome{}, err
 			}
 		}
-	case nothing || !submitted:
-		cs.HasConflicts = false
-	default:
-		cs.HasConflicts = false
+	} else if submitted && !nothing {
 		objects, err := q.ListChangesetObjects(ctx, cs.ID)
 		if err != nil {
 			return RebaseOutcome{}, err
 		}
 		if len(objects) == 0 {
 			// Все операции исключены — подавать нечего, Change Set возвращается в работу.
-			if err := reopen(ctx, q, &cs); err != nil {
-				return RebaseOutcome{}, err
-			}
-			break
+			err = reopen(ctx, q, &cs)
+		} else {
+			out.Checks, err = reevaluate(ctx, q, actor.ProjectID, &cs)
 		}
-		checks, err := reevaluate(ctx, q, actor.ProjectID, &cs)
 		if err != nil {
 			return RebaseOutcome{}, err
 		}
-		return RebaseOutcome{RebaseResult: res, Changeset: changes.ToChangeset(cs), Checks: checks}, nil
 	}
-	return RebaseOutcome{RebaseResult: res, Changeset: changes.ToChangeset(cs)}, nil
+	out.Changeset = changes.ToChangeset(cs)
+	return out, nil
 }
 
 // reopen возвращает поданный Change Set в работу со сбросом согласований.
@@ -142,14 +137,13 @@ func reevaluate(ctx context.Context, q *store.Queries, projectID uuid.UUID, cs *
 		return nil, err
 	}
 	state := cs.State
-	switch {
-	case failed(ev.checks):
+	if failed(ev.checks) {
 		state = "failed"
-	case state == "changes_requested":
-	case int(count) >= ev.required:
-		state = "approved"
-	default:
+	} else if state != "changes_requested" {
 		state = "in_review"
+		if int(count) >= ev.required {
+			state = "approved"
+		}
 	}
 	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: cs.Targets}); err != nil {
 		return nil, err

@@ -395,10 +395,9 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 	if err != nil {
 		return Review{}, err
 	}
-	switch {
-	case decision == "request_changes":
+	if decision == "request_changes" {
 		cs.State = "changes_requested"
-	case int(count) >= required:
+	} else if int(count) >= required {
 		cs.State = "approved"
 	}
 	if err := q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: cs.State}); err != nil {

@@ -109,8 +109,9 @@ func TestRouteErrors(t *testing.T) {
 			}
 		})
 	}
-	// Корень и собственный маршрут объекта допустимы.
-	if _, err := e.apply(cs.ID, 1, setRoute(doc, "/"), setRoute(headDoc, "/products/:id")); err != nil {
+	// Корень, собственный маршрут объекта и маршрут предельной длины допустимы.
+	longest := "/" + strings.Repeat("a", changes.MaxPathLength-1)
+	if _, err := e.apply(cs.ID, 1, setRoute(doc, longest), setRoute(doc, "/"), setRoute(headDoc, "/products/:id")); err != nil {
 		t.Errorf("%v", err)
 	}
 }
@@ -149,6 +150,15 @@ func TestRebaseRoutes(t *testing.T) {
 		if p := e.path(doc, cs.ID); p == nil || *p != want {
 			t.Errorf("%s: %v, ожидался %s", doc, p, want)
 		}
+	}
+	// На новой базе маршрут снят, а операция рассчитывала на прежний — конфликт.
+	cs3 := e.createCS("d")
+	if _, err := e.apply(cs3.ID, 0, setRoute(same, "/elsewhere")); err != nil {
+		t.Fatal(err)
+	}
+	e.moveHead(same, base)
+	if res := e.rebase(cs3.ID, nil); len(res.Conflicts) != 1 || res.Conflicts[0].Current.(map[string]any)["path"] != nil {
+		t.Errorf("маршрут снят на базе: %+v", res)
 	}
 	// theirs исключает смену маршрута: остаётся маршрут новой базы.
 	cs2 := e.createCS("c")
