@@ -279,7 +279,8 @@ CREATE TABLE operations (
   actor_id         uuid NOT NULL REFERENCES actors(id),
   on_behalf_of     uuid REFERENCES actors(id),
   source           text NOT NULL CHECK (source IN ('studio', 'api', 'agent', 'migration', 'import')),
-  target_object_id uuid NOT NULL REFERENCES objects(id),
+  target_object_id uuid REFERENCES objects(id),
+  target_schema_name text,                                  -- только schema.apply; схема из связанного кандидата
   type             text NOT NULL,
   payload          jsonb NOT NULL,
   before           jsonb,
@@ -292,9 +293,16 @@ CREATE TABLE operations (
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (changeset_id, seq),
-  UNIQUE (changeset_id, actor_id, client_op_id)
+  UNIQUE (changeset_id, actor_id, client_op_id),
+  CHECK (
+    (type = 'schema.apply' AND target_object_id IS NULL AND target_schema_name IS NOT NULL
+      AND length(target_schema_name) > 0)
+    OR (type <> 'schema.apply' AND target_object_id IS NOT NULL AND target_schema_name IS NULL)
+  )
 );
 CREATE INDEX operations_by_target ON operations (target_object_id, created_at);
+CREATE INDEX operations_by_schema ON operations (project_id, target_schema_name, created_at)
+  WHERE target_schema_name IS NOT NULL;
 CREATE INDEX operations_created_brin ON operations USING brin (created_at);
 
 -- Проверки и согласования ------------------------------------------------
@@ -333,6 +341,9 @@ CREATE TABLE publications (
   changeset_id           uuid REFERENCES changesets(id),
   kind                   text NOT NULL CHECK (kind IN ('publish', 'promote', 'rollback', 'unpublish')),
   source_publication_id  uuid REFERENCES publications(id),   -- для promote и rollback
+  previous_manifest_id  uuid REFERENCES manifests(id),       -- NULL: первая активация или без смены manifest
+  current_manifest_id   uuid REFERENCES manifests(id),       -- NULL: откат первой активации или без смены manifest
+  -- Оба NULL у публикаций без смены manifest; различающиеся указатели — активация/откат (PUB-033).
   actor_id               uuid NOT NULL REFERENCES actors(id),
   reason                 text,                                -- причина из конверта команды (API-011)
   created_at             timestamptz NOT NULL DEFAULT now()
