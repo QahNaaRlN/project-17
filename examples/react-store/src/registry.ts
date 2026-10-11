@@ -16,7 +16,7 @@ const product = {
     asset: { type: "asset", assetKind: "image" },
   },
 } as const;
-// satisfies keeps literal inference while checking the existing manifest schema types.
+// Literal descriptors retain their types for defineReactComponent inference.
 const products = { type: "list", required: true, max: 64, of: product } as const;
 const fields = {
   brand: string,
