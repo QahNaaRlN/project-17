@@ -145,6 +145,12 @@ func TestCNT043TamperingNeverReachesProxy(t *testing.T) {
 		_, e := f.s.Fetch(context.Background(), parse(t, raw))
 		expect(t, e, "ASSET_URL_INVALID")
 	}
+	uAlias := parse(t, original)
+	parts := strings.Split(uAlias.RawQuery, "&")
+	parts[0], parts[1] = parts[1], parts[0]
+	uAlias.RawQuery = strings.Join(parts, "&")
+	_, aliasErr := f.s.Fetch(context.Background(), uAlias)
+	expect(t, aliasErr, "ASSET_URL_INVALID")
 	u := parse(t, original)
 	u.Path = strings.Replace(u.Path, "staging", "production", 1)
 	_, e := f.s.Fetch(context.Background(), u)

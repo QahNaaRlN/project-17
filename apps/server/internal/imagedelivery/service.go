@@ -197,7 +197,7 @@ func (s *Service) Fetch(ctx context.Context, u *url.URL) (Image, error) {
 		return Image{}, denied()
 	}
 	keys := []string{"project", "pid", "eid", "v", "rev", "scope", "pk", "exp", "w", "h", "fit", "fmt", "sig"}
-	if len(q) != len(keys) {
+	if len(q) != len(keys) || u.RawQuery != q.Encode() {
 		return Image{}, denied()
 	}
 	for _, k := range keys {
