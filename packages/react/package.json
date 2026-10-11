@@ -1,0 +1,43 @@
+{
+  "name": "@cms/react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "React adapter for prepared CMS IR plans",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage",
+    "test:mutation": "stryker run"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "dependencies": {
+    "@cms/core": "workspace:*",
+    "@cms/ir": "workspace:*",
+    "@cms/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@vitest/coverage-v8": "4.1.11"
+  }
+}

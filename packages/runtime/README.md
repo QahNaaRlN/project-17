@@ -1,7 +1,11 @@
 # @cms/runtime
 
-Первый framework-neutral примитив runtime — `Image` (CNT-052, SDK-001).
-Пакет не содержит renderer дерева, React адаптер или preview bridge.
+Framework-neutral runtime содержит `Image` (CNT-052, SDK-001) и `preparePage`:
+привязки/условия, Repeat, live Composed/Slot и первый набор атомарных стилей.
+`preparePage(document, {scope, components, natives, tokens, breakpoints})` возвращает
+сериализуемый план `{roots, css, diagnostics}`. React-адаптер находится в `@cms/react`.
+Полные границы и оставшиеся зависимости: [IR/React renderer](../../docs/react-ir-renderer.md).
+Preview bridge, actions, pinned Composed и остальные дизайн-свойства ещё не реализованы.
 
 Получите image model через аутентифицированный
 `GET /delivery/v1/{project}/{env}/asset/{id}/image?fmt=webp&fit=cover&w=640&h=480`.
@@ -34,8 +38,8 @@ const element = Image(model, {
 истёкшую модель, неверные варианты/ширины/точку фокуса. Он не проверяет HMAC —
 это делает gateway перед выдачей байтов.
 
-Проверки: Vitest и property tests, пороги нового пакета 90/80/90/90;
-Stryker — минимум 70%. Выжившие мутанты разбираются по контракту: четыре
+Проверки: Vitest и property tests, пороги пакета 90/80/90/90;
+Stryker — минимум 70%. Исторический разбор Image: четыре
 проверки типа эквивалентны другим проверкам внутри `Width = number | vw`;
 два мутанта меняют только текст ошибки; удаление отдельной проверки пустых
 variants всё равно отклоняет вход до возврата модели. Контракт не фиксирует
