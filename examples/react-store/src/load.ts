@@ -1,5 +1,5 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
-import { Image, preparePageWithData } from "@cms/runtime";
+import { Image, preparePage, loadSources, documentHash } from "@cms/runtime";
 import { registry } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
@@ -8,6 +8,7 @@ export async function loadStore(
   cms: CmsClient,
   path: string,
   options: ReadOptions = {},
+  bridge?: { studioOrigin: string; manifestHash: string },
 ): Promise<StoreModel> {
   const preview = !!options.preview;
   try {
@@ -15,14 +16,41 @@ export async function loadStore(
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {} };
-    model.plan = await preparePageWithData(storeComposition(page.document, catalog), {
+    const scope = { context: { locale: "ru", store: catalog } };
+    const composition = storeComposition(page.document, catalog);
+    const data = await loadSources(composition.dataSources ?? {}, registry.dataSources, scope, {
+      app: { catalog },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    model.plan = preparePage(composition, {
       natives: definitionsFor(catalog),
-      scope: { context: { locale: "ru", store: catalog } },
+      scope: { ...scope, data },
       breakpoints: registry.breakpoints,
       actions: registry.actions,
-      sources: registry.dataSources,
-      sourceOptions: { app: { catalog }, ...(options.signal ? { signal: options.signal } : {}) },
     });
+    if (preview) {
+      model.plan.preview = true;
+      model.plan.interactionMode = "design";
+    }
+    if (preview && bridge) {
+      const root = page.document.nodes[page.document.root]!;
+      const document = {
+        ...page.document,
+        nodes: {
+          ...page.document.nodes,
+          [page.document.root]: { ...root, props: { ...root.props, config: { base: catalog } } },
+        },
+      };
+      model.bridge = {
+        ...bridge,
+        documentId: page.page.objectId,
+        path,
+        document,
+        hash: await documentHash(document),
+        data,
+        ...(options.preview?.changesetId ? { changesetId: options.preview.changesetId } : {}),
+      };
+    }
     if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
     const refs = [
       ...(catalog.heroAsset

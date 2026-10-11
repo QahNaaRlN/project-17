@@ -11,6 +11,10 @@
 | Генерация ID узлов | `generateNodeId`, `isNodeId` |
 | Conformance-фикстуры для всех реализаций | [`fixtures/`](fixtures/) |
 
+Schema validator генерируется вместе с типами как standalone AJV-код из той же
+схемы. Runtime не компилирует схему через Function и работает со строгим CSP без
+unsafe-eval. Generated validator проверяется теми же conformance-фикстурами и CI gen.
+
 ## Использование
 
 ```ts

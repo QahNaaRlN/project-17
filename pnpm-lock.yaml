@@ -251,6 +251,12 @@ importers:
         specifier: workspace:*
         version: link:../runtime
     devDependencies:
+      '@types/jsdom':
+        specifier: 21.1.7
+        version: 21.1.7
+      jsdom:
+        specifier: 26.1.0
+        version: 26.1.0
       react:
         specifier: 19.2.5
         version: 19.2.5

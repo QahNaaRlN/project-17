@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StoreApp } from "./app.js";
 import { serializeModel, type StoreModel } from "./model.js";
+import { previewFrameAncestors } from "@cms/react/server";
 
 export interface Assets {
   scripts: string[];
@@ -17,10 +18,11 @@ export function documentHtml(model: StoreModel, assets: Assets): string {
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><title>Тихая форма · Project 17</title>${tags}</head><body><div id="root">${renderToString(createElement(StoreApp, { initialModel: model }))}</div><script id="store-model" type="application/json">${serializeModel(model)}</script></body></html>`;
 }
 export function storeHandler(
-  load: () => Promise<StoreModel>,
+  load: (request: IncomingMessage) => Promise<StoreModel>,
   assets: () => Promise<Assets>,
   transform: (html: string) => Promise<string> = async (html) => html,
   deployedHash?: string,
+  preview?: { studioOrigin?: string; policy: string },
 ) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -47,7 +49,12 @@ export function storeHandler(
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     try {
-      const model = await load();
+      const model = await load(req);
+      if (preview)
+        res.setHeader(
+          "Content-Security-Policy",
+          `${preview.policy}; frame-ancestors ${previewFrameAncestors(preview.studioOrigin, model.preview && model.status === "ready")}`,
+        );
       res.statusCode = model.status === "error" ? 503 : model.status === "missing" ? 404 : 200;
       res.setHeader(
         "Content-Type",

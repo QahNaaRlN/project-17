@@ -12,6 +12,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./preview": {
+      "types": "./dist/preview.d.ts",
+      "default": "./dist/preview.js"
     }
   },
   "files": [
@@ -33,6 +37,8 @@
     "@cms/component-registry": "workspace:*"
   },
   "devDependencies": {
+    "jsdom": "26.1.0",
+    "@types/jsdom": "21.1.7",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "@types/react": "19.2.2",

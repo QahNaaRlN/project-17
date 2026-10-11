@@ -15,6 +15,7 @@ export interface NativeProps<V = Record<string, unknown>> {
   instanceId: string;
   className: string;
   events?: Record<string, () => Promise<boolean>>;
+  previewAttributes?: { "data-cms-node": string; "data-cms-instance"?: string };
 }
 export type NativeRegistry = Record<string, ComponentType<NativeProps>>;
 export interface CmsPageProps {
@@ -25,6 +26,7 @@ export interface CmsPageProps {
   services?: Omit<ActionContext, "app" | "node" | "instance">;
   mode?: "design" | "interact";
   onActionError?: (error: ActionError) => void;
+  preview?: boolean;
 }
 
 /** Render only plans prepared on a trusted server. Native code is application-owned. */
@@ -36,11 +38,23 @@ export function CmsPage({
   services = {},
   mode = plan.interactionMode ?? "interact",
   onActionError,
+  preview = plan.preview ?? false,
 }: CmsPageProps): ReactNode {
   function render(node: PlanNode): ReactNode {
     const props = node.props;
     const children = node.children.map(render);
-    const common = { key: node.key, id: node.key, className: node.className || undefined };
+    const previewAttributes = preview
+      ? {
+          "data-cms-node": node.id,
+          ...(node.key === node.id ? {} : { "data-cms-instance": node.key }),
+        }
+      : undefined;
+    const common = {
+      key: node.key,
+      id: node.key,
+      className: node.className || undefined,
+      ...previewAttributes,
+    };
     const events = node.events
       ? Object.fromEntries(
           Object.entries(node.events).map(([event, chain]) => [
@@ -144,6 +158,7 @@ export function CmsPage({
               instanceId: node.key,
               className: node.className,
               ...(events ? { events } : {}),
+              ...(previewAttributes ? { previewAttributes } : {}),
             })
           : null;
       }

@@ -9,11 +9,26 @@ import { storeDocument } from "../src/composition.js";
 // Deterministic CMS boundary for CI; the real SDK, HTTP server, SSR and browser run unchanged.
 const id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11";
 const key = "server-only-e2e-delivery-key";
+const previewToken =
+  "header." +
+  Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 900, cs: id })).toString(
+    "base64url",
+  ) +
+  ".fixture";
 let mode = "ready";
 let title = catalog.title;
 let release: (() => void)[] = [];
 const fixture = createServer(async (req, res) => {
   const path = new URL(req.url ?? "/", "http://127.0.0.1:18084").pathname;
+  if (path === "/studio" || path === "/rogue") {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(
+      path === "/rogue"
+        ? "<!doctype html><p>other window</p>"
+        : `<!doctype html><html><body><script>window.previewMessages=[]; addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:18083' && event.source===document.getElementById('preview')?.contentWindow) previewMessages.push(event.data);});</script><iframe id="preview" title="CMS preview" style="width:1024px;height:900px" src="http://127.0.0.1:18083/api/cms/preview?token=${previewToken}&path=/"></iframe><iframe id="rogue" title="Other window" src="/rogue"></iframe></body></html>`,
+    );
+    return;
+  }
   if (path === "/control" && req.method === "POST") {
     let body = "";
     for await (const chunk of req) body += String(chunk);
@@ -38,7 +53,10 @@ const fixture = createServer(async (req, res) => {
   }
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
-  if (req.headers.authorization !== `Bearer ${key}`) {
+  if (
+    req.headers.authorization !== `Bearer ${key}` &&
+    req.headers.authorization !== `Preview ${previewToken}`
+  ) {
     res.writeHead(401);
     res.end(JSON.stringify({ code: "UNAUTHORIZED" }));
     return;
@@ -47,6 +65,10 @@ const fixture = createServer(async (req, res) => {
   if (mode === "error" || mode === "missing") {
     res.writeHead(mode === "error" ? 503 : 404);
     res.end(JSON.stringify({ code: mode === "error" ? "INTERNAL_ERROR" : "NOT_FOUND" }));
+    return;
+  }
+  if (path.endsWith("/routes")) {
+    res.end(JSON.stringify({ items: [] }));
     return;
   }
   if (path.endsWith("/image")) {
@@ -115,7 +137,14 @@ await writeFile(
   { mode: 0o600 },
 );
 const child = spawn(process.execPath, ["dist/server/server.js"], {
-  env: { ...process.env, PORT: "18083", NODE_ENV: "production", CMS_STORE_CONFIG_FILE: config },
+  env: {
+    ...process.env,
+    PORT: "18083",
+    NODE_ENV: "production",
+    CMS_STORE_CONFIG_FILE: config,
+    CMS_STUDIO_ORIGIN: "http://127.0.0.1:18084",
+    CMS_APP_ORIGIN: "http://127.0.0.1:18083",
+  },
   stdio: "inherit",
 });
 child.on("exit", (code) => {

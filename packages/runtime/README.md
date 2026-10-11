@@ -9,7 +9,9 @@ Framework-neutral runtime содержит `Image` (CNT-052, SDK-001) и `prepar
 `loadSource`, `appendPage` поддерживают проверку результатов и пагинацию.
 `executeActions` проверяет аргументы и последовательно исполняет события.
 [Контракт действий и данных](../../docs/runtime-actions-data.md) описывает API,
-ошибки, таймаут, лимиты и границы кэширования. Preview bridge, pinned Composed
+ошибки, таймаут, лимиты и границы кэширования. `applyDocumentPatch` и `documentHash`
+обеспечивают атомарный JSON Patch/L1 и hash для [preview bridge](../../docs/preview-bridge.md).
+Pinned Composed
 и остальные дизайн-свойства ещё не реализованы.
 
 Получите image model через аутентифицированный

@@ -46,8 +46,10 @@ it("DS-030: native components apply generated classes, including the root wrappe
   });
   expect(plan.diagnostics).toEqual([]);
   const html = renderToString(createElement(StoreApp, { initialModel: { ...initial, plan } }));
-  expect(html).toMatch(/<div id="n_store" class="c-[0-9a-f]+">/);
-  expect(html).toMatch(/<article class="product-card c-[0-9a-f]+">/);
+  expect(html).toMatch(/<div id="n_store" class="c-[0-9a-f]+" data-cms-node="n_store">/);
+  expect(html).toMatch(
+    /<article class="product-card c-[0-9a-f]+" data-cms-node="n_product" data-cms-instance="[^"]+">/,
+  );
 });
 
 it("SDK-013/STORE-007: drops unused root config and private metadata from browser model", async () => {

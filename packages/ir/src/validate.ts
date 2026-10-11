@@ -1,7 +1,7 @@
-import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import type { ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
 import localizeRuModule from "ajv-i18n/localize/ru/index.js";
 import { DiagnosticCode, nodeIdFromPointer, pointer, type Diagnostic } from "./diagnostics.js";
-import { irSchema } from "./generated/schema.js";
+import standaloneValidator from "./generated/validator.js";
 import type { IrDocument, Predicate } from "./generated/types.js";
 import { IR_LIMITS, SUPPORTED_IR_VERSIONS } from "./limits.js";
 
@@ -14,18 +14,8 @@ export interface ValidationResult {
 const localizeRu = ((localizeRuModule as unknown as { default?: unknown }).default ??
   localizeRuModule) as (errors?: ErrorObject[] | null) => void;
 
-let compiled: ValidateFunction | undefined;
-
 function schemaValidator(): ValidateFunction {
-  // Компилируем лениво: схема нужна не всем потребителям пакета.
-  compiled ??= new Ajv2020({
-    allErrors: true,
-    strict: true,
-    strictTypes: false,
-    strictRequired: false,
-    discriminator: true,
-  }).compile(irSchema);
-  return compiled;
+  return standaloneValidator as ValidateFunction;
 }
 
 /**

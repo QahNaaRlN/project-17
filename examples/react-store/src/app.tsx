@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Menu, RefreshCw, X } from "lucide-react";
 import type { StoreModel } from "./model.js";
 import { CmsPage } from "@cms/react";
 import { StoreRenderContext } from "./sections.js";
 import { storeRegistry, registry } from "./registry.js";
+import { attachPreviewBridge } from "@cms/react/preview";
+import { preparePage } from "@cms/runtime";
+import { parseCatalog } from "./model.js";
+import { definitionsFor, storeComposition } from "./composition.js";
 export { CatalogImage, ProductCard } from "./cards.js";
 import { Button } from "./ui/button.js";
 
@@ -19,7 +24,83 @@ export function StoreApp({ initialModel }: AppProps) {
   const [actionNotice, setActionNotice] = useState("");
   const request = useRef<AbortController | null>(null);
   const alive = useRef(true);
+  const latest = useRef(model);
+  const previewBridge = useRef<Awaited<ReturnType<typeof attachPreviewBridge>> | undefined>(
+    undefined,
+  );
+  latest.current = model;
+  useEffect(() => {
+    const initial = latest.current.bridge;
+    const root = document.getElementById("home");
+    if (!initial || !root) return;
+    let stopped = false,
+      bridge: Awaited<ReturnType<typeof attachPreviewBridge>> | undefined,
+      fresh: StoreModel | undefined;
+    setInteract(false);
+    void attachPreviewBridge({
+      root,
+      studioOrigin: initial.studioOrigin,
+      initial,
+      manifestHash: initial.manifestHash,
+      ...(initial.changesetId ? { changesetId: initial.changesetId } : {}),
+      onMode: (mode) => {
+        if (!stopped) setInteract(mode === "interact");
+      },
+      reload: async (signal) => {
+        const response = await fetch("/api/store", { signal, cache: "no-store" });
+        if (!response.ok) throw new Error("STORE_PREVIEW_UNAVAILABLE");
+        const next = (await response.json()) as StoreModel;
+        if (!next.bridge || !next.preview || stopped) throw new Error("STORE_PREVIEW_UNAVAILABLE");
+        fresh = next;
+        return next.bridge;
+      },
+      render: async (snapshot) => {
+        const current = fresh ?? latest.current;
+        fresh = undefined;
+        const catalog = parseCatalog({ document: snapshot.document } as Parameters<
+          typeof parseCatalog
+        >[0]);
+        const plan = preparePage(storeComposition(snapshot.document, catalog), {
+          natives: definitionsFor(catalog),
+          actions: registry.actions,
+          breakpoints: registry.breakpoints,
+          scope: { context: { locale: "ru", store: catalog }, data: current.bridge!.data },
+        });
+        bridge?.controller.notify("diagnostics", { items: plan.diagnostics });
+        if (plan.diagnostics.length) throw new Error("STORE_PREVIEW_INVALID");
+        plan.preview = true;
+        plan.interactionMode = "design";
+        if (!stopped) {
+          const next = { ...current, catalog, plan, bridge: { ...current.bridge!, ...snapshot } };
+          latest.current = next;
+          flushSync(() => setModel(next));
+        }
+      },
+      navigate: (path) => {
+        window.location.assign(path);
+      },
+    })
+      .then((value) => {
+        if (stopped) value.dispose();
+        else {
+          bridge = value;
+          previewBridge.current = value;
+        }
+      })
+      .catch(() => {
+        if (!stopped) setActionNotice("Предпросмотр недоступен. Обновите страницу.");
+      });
+    return () => {
+      stopped = true;
+      bridge?.dispose();
+      if (previewBridge.current === bridge) previewBridge.current = undefined;
+    };
+  }, [model.bridge?.studioOrigin, model.bridge?.documentId, model.bridge?.changesetId]);
   async function refresh(showLoading = true) {
+    if (previewBridge.current) {
+      await previewBridge.current.controller.refresh();
+      return;
+    }
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -61,7 +142,7 @@ export function StoreApp({ initialModel }: AppProps) {
         <span>Project 17 / Демонстрационная витрина</span>
         <div>
           <span className="mode-label">{model.preview ? "Черновик" : "Опубликовано"}</span>
-          {model.preview && (
+          {model.preview && !model.bridge && (
             <Button
               className="button-ghost interaction-button"
               aria-pressed={interact}
@@ -134,6 +215,7 @@ export function StoreApp({ initialModel }: AppProps) {
                 plan={model.plan}
                 registry={storeRegistry}
                 actions={registry.actions}
+                preview={model.preview}
                 mode={interact ? "interact" : "design"}
                 app={{
                   favorite(id: string, title: string) {

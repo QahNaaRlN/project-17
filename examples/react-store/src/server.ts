@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createCmsClient, type ClientOptions, type ReadOptions } from "@cms/core";
 import { loadStore } from "./load.js";
 import { storeHandler, type Assets } from "./http.js";
+import { createPreviewHandler, getPreviewState } from "@cms/react/server";
 
 const production = process.env.NODE_ENV === "production";
 const root = production
@@ -24,6 +25,14 @@ const cms = createCmsClient({ ...config, cache: false });
 if (typeof config.path !== "string" || !config.path.startsWith("/"))
   throw new Error("Invalid CMS page path");
 const options: ReadOptions = config.preview ? { preview: config.preview } : {};
+const port = Number(process.env.PORT ?? 18082);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid PORT");
+const studioOrigin = process.env.CMS_STUDIO_ORIGIN;
+const appOrigin = process.env.CMS_APP_ORIGIN ?? `http://127.0.0.1:${port}`;
+const enterPreview = studioOrigin
+  ? createPreviewHandler({ cms, appOrigin, studioOrigin })
+  : undefined;
+const policy = `default-src 'self'; script-src 'self'${production ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' http: https:; connect-src 'self'${production ? "" : " ws://127.0.0.1:*"}; object-src 'none'; base-uri 'none'`;
 const vite = production
   ? undefined
   : await (
@@ -43,16 +52,41 @@ async function assets(): Promise<Assets> {
   return { scripts: [`/${entry.file}`], styles: (entry.css ?? []).map((file) => `/${file}`) };
 }
 const handler = storeHandler(
-  () => loadStore(cms, config.path, options),
+  (request) => {
+    const preview = getPreviewState(request.headers.cookie);
+    return loadStore(
+      cms,
+      config.path,
+      preview ? { preview } : options,
+      studioOrigin ? { studioOrigin, manifestHash: deployedHash } : undefined,
+    );
+  },
   assets,
   async (html) => (vite ? vite.transformIndexHtml("/", html) : html),
   deployedHash,
+  { policy, ...(studioOrigin ? { studioOrigin } : {}) },
 );
 const server = createServer((req, res) => {
-  res.setHeader(
-    "Content-Security-Policy",
-    `default-src 'self'; script-src 'self'${production ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' http: https:; connect-src 'self'${production ? "" : " ws://127.0.0.1:*"}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
-  );
+  res.setHeader("Content-Security-Policy", `${policy}; frame-ancestors 'none'`);
+  if (req.url?.split("?")[0] === "/api/cms/preview" && enterPreview) {
+    const controller = new AbortController();
+    req.once("aborted", () => controller.abort());
+    void enterPreview(
+      new Request(new URL(req.url, appOrigin), {
+        method: req.method ?? "GET",
+        signal: controller.signal,
+      }),
+    )
+      .then(async (response) => {
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        res.end(await response.text());
+      })
+      .catch(() => {
+        res.writeHead(503, { "Cache-Control": "no-store" });
+        res.end();
+      });
+    return;
+  }
   if (production && req.url === "/favicon.svg") {
     void readFile(resolve(root, "dist/client/favicon.svg"))
       .then((data) => {
@@ -96,8 +130,6 @@ const server = createServer((req, res) => {
     });
   else void handler(req, res);
 });
-const port = Number(process.env.PORT ?? 18082);
-if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid PORT");
 server.listen(port, "127.0.0.1", () => {
   console.log(`Project 17 storefront: http://127.0.0.1:${port}`);
 });

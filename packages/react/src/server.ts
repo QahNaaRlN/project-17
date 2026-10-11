@@ -2,6 +2,8 @@ import type { CmsClient, ReadOptions } from "@cms/core";
 import type { IrDocument } from "@cms/ir";
 import { preparePageWithData, type DataPlanOptions, type RenderPlan } from "@cms/runtime";
 import { nativeDefinitions, type Registry } from "@cms/component-registry";
+export { createPreviewHandler, getPreviewState, previewFrameAncestors } from "./preview-server.js";
+export type { PreviewHandlerOptions } from "./preview-server.js";
 export interface LoadPageOptions extends DataPlanOptions {
   read?: ReadOptions;
   registry?: Registry;
@@ -68,6 +70,9 @@ export async function loadPage(
       ...(options.read?.signal ? { signal: options.read.signal } : {}),
     },
   });
-  if (options.read?.preview) plan.interactionMode = options.mode ?? "design";
+  if (options.read?.preview) {
+    plan.interactionMode = options.mode ?? "design";
+    plan.preview = true;
+  }
   return plan;
 }

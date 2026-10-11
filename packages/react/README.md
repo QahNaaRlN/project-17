@@ -55,3 +55,20 @@ and `onActionError`. Native props include `events`, whose functions return a pro
 of success. Preview plans default to `interactionMode: "design"`; the host can choose
 `mode: "interact"`. Initial sources are not refetched during hydration.
 See [actions and data](../../docs/runtime-actions-data.md) for validation and pagination.
+
+## Application preview bridge
+
+`@cms/react/server` exports `createPreviewHandler`, `getPreviewState` and
+`previewFrameAncestors`. Mount the handler at `/api/cms/preview`; it verifies the
+token through Delivery API, installs a secure HttpOnly partitioned cookie and
+redirects to a local path. Read the cookie only on the server, and pass that preview
+to every CMS read. Permit the configured Studio origin in frame-ancestors only
+after a successful preview read. Never serialize the token to the browser.
+
+`@cms/react/preview` exports `attachPreviewBridge`. Supply the public IR snapshot
+and hash, the configured Studio origin, authenticated `reload` and application
+`render` callbacks. Resolve `render` only after the DOM commit. The bridge checks
+both message origin and parent Window, defaults to design, applies atomic patches,
+falls back to reload on hash/IR mismatch and emits geometry for Studio overlays.
+Native components spread `previewAttributes` on their outer element.
+See [the protocol and implemented scope](../../docs/preview-bridge.md).

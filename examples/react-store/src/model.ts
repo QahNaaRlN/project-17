@@ -1,6 +1,7 @@
 import type { PageResponse } from "@cms/core";
 import type { Image } from "@cms/runtime";
 import type { RenderPlan } from "@cms/runtime";
+import type { PreviewSnapshot } from "@cms/react/preview";
 
 export interface AssetRef {
   assetId: string;
@@ -35,6 +36,12 @@ export interface StoreModel {
   images: Record<string, ImageProps | null>;
   refreshAt?: number;
   plan?: RenderPlan;
+  bridge?: PreviewSnapshot & {
+    studioOrigin: string;
+    manifestHash: string;
+    data: Record<string, unknown>;
+    changesetId?: string;
+  };
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
