@@ -1,5 +1,6 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
 import { Image, preparePage } from "@cms/runtime";
+import { registry } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
 
@@ -17,7 +18,7 @@ export async function loadStore(
     model.plan = preparePage(storeComposition(page.document, catalog), {
       natives: definitionsFor(catalog),
       scope: { context: { locale: "ru", store: catalog } },
-      breakpoints: { sm: 640, md: 768, lg: 1024 },
+      breakpoints: registry.breakpoints,
     });
     if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
     const refs = [

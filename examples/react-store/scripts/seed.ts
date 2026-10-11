@@ -2,7 +2,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { catalog, storeContracts } from "./catalog.js";
+import { catalog } from "./catalog.js";
+import { buildManifest } from "@cms/component-registry/manifest";
+import { registry } from "../src/registry.js";
 import { storeDocument } from "../src/composition.js";
 
 const baseUrl = process.env.CMS_BASE_URL ?? "http://127.0.0.1:18080";
@@ -49,7 +51,8 @@ if (manifestResponse.ok) {
 else throw new Error(`Manifest read failed: ${manifestResponse.status}`);
 manifest.components = {
   ...((manifest.components as Record<string, unknown>) ?? {}),
-  ...storeContracts,
+  ...buildManifest(registry, { app: { id: "store-example", version: "1.0.0", framework: "react" } })
+    .components,
 };
 const registration = await command("register-manifest", { environment, manifest });
 if (registration.activation !== "active")

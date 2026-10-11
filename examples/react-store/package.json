@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/server.ts",
-    "build": "vite build && vite build --ssr src/server.ts --outDir dist/server",
+    "build": "pnpm manifest:build && vite build && vite build --ssr src/server.ts --outDir dist/server",
     "start": "node dist/server/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:mutation": "stryker run",
     "seed": "node --import tsx scripts/seed.ts",
-    "preview:renew": "node --import tsx scripts/renew-preview.ts"
+    "preview:renew": "node --import tsx scripts/renew-preview.ts",
+    "manifest:build": "node --import tsx scripts/build-manifest.ts"
   },
   "dependencies": {
     "@cms/core": "workspace:*",
@@ -21,7 +22,8 @@
     "@radix-ui/react-dialog": "1.1.15",
     "lucide-react": "0.468.0",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "@cms/component-registry": "workspace:*"
   },
   "devDependencies": {
     "@cms/manifest": "workspace:*",

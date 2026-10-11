@@ -11,6 +11,7 @@ CMS нового поколения: контент и визуальная ко
 |---|---|
 | `packages/ir` | Формат IR: JSON Schema, типы, валидатор, фикстуры |
 | `packages/manifest` | Формат manifest: JSON Schema, типы, валидатор, канонический хэш, фикстуры |
+| `packages/component-registry` | Единые объявления native-компонентов для manifest и runtime ([границы пакета](docs/component-registry.md)) |
 | `packages/sdk-core` | Delivery API, published LRU/ETag, безопасные привязки и условия |
 | `packages/runtime` | План рендеринга IR: Repeat/Composed/Slot, атомарные стили и Image |
 | `packages/react` | React-адаптер и серверная загрузка страниц ([границы пакета](docs/react-ir-renderer.md)) |

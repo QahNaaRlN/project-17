@@ -39,3 +39,12 @@ failures, returns null for 404 and diagnoses missing live components. It fetches
 at most 64 component documents per page and preserves preview/signal options.
 It does not fetch entities or run application data loaders. Localized `$local`
 content uses only the explicitly selected locale; there is no implicit fallback.
+
+## Shared component declarations
+
+Use `defineReactComponent({name, props, component, validate})` to infer a component's
+`NativeProps<InferProps<typeof props>>` from literal manifest descriptors.
+`createRegistry` from `@cms/component-registry` stores those declarations;
+`nativeDefinitions(registry)` prepares the server plan and `createReactRegistry(registry)`
+selects stable React implementations. Generate the manifest from this same registry
+via `@cms/component-registry/manifest`. See the storefront registry for a complete example.

@@ -29,7 +29,8 @@
   "dependencies": {
     "@cms/core": "workspace:*",
     "@cms/ir": "workspace:*",
-    "@cms/runtime": "workspace:*"
+    "@cms/runtime": "workspace:*",
+    "@cms/component-registry": "workspace:*"
   },
   "devDependencies": {
     "react": "19.2.5",

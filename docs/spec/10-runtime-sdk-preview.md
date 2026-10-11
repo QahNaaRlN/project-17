@@ -5,8 +5,11 @@
 Первый framework-neutral `@cms/runtime` реализован для Image CNT-052:
 signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cms/core`
 подключает клиент Delivery API, проверку IR, published LRU/ETag и preview
-без кэша. Вычисление привязок/условий, форматтеры, общий renderer, registry,
-адаптеры и preview bridge остаются следующими пакетами.
+без кэша. Теперь реализованы безопасные привязки/условия, форматтеры,
+план IR со стилями, Repeat/Composed/Slot и React-адаптер.
+Единый native component registry генерирует manifest и runtime-описания;
+полный CLI, действия, загрузчики и preview bridge остаются следующими пакетами.
+[Границы renderer](../react-ir-renderer.md), [границы registry](../component-registry.md).
 [README runtime](../../packages/runtime/README.md),
 [выдача изображений](../asset-delivery-images.md),
 [клиент Delivery API](../sdk-core-delivery.md).
@@ -15,9 +18,9 @@ signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cm
 |---|---|---|---|
 | `@cms/ir` | `packages/ir` | JSON Schema IR, сгенерированные типы TS, conformance-фикстуры | да |
 | `@cms/core` | `packages/sdk-core` | Клиент Delivery API, парсер и валидатор IR, вычисление привязок и условий, форматтеры | да |
-| `@cms/runtime` | `packages/runtime` | Обход дерева, раскрытие `Repeat`, генерация стилей из дизайн-свойств, контракты примитивов (пока реализован Image) | да |
+| `@cms/runtime` | `packages/runtime` | Обход дерева, раскрытие `Repeat`/Composed/Slot, генерация стилей, первые примитивы и Image | да |
 | `@cms/component-registry` | `packages/component-registry` | `defineComponent`/`defineAction`/…, CLI `cms manifest build|push`, индекс кода | да |
-| `@cms/react` | `packages/sdk-react` | Адаптер React: примитивы, `CmsPage`, `loadPage`, SSR, мост preview | да |
+| `@cms/react` | `packages/react` | Адаптер React: примитивы, `CmsPage`, `loadPage`, SSR; мост preview ещё не реализован | да |
 | `@cms/vue`, `@cms/svelte` | `packages/sdk-vue`, `packages/sdk-svelte` | Адаптеры | после MVP |
 | `@cms/mcp` | `packages/mcp` | Описания инструментов MCP, stdio-прокси | да |
 
