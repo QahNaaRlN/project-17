@@ -1,4 +1,4 @@
-import { snapshot } from "./json.js";
+import { snapshot, metadataEntries } from "./json.js";
 import type { Slot, Type } from "@cms/manifest";
 import type { InferValue, ReadonlyJson, SchemaType } from "./types.js";
 
@@ -14,7 +14,7 @@ type Rich = Extract<SchemaType, { type: "richText" }>;
 
 export function fields<P extends FieldsInput>(input: P): ResolveFields<P> {
   return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [
+    metadataEntries(input).map(([key, value]) => [
       key,
       value instanceof Field ? value.schema : value,
     ]),

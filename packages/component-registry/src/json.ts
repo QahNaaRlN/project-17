@@ -1,9 +1,4 @@
-/** Reject non-JSON metadata rather than silently dropping executable values. */
-export function snapshot<T>(value: T, seen = new Set<object>()): T {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "object" || seen.has(value))
-    throw new Error("CMS_REGISTRY_METADATA_INVALID");
+function assertJsonObject(value: object): void {
   if (
     !Array.isArray(value) &&
     Object.getPrototypeOf(value) !== Object.prototype &&
@@ -18,6 +13,19 @@ export function snapshot<T>(value: T, seen = new Set<object>()): T {
     )
   )
     throw new Error("CMS_REGISTRY_METADATA_INVALID");
+}
+/** Check property descriptors before reading values during DSL normalization. */
+export function metadataEntries<T>(value: Readonly<Record<string, T>>): [string, T][] {
+  assertJsonObject(value);
+  return Object.entries(value);
+}
+/** Reject non-JSON metadata rather than silently dropping executable values. */
+export function snapshot<T>(value: T, seen = new Set<object>()): T {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "object" || seen.has(value))
+    throw new Error("CMS_REGISTRY_METADATA_INVALID");
+  assertJsonObject(value);
   seen.add(value);
   const result = Array.isArray(value)
     ? Array.from(value, (item) => snapshot(item, seen))

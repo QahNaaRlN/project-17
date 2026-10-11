@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { createRegistry, defineComponent, t } from "../src/index.js";
 import { buildManifest } from "../src/manifest.js";
-import type { InferProps, ResolveFields } from "../src/index.js";
+import type { InferProps, ResolveFields, FieldsInput, SlotsInput } from "../src/index.js";
 const app = { id: "dsl-app", version: "1.0.0", framework: "other" } as const;
 
 it("MF-010: all 17 field kinds and slots produce validated schema JSON", () => {
@@ -145,6 +145,34 @@ it("MF-010: builders snapshot input and do not mutate earlier descriptors", () =
   expect(Object.isFrozen(slot.schema)).toBe(true);
   expect(slot.max(2).schema).toEqual({ max: 2 });
   expect(slot.schema).toEqual({});
+});
+it("MF-001: normalizing DSL records rejects getters without executing them", () => {
+  let reads = 0;
+  const props = Object.defineProperty({}, "title", {
+    enumerable: true,
+    get() {
+      reads++;
+      return t.text();
+    },
+  }) as FieldsInput;
+  const slots = Object.defineProperty({}, "footer", {
+    enumerable: true,
+    get() {
+      reads++;
+      return t.slot();
+    },
+  }) as SlotsInput;
+  expect(() => t.object(props)).toThrow("CMS_REGISTRY_METADATA_INVALID");
+  expect(() => defineComponent({ name: "Card", props, component: () => null })).toThrow(
+    "CMS_REGISTRY_METADATA_INVALID",
+  );
+  expect(() =>
+    defineComponent({ name: "Card", props: {}, provides: props, component: () => null }),
+  ).toThrow("CMS_REGISTRY_METADATA_INVALID");
+  expect(() => defineComponent({ name: "Card", props: {}, slots, component: () => null })).toThrow(
+    "CMS_REGISTRY_METADATA_INVALID",
+  );
+  expect(reads).toBe(0);
 });
 it("MF-001: descriptors retain authoritative validation, including RE2 and defaults", () => {
   for (const field of [

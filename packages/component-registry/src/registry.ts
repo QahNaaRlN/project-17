@@ -1,4 +1,4 @@
-import { snapshot } from "./json.js";
+import { snapshot, metadataEntries } from "./json.js";
 import type { Component, Fields, Manifest } from "@cms/manifest";
 import type { NativeDefinition } from "@cms/runtime";
 import type { SchemaFields, ReadonlyJson } from "./types.js";
@@ -73,7 +73,7 @@ export function registerComponent<const P extends FieldsInput, I>(
       ? {}
       : {
           slots: Object.fromEntries(
-            Object.entries(definition.slots).map(([key, value]) => [
+            metadataEntries(definition.slots).map(([key, value]) => [
               key,
               value instanceof SlotField ? value.schema : value,
             ]),

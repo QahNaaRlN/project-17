@@ -18,6 +18,7 @@ export async function fixture(files: Record<string, string> = {}): Promise<Build
       compilerOptions: {
         module: "NodeNext",
         target: "ES2022",
+        lib: ["ES2022"],
         strict: true,
         skipLibCheck: true,
         types: [],
