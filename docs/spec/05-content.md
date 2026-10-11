@@ -174,7 +174,9 @@ complete-asset-upload {assetId}
 
 Создание/редактирование/удаление/восстановление сущностей через CS, схемная проверка,
 unique/singleton, L2-ссылки, метаданные ассетов, HTTP и Delivery чтение подключены
-([граница и API](../entities-assets.md)). Upload pipeline CNT-041/042, S3/MinIO,
-imgproxy, upcast/материализация CNT-023 и locale fallback CNT-031 ещё не реализованы.
+([граница и API](../entities-assets.md)). Upload pipeline CNT-041/042 и приватное
+S3/MinIO подключены ([обработка и ограничения](../asset-upload-processing.md)).
+Превью SVG, метаданные/превью видео, imgproxy CNT-050–052,
+upcast/материализация CNT-023 и locale fallback CNT-031 ещё не реализованы.
 Старые версии требуют явного исправления в CS; новые относительно окружения
 отклоняются с `SCHEMA_VERSION_AHEAD`. Даункаст не выполняется.
