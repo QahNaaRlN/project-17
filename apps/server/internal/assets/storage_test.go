@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +23,14 @@ import (
 // CNT-040/042: real S3 signing, PUT, private reads and canonical processing.
 func TestS3PrivateStorage(t *testing.T) {
 	ctx := context.Background()
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "minio/minio:RELEASE.2025-04-22T22-12-26Z", ExposedPorts: []string{"9000/tcp"}, Env: map[string]string{"MINIO_ROOT_USER": "test-access", "MINIO_ROOT_PASSWORD": "test-secret"}, Cmd: []string{"server", "/data"}, WaitingFor: wait.ForHTTP("/minio/health/ready").WithPort("9000/tcp").WithStartupTimeout(time.Minute)}, Started: true})
+	_, source, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate MinIO build context")
+	}
+	var buildLog bytes.Buffer
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{FromDockerfile: testcontainers.FromDockerfile{Context: filepath.Join(filepath.Dir(source), "testdata", "minio"), Repo: "project17-minio-test", Tag: "2025-04-22", KeepImage: true, BuildLogWriter: &buildLog}, ExposedPorts: []string{"9000/tcp"}, Env: map[string]string{"MINIO_ROOT_USER": "test-access", "MINIO_ROOT_PASSWORD": "test-secret"}, Cmd: []string{"server", "/data"}, WaitingFor: wait.ForHTTP("/minio/health/ready").WithPort("9000/tcp").WithStartupTimeout(time.Minute)}, Started: true})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("MinIO container: %v\n%s", err, buildLog.String())
 	}
 	t.Cleanup(func() {
 		if err := c.Terminate(ctx); err != nil {
