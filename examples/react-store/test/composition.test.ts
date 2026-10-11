@@ -4,24 +4,33 @@ import { storeComposition, definitionsFor } from "../src/composition.js";
 import { loadStore } from "../src/load.js";
 import { cms, page } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
-import { storeContracts } from "../scripts/catalog.js";
+import { buildManifest } from "@cms/component-registry/manifest";
+import { registry, storeDefinitions, storeRegistry } from "../src/registry.js";
 import { validateManifest } from "@cms/manifest";
 import { renderToString } from "react-dom/server";
 import { createElement } from "react";
 import { StoreApp } from "../src/app.js";
 import { model } from "./fixtures.js";
 
-it("STORE-001: storefront manifest accepts native contracts and declares the store context", () => {
-  const manifest = {
-    manifestVersion: "1.0",
+it("MF-010/STORE-001: storefront manifest, plan and React consume one registry", () => {
+  const manifest = buildManifest(registry, {
     app: { id: "store-test", version: "1.0.0", framework: "react" },
-    irVersions: ["1.0"],
-    breakpoints: { sm: 640, md: 768, lg: 1024 },
-    tokens: {},
-    components: storeContracts,
-  };
+  });
+  const storeContracts = manifest.components!;
   expect(validateManifest(manifest).diagnostics).toEqual([]);
-  expect(storeContracts.Storefront.provides.store.fields.products.type).toBe("list");
+  expect(Object.keys(storeDefinitions)).toEqual(Object.keys(storeRegistry));
+  expect(Object.keys(storeDefinitions).sort()).toEqual(Object.keys(storeContracts).sort());
+  for (const definition of registry.components) {
+    expect(storeRegistry[definition.name]).toBe(definition.component);
+    expect(Object.keys(storeDefinitions[definition.name]!.props).sort()).toEqual(
+      Object.keys(definition.props).sort(),
+    );
+    expect(storeContracts[definition.name]!.props).toEqual(definition.props);
+  }
+  expect(storeContracts.Storefront!.provides!.store).toMatchObject({
+    type: "object",
+    fields: { products: { type: "list" } },
+  });
 });
 it("DS-030: native components apply generated classes, including the root wrapper", () => {
   const initial = model();

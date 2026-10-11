@@ -3,23 +3,7 @@ import type { NativeDefinition } from "@cms/runtime";
 import type { Catalog, Product } from "./model.js";
 type IrDocument = PageResponse["document"];
 
-export const storeDefinitions: Record<string, NativeDefinition> = {
-  Storefront: { container: true, props: {} },
-  StoreHero: {
-    props: { title: {}, subtitle: {}, description: {}, ctaLabel: {} },
-    validate: (p) =>
-      [p.title, p.subtitle, p.description, p.ctaLabel].every(
-        (v) => typeof v === "string" && v.length <= 2000,
-      ),
-  },
-  StoreCollection: { container: true, props: { title: {}, products: {} } },
-  StoreProduct: { props: { product: {} } },
-  StoreEmpty: { props: {} },
-  StoreAbout: {
-    props: { title: {}, text: {} },
-    validate: (p) => [p.title, p.text].every((v) => typeof v === "string" && v.length <= 2000),
-  },
-};
+import { storeDefinitions } from "./registry.js";
 export function definitionsFor(catalog: Catalog): Record<string, NativeDefinition> {
   return {
     ...storeDefinitions,

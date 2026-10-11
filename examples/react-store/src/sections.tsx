@@ -1,10 +1,10 @@
 import { createContext, useContext } from "react";
 import { ArrowUpRight } from "lucide-react";
-import type { NativeProps, NativeRegistry } from "@cms/react";
+import type { NativeProps } from "@cms/react";
 import type { Product, StoreModel } from "./model.js";
 import { CatalogImage, ProductCard } from "./cards.js";
 export const StoreRenderContext = createContext<Pick<StoreModel, "images">>({ images: {} });
-function Storefront({ children, className, instanceId }: NativeProps) {
+export function Storefront({ children, className, instanceId }: NativeProps) {
   return className ? (
     <div id={instanceId} className={className}>
       {children}
@@ -13,7 +13,7 @@ function Storefront({ children, className, instanceId }: NativeProps) {
     children
   );
 }
-function Hero({ values: p, className }: NativeProps) {
+export function Hero({ values: p, className }: NativeProps) {
   const { images } = useContext(StoreRenderContext);
   return (
     <section className={`hero ${className}`}>
@@ -35,7 +35,7 @@ function Hero({ values: p, className }: NativeProps) {
     </section>
   );
 }
-function Collection({ values: p, children, className }: NativeProps) {
+export function Collection({ values: p, children, className }: NativeProps) {
   const count = (p.products as Product[]).length;
   return (
     <section className={`collection ${className}`} id="collection" aria-label="Коллекция">
@@ -50,14 +50,14 @@ function Collection({ values: p, children, className }: NativeProps) {
     </section>
   );
 }
-function Item({ values: p, className }: NativeProps) {
+export function Item({ values: p, className }: NativeProps) {
   const { images } = useContext(StoreRenderContext);
   const product = p.product as Product;
   return (
     <ProductCard product={product} image={images[`product:${product.id}`]} className={className} />
   );
 }
-function Empty({ className }: NativeProps) {
+export function Empty({ className }: NativeProps) {
   return (
     <div className={`empty-state ${className}`}>
       <h3>Новые вещи скоро появятся</h3>
@@ -65,7 +65,7 @@ function Empty({ className }: NativeProps) {
     </div>
   );
 }
-function About({ values: p, className }: NativeProps) {
+export function About({ values: p, className }: NativeProps) {
   return (
     <section className={`about ${className}`} id="about">
       <span className="about-mark" aria-hidden="true">
@@ -79,11 +79,3 @@ function About({ values: p, className }: NativeProps) {
     </section>
   );
 }
-export const storeRegistry: NativeRegistry = {
-  Storefront,
-  StoreHero: Hero,
-  StoreCollection: Collection,
-  StoreProduct: Item,
-  StoreEmpty: Empty,
-  StoreAbout: About,
-};

@@ -1,7 +1,7 @@
 import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
 import type { PlanNode, RenderPlan } from "@cms/runtime";
-export interface NativeProps {
-  values: Record<string, unknown>;
+export interface NativeProps<V = Record<string, unknown>> {
+  values: V;
   children: ReactNode;
   nodeId: string;
   instanceId: string;

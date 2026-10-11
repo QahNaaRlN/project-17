@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Menu, RefreshCw, X } from "lucide-react";
 import type { StoreModel } from "./model.js";
 import { CmsPage } from "@cms/react";
-import { StoreRenderContext, storeRegistry } from "./sections.js";
+import { StoreRenderContext } from "./sections.js";
+import { storeRegistry } from "./registry.js";
 export { CatalogImage, ProductCard } from "./cards.js";
 import { Button } from "./ui/button.js";
 
