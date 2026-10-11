@@ -129,6 +129,12 @@ it("SDK-002: component version, page path и url должны иметь пра�
   expect(() =>
     decode.page({
       ...page,
+      components: { card: { versionId: ID, document: { ...ir, kind: "component" } } },
+    }),
+  ).toThrow(CmsError);
+  expect(() =>
+    decode.page({
+      ...page,
       components: { [ID]: { versionId: "invalid", document: { ...ir, kind: "component" } } },
     }),
   ).toThrow();

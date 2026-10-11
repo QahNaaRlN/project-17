@@ -4,6 +4,36 @@ import { expect, it } from "vitest";
 import { createCmsClient } from "../src/index.js";
 import { config, page } from "./fixtures.js";
 
+// Response limits must also release an unfinished native HTTP response.
+it("ранний отказ по Content-Length закрывает незавершённый HTTP response", async () => {
+  let closed!: () => void;
+  const disconnected = new Promise<void>((resolve) => {
+    closed = resolve;
+  });
+  const server = createServer((_req, res) => {
+    res.once("close", closed);
+    res.writeHead(200, { "Content-Type": "application/json", "Content-Length": "9999" });
+    res.write("{");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing address");
+  try {
+    const client = createCmsClient({
+      ...config,
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      maxResponseBytes: 1,
+    });
+    await expect(client.getPage("/")).rejects.toMatchObject({ code: "RESPONSE_TOO_LARGE" });
+    await disconnected;
+  } finally {
+    server.closeAllConnections();
+    server.close();
+    await once(server, "close");
+  }
+});
+
 // API-033 / SDK-020: exercise native Fetch, Headers, byte streaming and actual 304 over HTTP.
 it("настоящий HTTP транспорт повторно проверяет ETag и не следует redirects", async () => {
   const requests: {
