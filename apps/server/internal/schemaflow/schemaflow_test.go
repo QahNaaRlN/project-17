@@ -525,6 +525,9 @@ func TestMigrationDownPreservesSchemaAudit(t *testing.T) {
 	r := register(e, manifest("1", "text"), "staging")
 	if err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatal(err)
+	} // remove the empty asset upload migration first
+	if err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
 	} // remove the empty content migration first
 	err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err == nil || !strings.Contains(err.Error(), "schema publication data prevents downgrade") {

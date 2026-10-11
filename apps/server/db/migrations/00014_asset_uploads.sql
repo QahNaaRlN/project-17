@@ -31,5 +31,12 @@ CREATE TABLE asset_uploads (
  FOREIGN KEY(project_id,file_sha256) REFERENCES asset_files(project_id,sha256)
 );
 -- +goose Down
+-- +goose StatementBegin
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM asset_uploads) OR EXISTS(SELECT 1 FROM asset_files) THEN
+  RAISE EXCEPTION 'asset upload or file data prevents downgrade';
+ END IF;
+END $$;
+-- +goose StatementEnd
 DROP TABLE asset_uploads;
 DROP TABLE asset_files;

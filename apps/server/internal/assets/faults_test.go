@@ -2,9 +2,12 @@ package assets
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 )
 
@@ -75,5 +78,22 @@ func TestSVGAndStorageMalformedInputs(t *testing.T) {
 	}
 	if _, _, err := s.Open(context.Background(), "key"); err == nil {
 		t.Fatal("invalid bucket reading")
+	}
+}
+
+// CNT-040/OPS-002: downgrade cannot erase the immutable file/upload audit.
+func TestAssetDowngradePreservesAudit(t *testing.T) {
+	e := cmstest.New(t)
+	m := &memoryStorage{data: map[string][]byte{}}
+	s := &Service{Pool: e.Pool, Storage: m}
+	s.Register(e.Bus)
+	u := ready(t, e, s, m, pngBytes(t, 2, 2))
+	err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil || !strings.Contains(err.Error(), "asset upload or file data prevents downgrade") {
+		t.Fatal(err)
+	}
+	got, err := s.Get(context.Background(), e.Admin, u.AssetID)
+	if err != nil || got.Status != "ready" || got.FileHash == nil {
+		t.Fatal(got, err)
 	}
 }
