@@ -3,15 +3,19 @@
 ## 1. Пакеты
 
 Первый framework-neutral `@cms/runtime` реализован для Image CNT-052:
-signed variants → src/srcset/sizes и focalPoint. Общий renderer, `@cms/core`,
-адаптеры и preview bridge ещё не подключены. [README runtime](../../packages/runtime/README.md),
-[выдача изображений](../asset-delivery-images.md).
+signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cms/core`
+подключает клиент Delivery API, проверку IR, published LRU/ETag и preview
+без кэша. Вычисление привязок/условий, форматтеры, общий renderer, registry,
+адаптеры и preview bridge остаются следующими пакетами.
+[README runtime](../../packages/runtime/README.md),
+[выдача изображений](../asset-delivery-images.md),
+[клиент Delivery API](../sdk-core-delivery.md).
 
 | Пакет | Каталог | Ответственность | MVP |
 |---|---|---|---|
 | `@cms/ir` | `packages/ir` | JSON Schema IR, сгенерированные типы TS, conformance-фикстуры | да |
 | `@cms/core` | `packages/sdk-core` | Клиент Delivery API, парсер и валидатор IR, вычисление привязок и условий, форматтеры | да |
-| `@cms/runtime` | `packages/design-runtime` | Обход дерева, раскрытие `Repeat`, генерация стилей из дизайн-свойств, контракты примитивов | да |
+| `@cms/runtime` | `packages/runtime` | Обход дерева, раскрытие `Repeat`, генерация стилей из дизайн-свойств, контракты примитивов (пока реализован Image) | да |
 | `@cms/component-registry` | `packages/component-registry` | `defineComponent`/`defineAction`/…, CLI `cms manifest build|push`, индекс кода | да |
 | `@cms/react` | `packages/sdk-react` | Адаптер React: примитивы, `CmsPage`, `loadPage`, SSR, мост preview | да |
 | `@cms/vue`, `@cms/svelte` | `packages/sdk-vue`, `packages/sdk-svelte` | Адаптеры | после MVP |
