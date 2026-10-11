@@ -204,7 +204,11 @@ describe("predicates", () => {
       false,
     );
     expect(evaluatePredicate({ op: "in", args: ["$item.id", { lit: 1 }] }, scope)).toBe(false);
-    expect(evaluatePredicate({ op: "eq", args: [null, 1] }, scope)).toBe(true);
+    for (const value of [null, 1, "not-a-path", { lit: 1, extra: true }]) {
+      expect(() => evaluatePredicate({ op: "eq", args: [value, { lit: 1 }] }, scope)).toThrow(
+        "CMS_OPERAND_INVALID",
+      );
+    }
   });
   it("bounds predicate depth/arity and rejects unknown operations", () => {
     let predicate: Predicate = eq;

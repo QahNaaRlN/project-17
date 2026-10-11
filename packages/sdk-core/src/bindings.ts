@@ -109,10 +109,15 @@ export function evaluateBinding(binding: Binding, scope: BindingScope): unknown 
   return binding.format ? formatValue(value, binding.format, scope.context?.locale) : value;
 }
 function operand(value: unknown, scope: BindingScope): unknown {
-  if (typeof value === "string") return readPath(value, scope);
-  if (value !== null && typeof value === "object" && Object.hasOwn(value, "lit"))
+  if (typeof value === "string" && pathPattern.test(value)) return readPath(value, scope);
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Object.hasOwn(value, "lit") &&
+    Object.keys(value).length === 1
+  )
     return (value as { lit: unknown }).lit;
-  return undefined;
+  throw new Error("CMS_OPERAND_INVALID");
 }
 export function evaluatePredicate(predicate: Predicate, scope: BindingScope, depth = 0): boolean {
   if (depth > 8) throw new Error("CMS_PREDICATE_LIMIT");
