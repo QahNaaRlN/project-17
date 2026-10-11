@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/buckket/go-blurhash"
-	_ "github.com/gen2brain/avif"
+	"github.com/gen2brain/avif"
 	"github.com/jackc/pgx/v5"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"golang.org/x/image/draw"
@@ -137,7 +137,12 @@ func (s *Service) Process(ctx context.Context, args ProcessArgs) error {
 			binary = bytes.NewReader(clean)
 			w, h = svgDimensions(clean)
 		} else if strings.HasPrefix(mime, "image/") {
-			cfg, _, err := image.DecodeConfig(f)
+			var cfg image.Config
+			if mime == "image/avif" {
+				cfg, err = avif.DecodeConfig(f)
+			} else {
+				cfg, _, err = image.DecodeConfig(f)
+			}
 			if err != nil {
 				return reject("ASSET_INVALID_IMAGE")
 			}
@@ -147,7 +152,12 @@ func (s *Service) Process(ctx context.Context, args ProcessArgs) error {
 			if _, err = f.Seek(0, io.SeekStart); err != nil {
 				return err
 			}
-			img, _, err := image.Decode(f)
+			var img image.Image
+			if mime == "image/avif" {
+				img, err = avif.Decode(f)
+			} else {
+				img, _, err = image.Decode(f)
+			}
 			if err != nil {
 				return reject("ASSET_INVALID_IMAGE")
 			}

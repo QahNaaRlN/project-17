@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/gif"
 	"image/jpeg"
+	"strings"
 	"testing"
 
 	"github.com/gen2brain/avif"
@@ -22,7 +23,7 @@ func TestFormatsAndPolicy(t *testing.T) {
 	s := &Service{Pool: e.Pool, Storage: m}
 	s.Register(e.Bus)
 	im := image.NewNRGBA(image.Rect(0, 0, 2, 2))
-	for _, format := range []string{"jpeg", "gif", "avif"} {
+	for _, format := range []string{"jpeg", "gif", "avif", "avif-compatible"} {
 		var b bytes.Buffer
 		var err error
 		switch format {
@@ -30,13 +31,20 @@ func TestFormatsAndPolicy(t *testing.T) {
 			err = jpeg.Encode(&b, im, nil)
 		case "gif":
 			err = gif.Encode(&b, im, nil)
-		case "avif":
+		case "avif", "avif-compatible":
 			err = avif.Encode(&b, im)
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		u := begin(t, e, s, m, b.Bytes(), "image/"+format)
+		mime := "image/" + format
+		if strings.HasPrefix(format, "avif") {
+			mime = "image/avif"
+		}
+		if format == "avif-compatible" {
+			copy(b.Bytes()[8:12], []byte("mif1"))
+		}
+		u := begin(t, e, s, m, b.Bytes(), mime)
 		e.Must(e.Admin, "complete-asset-upload", Ref{u.AssetID}, nil)
 		if err := (&Worker{Service: s}).Work(context.Background(), &river.Job[ProcessArgs]{Args: ProcessArgs{u.AssetID, e.Admin.ProjectID}}); err != nil {
 			t.Fatal(err)
