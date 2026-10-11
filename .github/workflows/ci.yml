@@ -41,6 +41,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Storefront browser scenarios
+        run: |
+          pnpm --filter @cms/store-example exec playwright install --with-deps chromium
+          pnpm --filter @cms/store-example test:e2e
 
   docker:
     name: Docker image
