@@ -10,6 +10,8 @@ const production = process.env.NODE_ENV === "production";
 const root = production
   ? resolve(dirname(fileURLToPath(import.meta.url)), "../..")
   : resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const deployedHash = (await readFile(resolve(root, ".cms/manifest.hash"), "utf8")).trim();
+if (!/^sha256:[a-f0-9]{64}$/.test(deployedHash)) throw new Error("CMS_MANIFEST_HASH_INVALID");
 const configFile = process.env.CMS_STORE_CONFIG_FILE;
 if (!configFile)
   throw new Error(
@@ -44,6 +46,7 @@ const handler = storeHandler(
   () => loadStore(cms, config.path, options),
   assets,
   async (html) => (vite ? vite.transformIndexHtml("/", html) : html),
+  deployedHash,
 );
 const server = createServer((req, res) => {
   res.setHeader(

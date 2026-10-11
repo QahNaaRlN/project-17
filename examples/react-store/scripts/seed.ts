@@ -3,8 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog } from "./catalog.js";
-import { buildManifest } from "@cms/component-registry/manifest";
-import { registry } from "../src/registry.js";
+import { validateManifest } from "@cms/manifest";
 import { storeDocument } from "../src/composition.js";
 
 const baseUrl = process.env.CMS_BASE_URL ?? "http://127.0.0.1:18080";
@@ -49,10 +48,11 @@ if (manifestResponse.ok) {
     tokens: {},
   };
 else throw new Error(`Manifest read failed: ${manifestResponse.status}`);
+const builtManifest = JSON.parse(await readFile(".cms/manifest.json", "utf8"));
+if (!validateManifest(builtManifest).valid) throw new Error("CMS_MANIFEST_INVALID");
 manifest.components = {
   ...((manifest.components as Record<string, unknown>) ?? {}),
-  ...buildManifest(registry, { app: { id: "store-example", version: "1.0.0", framework: "react" } })
-    .components,
+  ...builtManifest.components,
 };
 const registration = await command("register-manifest", { environment, manifest });
 if (registration.activation !== "active")

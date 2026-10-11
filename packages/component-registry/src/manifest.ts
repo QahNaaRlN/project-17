@@ -15,6 +15,8 @@ export function buildManifest(registry: Registry, options: ManifestOptions): Man
       breakpoints: registry.breakpoints,
       tokens: registry.tokens,
       icons: registry.icons,
+      schemas: registry.schemas,
+      capabilities: registry.capabilities,
       components: Object.fromEntries(
         registry.components.map((definition) => [definition.name, componentContract(definition)]),
       ),

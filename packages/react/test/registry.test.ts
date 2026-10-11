@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { expect, it } from "vitest";
-import { createRegistry, nativeDefinitions } from "@cms/component-registry";
+import { createRegistry, nativeDefinitions, t } from "@cms/component-registry";
 import {
   CmsPage,
   createReactRegistry,
@@ -54,6 +54,21 @@ it("MF-010: empty registry yields no React registrations", () => {
 });
 // Compile-time assertions are checked by pnpm typecheck; they never execute.
 function contractTypeChecks() {
+  defineReactComponent({
+    name: "DslCard",
+    props: { title: t.text().required(), choices: t.list(t.enum(["a", "b"])).required() },
+    component: ({ values }) => {
+      const title: string = values.title;
+      const choice: "a" | "b" = values.choices[0]!;
+      return title + choice;
+    },
+  });
+  defineReactComponent({
+    name: "BadDslCard",
+    props: { title: t.text().required() },
+    // @ts-expect-error MF-012: React values must match the DSL declaration.
+    component: (_p: NativeProps<{ title: number }>) => null,
+  });
   defineReactComponent({
     name: "BadCard",
     props: { label: { type: "string", required: true } },

@@ -12,10 +12,19 @@
     "./manifest": {
       "types": "./dist/manifest.d.ts",
       "default": "./dist/manifest.js"
+    },
+    "./adapter": {
+      "types": "./dist/adapter.d.ts",
+      "default": "./dist/adapter.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -25,11 +34,16 @@
   },
   "dependencies": {
     "@cms/manifest": "workspace:*",
-    "@cms/runtime": "workspace:*"
+    "@cms/runtime": "workspace:*",
+    "typescript": "~6.0.3",
+    "tsx": "4.20.6"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@vitest/coverage-v8": "4.1.11"
+  },
+  "bin": {
+    "cms": "./bin/cms.mjs"
   }
 }

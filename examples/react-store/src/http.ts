@@ -20,6 +20,7 @@ export function storeHandler(
   load: () => Promise<StoreModel>,
   assets: () => Promise<Assets>,
   transform: (html: string) => Promise<string> = async (html) => html,
+  deployedHash?: string,
 ) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -28,6 +29,15 @@ export function storeHandler(
       return;
     }
     const path = req.url?.split("?")[0];
+    if (path === "/.well-known/cms-manifest-hash" && deployedHash) {
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      res.end(req.method === "HEAD" ? undefined : deployedHash + "\n");
+      return;
+    }
     if (path !== "/" && path !== "/api/store") {
       res.writeHead(404);
       res.end();
