@@ -9,9 +9,12 @@ signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cm
 план IR со стилями, Repeat/Composed/Slot и React-адаптер.
 Единый native component registry генерирует manifest и runtime-описания;
 CLI/DSL/sourceRef, действия registry и загрузчики до SSR теперь реализованы.
-Preview bridge остаётся следующим пакетом; streaming/selective hydration и полная
+Сторона приложения preview bridge реализована: cookie entry, postMessage, атрибуты,
+выбор, patch/reload и layout. Studio и его оверлеи остаются M4.
+Streaming/selective hydration и полная
 изоляция native-ошибок ещё не реализованы.
 [Действия и данные](../runtime-actions-data.md) фиксирует текущий срез SDK-014/033.
+[Preview bridge](../preview-bridge.md) описывает SDK-030…042 и границы интеграции.
 [Границы renderer](../react-ir-renderer.md), [границы registry](../component-registry.md).
 [README runtime](../../packages/runtime/README.md),
 [выдача изображений](../asset-delivery-images.md),
@@ -119,7 +122,7 @@ defineAction({
 
 | ID | Требование |
 |---|---|
-| SDK-030 | В режиме preview DOM-элементы узлов ДОЛЖНЫ иметь атрибут `data-cms-node="<nodeId>"`, экземпляры `Repeat` — `data-cms-instance="<nodeId>:<n>"`. В обычном режиме атрибуты не выводятся. |
+| SDK-030 | В режиме preview DOM-элементы узлов ДОЛЖНЫ иметь атрибут `data-cms-node="<nodeId>"`, экземпляры `Repeat`/Composed — `data-cms-instance` со стабильным ключом runtime, включающим область экземпляра (ID узла, типизированный key элемента или индекс). Native-компонент переносит `previewAttributes` на внешний элемент. В обычном режиме атрибуты не выводятся. |
 | SDK-031 | Мост ДОЛЖЕН принимать сообщения только от origin Studio из конфигурации приложения (`CMS_STUDIO_ORIGIN`); Studio — только от origin `appUrl` окружения. |
 | SDK-032 | Приложение ДОЛЖНО разрешать встраивание в iframe только с origin Studio (`Content-Security-Policy: frame-ancestors <studio-origin>`) и только в режиме preview. |
 | SDK-033 | По умолчанию preview работает в режиме «Дизайн»: клики выбирают узлы, действия не исполняются. Режим «Взаимодействие» исполняет действия против бэкенда окружения; Studio предупреждает о побочных эффектах. |
@@ -153,7 +156,7 @@ defineAction({
 | `rendered` | `hash`, `durationMs` | Отрисована версия документа |
 | `node.click` | `nodeId`, `instance?`, `modifiers` | Выбор узла на холсте |
 | `node.hover` | `nodeId \| null` | Наведение |
-| `layout` | `{ nodeId: [{x, y, w, h}] }`, `viewport`, `scroll` | Геометрия узлов для оверлеев Studio (не чаще раза в 60 мс) |
+| `layout` | `nodes: { nodeId: [{x, y, w, h, instance?}] }`, `viewport: {width,height}`, `scroll: {x,y}` | Геометрия узлов для оверлеев Studio (не чаще раза в 60 мс) |
 | `diagnostics` | `items[]` | Ошибки и предупреждения runtime |
 | `navigated` | `path`, `documentId` | Пользователь перешёл по ссылке |
 | `error` | `code`, `message` | Ошибка моста |

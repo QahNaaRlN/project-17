@@ -21,6 +21,7 @@ export interface RenderPlan {
   css: string;
   diagnostics: PlanDiagnostic[];
   interactionMode?: "design" | "interact";
+  preview?: boolean;
 }
 export interface NativeDefinition {
   props: Record<string, { responsive?: boolean }>;

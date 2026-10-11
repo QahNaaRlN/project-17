@@ -98,4 +98,18 @@ PNG-иллюстрации в `assets/` отрисованы из собстве
 `store.products` вызывается до SSR, Repeat читает `$data.featured.items`,
 `store.favorite` исполняется из события `favorite` в документе CMS.
 В preview действия отключены до включения взаимодействия. Серверная загрузка
-индекса, Product/Collection как сущности CMS и preview bridge остаются следующими.
+индекса и Product/Collection как сущности CMS остаются следующими.
+
+## Preview приложения
+
+Задайте `CMS_STUDIO_ORIGIN` и `CMS_APP_ORIGIN` как точные origins. Страница
+`/api/cms/preview?token=…&path=/` проверяет token в CMS и устанавливает серверную
+cookie. Только успешно прочитанный preview разрешает iframe из Studio в CSP.
+JWT остаётся в HttpOnly cookie; snapshot/browser messages содержат публичный IR,
+контент и hash. Витрина пока использует локаль ru и страницу из config.path.
+
+Bridge в design выбирает узлы, в interact исполняет события. Studio управляет
+режимом; готового Studio в этом пакете нет. E2E использует отдельный iframe-host
+для проверки происхождения сообщений, Repeat, JSON Patch и fallback на сервер.
+Refresh токена выдающим Studio и настоящий UI оверлеев остаются M4.
+[Контракт SDK](../../docs/preview-bridge.md).

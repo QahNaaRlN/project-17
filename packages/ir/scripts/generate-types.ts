@@ -3,6 +3,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { compile, type JSONSchema } from "json-schema-to-typescript";
+import { Ajv2020, type SchemaObject, type ValidateFunction } from "ajv/dist/2020.js";
+import standaloneCodeModule from "ajv/dist/standalone/index.js";
+import { format } from "prettier";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const schemaPath = `${root}schema/ir-1.0.schema.json`;
@@ -66,4 +69,28 @@ await writeFile(
   `${outDir}/schema.ts`,
   `${header}\nexport const irSchema = ${JSON.stringify(schema, null, 2)} as const;\n`,
 );
-console.log("generated:", `${outDir}/types.ts`, `${outDir}/schema.ts`);
+const ajv = new Ajv2020({
+  allErrors: true,
+  strict: true,
+  strictTypes: false,
+  strictRequired: false,
+  discriminator: true,
+  code: { source: true, esm: true, lines: true },
+});
+const validator = ajv.compile(schema as unknown as SchemaObject);
+// Standalone AJV output may reference small CommonJS runtime helpers. Normalize
+// their ESM interop at generation time; runtime imports static functions without eval.
+type StandaloneCode = (compiler: Ajv2020, validate: ValidateFunction) => string;
+const standaloneCode = ((standaloneCodeModule as unknown as { default?: StandaloneCode }).default ??
+  standaloneCodeModule) as StandaloneCode;
+const standalone = standaloneCode(ajv, validator);
+const source = standalone.replace(
+  /const (func\d+) = require\("([^"]+)"\)\.default;/g,
+  (_match: string, name: string, path: string) =>
+    `import ${name}Module from "${path}.js";\nconst ${name} = ${name}Module.default ?? ${name}Module;`,
+);
+await writeFile(
+  `${outDir}/validator.ts`,
+  await format(`${header}// @ts-nocheck\n${source}`, { parser: "typescript", printWidth: 100 }),
+);
+console.log("generated:", `${outDir}/types.ts`, `${outDir}/schema.ts`, `${outDir}/validator.ts`);

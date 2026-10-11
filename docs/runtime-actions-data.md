@@ -76,5 +76,6 @@ const plan = await loadPage(cms, "/catalog", {registry, sourceOptions: {app: ser
 Витрина демонстрирует загрузку каталога и действие из CMS, сохраняя клавиатурную
 навигацию, существующий дизайн и отсутствие оформления заказа.
 
-Product/Collection как сущности CMS, Studio, preview bridge, streaming/selective
+Сторона приложения [preview bridge](preview-bridge.md) добавлена следующим пакетом.
+Product/Collection как сущности CMS, Studio, streaming/selective
 hydration и загрузка code-index на сервер остаются следующими пакетами.

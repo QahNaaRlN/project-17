@@ -27,3 +27,4 @@ export type {
 } from "./sources.js";
 export { preparePageWithData } from "./data-plan.js";
 export type { DataPlanOptions } from "./data-plan.js";
+export { applyDocumentPatch, documentHash } from "./patch.js";

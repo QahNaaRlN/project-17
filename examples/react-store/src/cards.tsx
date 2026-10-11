@@ -3,6 +3,7 @@ import { ArrowUpRight, ImageOff } from "lucide-react";
 import { priceLabel, type ImageProps, type Product } from "./model.js";
 import { Button } from "./ui/button.js";
 import { ProductDialog } from "./ui/dialog.js";
+import type { NativeProps } from "@cms/react";
 
 export function CatalogImage({
   image,
@@ -33,11 +34,13 @@ export function ProductCard({
   image,
   className = "",
   onFavorite,
+  previewAttributes,
 }: {
   product: Product;
   image?: ImageProps | null | undefined;
   className?: string;
   onFavorite?: () => Promise<boolean>;
+  previewAttributes?: NativeProps["previewAttributes"];
 }) {
   const details = (
     <>
@@ -49,7 +52,7 @@ export function ProductCard({
     </>
   );
   return (
-    <article className={`product-card ${className}`}>
+    <article className={`product-card ${className}`} {...previewAttributes}>
       <div className={`product-art tone-${product.tone}`}>
         <CatalogImage image={image} alt={product.title} />
         <span className="product-tag">{product.category}</span>
