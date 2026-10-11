@@ -17,15 +17,17 @@ import (
 )
 
 const (
-	EntityCreate    = "entity.create"
-	EntitySetFields = "entity.setFields"
-	EntityDelete    = "entity.delete"
-	EntityRestore   = "entity.restore"
-	AssetUpdateMeta = "asset.updateMeta"
+	EntityCreate     = "entity.create"
+	EntitySetFields  = "entity.setFields"
+	EntityDelete     = "entity.delete"
+	EntityRestore    = "entity.restore"
+	AssetUpdateMeta  = "asset.updateMeta"
+	AssetCreate      = "asset.create"
+	AssetReplaceFile = "asset.replaceFile"
 )
 
 func isContentOperation(t string) bool {
-	return t == EntitySetFields || t == EntityDelete || t == EntityRestore || t == AssetUpdateMeta
+	return t == EntitySetFields || t == EntityDelete || t == EntityRestore || t == AssetUpdateMeta || t == AssetReplaceFile
 }
 func payloadError(message string) error { return &ops.Error{Code: "PAYLOAD_INVALID", Message: message} }
 func parsePayload(raw []byte, out any) error {
@@ -98,7 +100,7 @@ func (s *session) applyContent(target uuid.UUID, op ops.Op) (recordInput, error)
 		return recordInput{}, err
 	}
 	kind := "entity"
-	if op.Type == AssetUpdateMeta {
+	if op.Type == AssetUpdateMeta || op.Type == AssetReplaceFile {
 		kind = "asset"
 	}
 	if d.kind != kind {
@@ -115,6 +117,9 @@ func (s *session) applyContent(target uuid.UUID, op ops.Op) (recordInput, error)
 	} else {
 		if d.deleted {
 			return recordInput{}, payloadError("сначала восстановите сущность")
+		}
+		if op.Type == AssetReplaceFile {
+			return s.replaceAssetFile(target, d, op)
 		}
 		r, err = contentFields(d.body, op)
 		if err != nil {

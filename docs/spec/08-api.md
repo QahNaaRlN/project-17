@@ -235,6 +235,11 @@ Authorization: Preview eyJhbGciOi…
 
 ### Подключённое чтение сущностей и метаданных ассетов
 
+`GET /api/v1/asset-uploads/{id}` требует `asset.write` и возвращает статус
+собственной загрузки актора в проекте: pending/processing/ready/rejected,
+expiresAt, fileHash готового файла и errorCode отклонения. Запись файла в
+Change Set остаётся отдельной операцией; см. [пакет загрузки](../asset-upload-processing.md).
+
 `GET /api/v1/entities/{id}` и `/assets/{id}` (content.read) принимают `environment`
 или `changesetId`; без окружения читается head. Delivery endpoints —
 `/delivery/v1/{project}/{env}/entity/{id}` и `/asset/{id}`. Они используют

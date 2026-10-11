@@ -102,10 +102,15 @@ func NewInserter(pool *pgxpool.Pool) (*Client, error) {
 }
 
 // NewProcessor — клиент, который ставит и исполняет задачи; запускается Start.
-func NewProcessor(pool *pgxpool.Pool, purger Purger, log *slog.Logger) (*Client, error) {
+func NewProcessor(pool *pgxpool.Pool, purger Purger, log *slog.Logger, register ...func(*river.Workers) error) (*Client, error) {
 	workers := river.NewWorkers()
 	if err := river.AddWorkerSafely(workers, &PurgeWorker{Purger: purger}); err != nil {
 		return nil, err
+	}
+	for _, add := range register {
+		if err := add(workers); err != nil {
+			return nil, err
+		}
 	}
 	return river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},

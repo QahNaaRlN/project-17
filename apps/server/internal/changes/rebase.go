@@ -269,7 +269,7 @@ func replay(body map[string]any, op store.Operation, choice string) (opPlan, *Co
 	next := ops.Clone(body)
 	var r ops.Result
 	var err error
-	if op.Type == EntitySetFields || op.Type == AssetUpdateMeta {
+	if op.Type == EntitySetFields || op.Type == AssetUpdateMeta || op.Type == AssetReplaceFile {
 		r, err = contentFields(next, ops.Op{Type: op.Type, Payload: op.Payload})
 	} else {
 		r, err = ops.Apply(next, ops.Op{Type: op.Type, Payload: op.Payload}, nil)

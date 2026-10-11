@@ -142,6 +142,11 @@ export const article = defineSchema({
 
 ### 6.1. Загрузка
 
+Реализованный серверный путь и текущие границы обработки описаны в
+[пакете загрузки ассетов](../asset-upload-processing.md). После обработки готовый
+файл явно добавляется в Change Set через `asset.create {uploadId}` или
+`asset.replaceFile {set:{fileHash}}`; worker не изменяет контент и публикации.
+
 ```
 create-asset-upload {filename, mimeType, size, sha256}
    ─▶ { assetId, uploadUrl (pre-signed PUT, 15 мин) }
