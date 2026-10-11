@@ -64,6 +64,8 @@ export function sourceIndex(
     [
       resolve(packageRoot, "src/registry.ts"),
       resolve(packageRoot, "dist/registry.d.ts"),
+      resolve(packageRoot, "src/operations.ts"),
+      resolve(packageRoot, "dist/operations.d.ts"),
       resolve(packageRoot, "../react/src/registry.ts"),
       resolve(packageRoot, "../react/dist/registry.d.ts"),
     ].map((path) => path.replaceAll("\\", "/")),
@@ -116,7 +118,7 @@ export function sourceIndex(
       ts.sys,
     ).resolvedModule;
     if (module)
-      for (const file of ["registry.ts", "registry.d.ts"])
+      for (const file of ["registry.ts", "registry.d.ts", "operations.ts", "operations.d.ts"])
         factoryFiles.add(resolve(dirname(module.resolvedFileName), file).replaceAll("\\", "/"));
   }
   const reachable = new Set<ts.SourceFile>();
@@ -145,7 +147,9 @@ export function sourceIndex(
         const factory = symbol && alias(symbol);
         const name = factory?.getName();
         if (
-          (name === "defineComponent" || name === "defineReactComponent") &&
+          ["defineComponent", "defineReactComponent", "defineAction", "defineDataSource"].includes(
+            name ?? "",
+          ) &&
           factory!
             .getDeclarations()
             ?.some((declaration) =>
@@ -159,6 +163,14 @@ export function sourceIndex(
             throw new Error("CMS_SOURCE_DEFINITION_UNSUPPORTED");
           let componentName: string | undefined;
           let implementation: ts.Expression | undefined;
+          const kind =
+            name === "defineAction"
+              ? "action"
+              : name === "defineDataSource"
+                ? "dataSource"
+                : "component";
+          const implementationKey =
+            kind === "action" ? "handler" : kind === "dataSource" ? "loader" : "component";
           for (const property of argument.properties) {
             if (
               ts.isPropertyAssignment(property) &&
@@ -170,18 +182,19 @@ export function sourceIndex(
                   ts.isNoSubstitutionTemplateLiteral(property.initializer))
               )
                 componentName = property.initializer.text;
-              if (property.name.text === "component") implementation = property.initializer;
+              if (property.name.text === implementationKey) implementation = property.initializer;
             } else if (
               ts.isShorthandPropertyAssignment(property) &&
-              property.name.text === "component"
+              property.name.text === implementationKey
             )
               implementation = property.name;
           }
           if (!componentName || !implementation)
             throw new Error("CMS_SOURCE_DEFINITION_UNSUPPORTED");
-          const records = calls.get(componentName) ?? [];
+          const key = kind + ":" + componentName;
+          const records = calls.get(key) ?? [];
           records.push({ call: node, implementation });
-          calls.set(componentName, records);
+          calls.set(key, records);
         }
       }
       ts.forEachChild(node, scan);
@@ -190,8 +203,13 @@ export function sourceIndex(
   }
   const refs: Record<string, SourceRef> = Object.create(null);
   const elements: Record<string, CodeElement> = Object.create(null);
-  for (const definition of registry.components) {
-    const candidates = calls.get(definition.name);
+  const definitions = [
+    ...registry.components.map((definition) => ({ definition, kind: "component" })),
+    ...registry.actions.map((definition) => ({ definition, kind: "action" })),
+    ...registry.dataSources.map((definition) => ({ definition, kind: "dataSource" })),
+  ];
+  for (const { definition, kind } of definitions) {
+    const candidates = calls.get(kind + ":" + definition.name);
     if (!candidates || candidates.length !== 1)
       throw new Error("CMS_SOURCE_DEFINITION_AMBIGUOUS: " + definition.name);
     const candidate = candidates[0]!;
@@ -220,7 +238,7 @@ export function sourceIndex(
       export: exported.map((item) => item.getName()).sort()[0]!,
       line: implementationFile.getLineAndCharacterOfPosition(implementation.getStart()).line + 1,
     };
-    refs[definition.name] = ref;
+    refs[kind === "component" ? definition.name : kind + ":" + definition.name] = ref;
     const dependencies = new Set<ts.SourceFile>();
     let level = [implementationFile];
     for (let depth = 0; depth < 2; depth++) {
@@ -237,7 +255,7 @@ export function sourceIndex(
           imports(file).includes(implementationFile),
       );
     const declarationFile = candidate.call.getSourceFile();
-    elements["component:" + definition.name] = {
+    elements[kind + ":" + definition.name] = {
       definition: {
         file: fileName(declarationFile)!,
         line: declarationFile.getLineAndCharacterOfPosition(candidate.call.getStart()).line + 1,

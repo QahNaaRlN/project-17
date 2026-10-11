@@ -26,6 +26,41 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+it("IR-050/SDK-033: событие из CMS отключено в дизайне, взаимодействие применяет правильный товар", async () => {
+  await mount(createElement(StoreApp, { initialModel: model() }));
+  await click(".favorite-button");
+  expect(document.querySelector(".action-notice")).toBeNull();
+  await click(".interaction-button");
+  expect(document.querySelector(".interaction-button")!.getAttribute("aria-pressed")).toBe("true");
+  await click(".favorite-button");
+  expect(document.querySelector(".action-notice")!.textContent).toBe(
+    "«Ваза «Линия»» добавлен в избранное",
+  );
+  await click(".favorite-button");
+  expect(document.querySelector(".action-notice")!.textContent).toBe(
+    "«Ваза «Линия»» уже в избранном",
+  );
+  await click(".product-card:nth-child(2) .favorite-button");
+  expect(document.querySelector(".action-notice")!.textContent).toBe(
+    "«Лампа «Тепло»» добавлен в избранное",
+  );
+  await click(".interaction-button");
+  await click(".favorite-button");
+  expect(document.querySelector(".action-notice")!.textContent).toBe(
+    "«Лампа «Тепло»» добавлен в избранное",
+  );
+});
+it("IR-050: ошибка аргумента действия показывает безопасное состояние", async () => {
+  const initial = model(),
+    plan = initial.plan!;
+  const product = plan.roots[0]!.children[1]!.children[0]!;
+  product.events!.favorite![0]!.args.id = 1;
+  await mount(createElement(StoreApp, { initialModel: { ...initial, preview: false, plan } }));
+  await click(".favorite-button");
+  expect(document.querySelector(".action-notice")!.textContent).toBe(
+    "Не получилось выполнить действие. Попробуйте снова.",
+  );
+});
 it("STORE-002/003: меню и подробности предмета работают с доступными подписями", async () => {
   await mount(createElement(StoreApp, { initialModel: model() }));
   await click(".menu-button");

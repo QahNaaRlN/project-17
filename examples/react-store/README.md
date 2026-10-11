@@ -72,8 +72,8 @@ model/load/http с порогом 70%; React-поведение проверяе
 Исторический документ с единственным Storefront пока читается через совместимую композицию.
 Дополнительные breakpoint overrides config отклоняются; адаптация native-компонентов
 принадлежит CSS приложения. Это первый пакет рендерера, а не полная реализация M3.
-Studio, data loaders, streaming/selective hydration, preview bridge, pinned Composed,
-actions, rich text и остальные дизайн-свойства остаются следующими пакетами.
+Studio, streaming/selective hydration, preview bridge, pinned Composed,
+rich text и остальные дизайн-свойства остаются следующими пакетами.
 Список предметов пока не использует сущности Product.
 Корзины, платежей и заказов нет; цены демонстрационные, целые рубли.
 
@@ -94,4 +94,8 @@ PNG-иллюстрации в `assets/` отрисованы из собстве
 товара остаются серверной проверкой значений конкретной страницы.
 Витрина отдаёт хэш сборки через `/.well-known/cms-manifest-hash` для проверки
 `cms manifest push --wait-for-deploy`. [CLI и границы пакета](../../docs/registry-dsl-cli.md).
-Действия, загрузчики и серверная загрузка индекса — следующие пакеты.
+Действия и загрузчики реализованы [в следующем пакете](../../docs/runtime-actions-data.md):
+`store.products` вызывается до SSR, Repeat читает `$data.featured.items`,
+`store.favorite` исполняется из события `favorite` в документе CMS.
+В preview действия отключены до включения взаимодействия. Серверная загрузка
+индекса, Product/Collection как сущности CMS и preview bridge остаются следующими.

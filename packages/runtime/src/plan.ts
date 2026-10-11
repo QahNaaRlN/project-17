@@ -1,6 +1,7 @@
 import { evaluateBinding, evaluatePredicate, readPath, type BindingScope } from "@cms/core";
 import type { IrDocument } from "@cms/ir";
 import { atom, designDeclarations, responsive, type DesignOptions } from "./design.js";
+import { planEvents, type PlannedEvents, type RuntimeAction } from "./actions.js";
 
 export interface PlanNode {
   id: string;
@@ -9,6 +10,7 @@ export interface PlanNode {
   props: Record<string, unknown>;
   className: string;
   children: PlanNode[];
+  events?: PlannedEvents;
 }
 export interface PlanDiagnostic {
   code: string;
@@ -18,16 +20,21 @@ export interface RenderPlan {
   roots: PlanNode[];
   css: string;
   diagnostics: PlanDiagnostic[];
+  interactionMode?: "design" | "interact";
 }
 export interface NativeDefinition {
   props: Record<string, { responsive?: boolean }>;
   container?: boolean;
   validate?: (props: Record<string, unknown>) => boolean;
+  events?: readonly string[];
+  provide?: (props: Record<string, unknown>) => Record<string, unknown>;
 }
 export interface PlanOptions extends DesignOptions {
   scope?: BindingScope;
   components?: Record<string, IrDocument>;
   natives?: Record<string, NativeDefinition>;
+  actions?: readonly RuntimeAction[];
+  documentScope?: (document: IrDocument, scope: BindingScope, instance: string) => BindingScope;
 }
 const primitiveProps: Record<string, string[]> = {
   Box: ["as"],
@@ -39,6 +46,7 @@ const primitiveProps: Record<string, string[]> = {
   Label: ["text"],
   Divider: ["orientation"],
   Link: ["to", "newTab", "label"],
+  Button: ["label", "variant", "size", "disabled"],
   Repeat: ["items", "as", "limit", "key"],
   Slot: ["name"],
 };
@@ -117,7 +125,6 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
     const childFrame = { ...frame, ancestors: [...frame.ancestors, id] };
     try {
       if (node.when && !evaluatePredicate(node.when, scope)) return [];
-      if (node.on && Object.keys(node.on).length) return reject("CMS_ACTION_UNSUPPORTED", id);
       const props: Record<string, unknown> = Object.assign(Object.create(null), node.props);
       if (
         Object.keys(props).some((name) => ["constructor", "prototype", "__proto__"].includes(name))
@@ -180,12 +187,14 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           )
         )
           return reject("CMS_SLOT_INVALID", id);
-        const childScope = localScope(component, { ...scope, props });
+        const instance = `${prefix}${id}/`;
+        let childScope = localScope(component, { ...scope, props });
+        childScope = options.documentScope?.(component, childScope, instance) ?? childScope;
         return walk(
           component,
           component.root,
           childScope,
-          `${prefix}${id}/`,
+          instance,
           { slots, references: [...frame.references, ref], ancestors: [] },
           depth + 1,
         );
@@ -206,6 +215,32 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
         for (const [name, definition] of Object.entries(native.props))
           if (definition.responsive) props[name] = baseProp(props[name]);
         if (native.validate && !native.validate(props)) return reject("CMS_PROP_INVALID", id);
+      }
+      const provided = native?.provide?.(props);
+      const eventScope = provided
+        ? { ...scope, context: { ...scope.context, ...provided } }
+        : scope;
+      const declaredEvents =
+        native?.events ?? (node.type === "Link" || node.type === "Button" ? ["click"] : []);
+      if (node.on && Object.keys(node.on).length && !declaredEvents.length)
+        return reject("CMS_ACTION_UNSUPPORTED", id);
+      let events: PlannedEvents | undefined;
+      try {
+        events = planEvents(
+          node,
+          eventScope,
+          declaredEvents,
+          options.actions ?? [],
+          doc.nodes,
+          prefix,
+          Object.keys(doc.dataSources ?? {}),
+        );
+      } catch (error) {
+        const code =
+          error instanceof Error && /^CMS_(ACTION|EVENT|VALUE)_/.test(error.message)
+            ? error.message
+            : "CMS_ACTION_ARGS_INVALID";
+        return reject(code, id);
       }
       if (node.type === "Slot") {
         if (node.design && Object.keys(node.design).length)
@@ -305,6 +340,10 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
       outputBytes += new TextEncoder().encode(json).length;
       if (outputBytes > 2 * 1024 * 1024) throw new Error("CMS_EXPANSION_LIMIT");
       const serializedProps = JSON.parse(json) as Record<string, unknown>;
+      if (events) {
+        outputBytes += new TextEncoder().encode(JSON.stringify(events)).length;
+        if (outputBytes > 2 * 1024 * 1024) throw new Error("CMS_EXPANSION_LIMIT");
+      }
       return [
         {
           id,
@@ -312,7 +351,8 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           type: node.type,
           props: serializedProps,
           className: atoms.join(" "),
-          children: children(node.children ?? []),
+          children: children(node.children ?? [], eventScope),
+          ...(events === undefined ? {} : { events }),
         },
       ];
     } catch (error) {
@@ -324,7 +364,8 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
     const roots = walk(
       document,
       document.root,
-      localScope(document, options.scope ?? {}),
+      options.documentScope?.(document, localScope(document, options.scope ?? {}), "") ??
+        localScope(document, options.scope ?? {}),
       "",
       { slots: Object.create(null), references: [], ancestors: [] },
       0,
@@ -385,6 +426,15 @@ function validatePrimitive(type: string, props: Record<string, unknown>): void {
   )
     fail();
   if (type === "Divider" && props.orientation !== undefined && props.orientation !== "horizontal")
+    fail();
+  if (
+    type === "Button" &&
+    (typeof props.label !== "string" ||
+      (props.disabled !== undefined && typeof props.disabled !== "boolean") ||
+      (props.variant !== undefined &&
+        !["default", "primary", "secondary", "ghost"].includes(String(props.variant))) ||
+      (props.size !== undefined && !["sm", "md", "lg"].includes(String(props.size))))
+  )
     fail();
   if (type === "Link") {
     const href = linkHref(props.to);

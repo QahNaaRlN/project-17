@@ -5,7 +5,12 @@ Framework-neutral runtime содержит `Image` (CNT-052, SDK-001) и `prepar
 `preparePage(document, {scope, components, natives, tokens, breakpoints})` возвращает
 сериализуемый план `{roots, css, diagnostics}`. React-адаптер находится в `@cms/react`.
 Полные границы и оставшиеся зависимости: [IR/React renderer](../../docs/react-ir-renderer.md).
-Preview bridge, actions, pinned Composed и остальные дизайн-свойства ещё не реализованы.
+`preparePageWithData` загружает источники registry до подготовки плана;
+`loadSource`, `appendPage` поддерживают проверку результатов и пагинацию.
+`executeActions` проверяет аргументы и последовательно исполняет события.
+[Контракт действий и данных](../../docs/runtime-actions-data.md) описывает API,
+ошибки, таймаут, лимиты и границы кэширования. Preview bridge, pinned Composed
+и остальные дизайн-свойства ещё не реализованы.
 
 Получите image model через аутентифицированный
 `GET /delivery/v1/{project}/{env}/asset/{id}/image?fmt=webp&fit=cover&w=640&h=480`.

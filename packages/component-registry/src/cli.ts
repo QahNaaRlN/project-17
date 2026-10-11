@@ -47,18 +47,40 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       options.root,
       options.commit,
     );
-    for (const definition of registry.components) {
-      const ref = sources.refs[definition.name]!;
+    const implementations = [
+      ...registry.components.map((item) => ({
+        name: item.name,
+        key: item.name,
+        implementation: item.component,
+      })),
+      ...registry.actions.map((item) => ({
+        name: item.name,
+        key: "action:" + item.name,
+        implementation: item.handler,
+      })),
+      ...registry.dataSources.map((item) => ({
+        name: item.name,
+        key: "dataSource:" + item.name,
+        implementation: item.loader,
+      })),
+    ];
+    for (const definition of implementations) {
+      const ref = sources.refs[definition.key]!;
       const implementation = (await loader.import(
         pathToFileURL(resolve(options.root, ref.file)).href,
         import.meta.url,
       )) as Record<string, unknown>;
-      if (!ref.export || implementation[ref.export] !== definition.component)
+      if (!ref.export || implementation[ref.export] !== definition.implementation)
         throw new Error("CMS_SOURCE_IMPLEMENTATION_MISMATCH: " + definition.name);
     }
     const manifest = buildManifest(registry, { app: options.app });
-    for (const [name, ref] of Object.entries(sources.refs))
-      manifest.components![name]!.sourceRef = ref;
+    for (const definition of registry.components)
+      manifest.components![definition.name]!.sourceRef = sources.refs[definition.name]!;
+    for (const definition of registry.actions)
+      manifest.actions![definition.name]!.sourceRef = sources.refs["action:" + definition.name]!;
+    for (const definition of registry.dataSources)
+      manifest.dataSources![definition.name]!.sourceRef =
+        sources.refs["dataSource:" + definition.name]!;
     manifest.codeIndex = { hash: await manifestHash(sources.index), uploaded: false };
     if (!validateManifest(manifest).valid) throw new Error("CMS_MANIFEST_INVALID");
     const hash = await manifestHash(manifest);

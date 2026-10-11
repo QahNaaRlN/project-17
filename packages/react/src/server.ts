@@ -1,8 +1,11 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
 import type { IrDocument } from "@cms/ir";
-import { preparePage, type PlanOptions, type RenderPlan } from "@cms/runtime";
-export interface LoadPageOptions extends PlanOptions {
+import { preparePageWithData, type DataPlanOptions, type RenderPlan } from "@cms/runtime";
+import { nativeDefinitions, type Registry } from "@cms/component-registry";
+export interface LoadPageOptions extends DataPlanOptions {
   read?: ReadOptions;
+  registry?: Registry;
+  mode?: "design" | "interact";
 }
 
 /** Server entrypoint: client credentials and preview options never enter the returned plan. */
@@ -48,9 +51,23 @@ export async function loadPage(
       if (components[id]) queue.push(components[id]);
     }
   }
-  return preparePage(page.document, {
+  const plan = await preparePageWithData(page.document, {
+    ...(options.registry
+      ? {
+          natives: nativeDefinitions(options.registry),
+          actions: options.registry.actions,
+          sources: options.registry.dataSources,
+          breakpoints: options.registry.breakpoints,
+        }
+      : {}),
     ...options,
     components,
     scope: { data: page.data, ...options.scope },
+    sourceOptions: {
+      ...options.sourceOptions,
+      ...(options.read?.signal ? { signal: options.read.signal } : {}),
+    },
   });
+  if (options.read?.preview) plan.interactionMode = options.mode ?? "design";
+  return plan;
 }

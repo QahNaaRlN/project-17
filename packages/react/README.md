@@ -37,7 +37,8 @@ Native React components may use hooks. Native SSR exceptions belong to the host'
 sanitized error response, not a per-node boundary. `loadPage` propagates page
 failures, returns null for 404 and diagnoses missing live components. It fetches
 at most 64 component documents per page and preserves preview/signal options.
-It does not fetch entities or run application data loaders. Localized `$local`
+It runs registry data loaders before SSR when `registry` or `sources` are supplied,
+using `sourceOptions.app` for server services. It does not resolve entities automatically. Localized `$local`
 content uses only the explicitly selected locale; there is no implicit fallback.
 
 ## Shared component declarations
@@ -48,3 +49,9 @@ Use `defineReactComponent({name, props, component, validate})` to infer a compon
 `nativeDefinitions(registry)` prepares the server plan and `createReactRegistry(registry)`
 selects stable React implementations. Generate the manifest from this same registry
 via `@cms/component-registry/manifest`. See the storefront registry for a complete example.
+
+`CmsPage` accepts `actions`, browser `app` services, optional `services` overrides
+and `onActionError`. Native props include `events`, whose functions return a promise
+of success. Preview plans default to `interactionMode: "design"`; the host can choose
+`mode: "interact"`. Initial sources are not refetched during hydration.
+See [actions and data](../../docs/runtime-actions-data.md) for validation and pagination.

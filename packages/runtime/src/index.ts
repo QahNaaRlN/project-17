@@ -9,3 +9,21 @@ export type {
   NativeDefinition,
 } from "./plan.js";
 export type { DesignOptions } from "./design.js";
+export { executeActions, planEvents } from "./actions.js";
+export type {
+  ActionContext,
+  ActionError,
+  RuntimeAction,
+  PlannedAction,
+  PlannedEvents,
+} from "./actions.js";
+export { loadSource, loadSources, sourceResult, appendPage } from "./sources.js";
+export type {
+  LoaderContext,
+  RuntimeSource,
+  PageItems,
+  SourceOptions,
+  SourceError,
+} from "./sources.js";
+export { preparePageWithData } from "./data-plan.js";
+export type { DataPlanOptions } from "./data-plan.js";
