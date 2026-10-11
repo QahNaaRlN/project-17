@@ -36,7 +36,7 @@ export function Hero({ values: p, className }: NativeProps) {
   );
 }
 export function Collection({ values: p, children, className }: NativeProps) {
-  const count = (p.products as Product[]).length;
+  const count = (p.products as Product[] | undefined)?.length ?? 0;
   return (
     <section className={`collection ${className}`} id="collection" aria-label="Коллекция">
       <div className="section-heading">
@@ -50,11 +50,16 @@ export function Collection({ values: p, children, className }: NativeProps) {
     </section>
   );
 }
-export function Item({ values: p, className }: NativeProps) {
+export function Item({ values: p, className, events }: NativeProps) {
   const { images } = useContext(StoreRenderContext);
   const product = p.product as Product;
   return (
-    <ProductCard product={product} image={images[`product:${product.id}`]} className={className} />
+    <ProductCard
+      product={product}
+      image={images[`product:${product.id}`]}
+      className={className}
+      {...(events?.favorite ? { onFavorite: events.favorite } : {})}
+    />
   );
 }
 export function Empty({ className }: NativeProps) {

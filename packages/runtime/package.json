@@ -20,6 +20,7 @@
     "test:mutation": "stryker run"
   },
   "dependencies": {
+    "@cms/manifest": "workspace:*",
     "@cms/core": "workspace:*",
     "@cms/ir": "workspace:*"
   },

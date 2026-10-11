@@ -4,6 +4,7 @@ import type { StoreModel } from "../src/model.js";
 import { vi } from "vitest";
 import { preparePage } from "@cms/runtime";
 import { storeDocument, storeComposition, definitionsFor } from "../src/composition.js";
+import { registry } from "../src/registry.js";
 
 export const id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11";
 export const now = Date.parse("2030-01-01T00:00:00Z");
@@ -25,7 +26,11 @@ export function model(): StoreModel {
     get plan() {
       return preparePage(storeComposition(storeDocument(this.catalog), this.catalog!), {
         natives: definitionsFor(this.catalog!),
-        scope: { context: { store: this.catalog } },
+        scope: {
+          context: { store: this.catalog },
+          data: { featured: { items: this.catalog!.products } },
+        },
+        actions: registry.actions,
       });
     },
   };

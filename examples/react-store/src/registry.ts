@@ -1,19 +1,16 @@
-import { createRegistry, nativeDefinitions, t } from "@cms/component-registry";
+import {
+  createRegistry,
+  nativeDefinitions,
+  t,
+  defineAction,
+  defineDataSource,
+} from "@cms/component-registry";
 import { createReactRegistry, defineReactComponent } from "@cms/react";
 import { Storefront, Hero, Collection, Item, Empty, About } from "./sections.js";
+import { productField as product, productsField as products } from "./contracts.js";
+import { favoriteProduct, loadProducts } from "./operations.js";
 const text = t.text().content().required().max(2000);
 const string = t.string().required().max(2000);
-const product = t.object({
-  id: string,
-  title: string,
-  description: string,
-  material: string,
-  category: string,
-  tone: t.enum(["sand", "sage", "clay"]).required(),
-  priceRub: t.number().int().min(0).max(1_000_000_000),
-  asset: t.asset("image"),
-});
-const products = t.list(product).required().max(64);
 const fields = {
   brand: string,
   title: string,
@@ -31,6 +28,21 @@ const strings = (values: Record<string, unknown>) =>
 export const registry = createRegistry({
   breakpoints: { sm: 640, md: 768, lg: 1024 },
   tokens: {},
+  actions: [
+    defineAction({
+      name: "store.favorite",
+      args: { id: t.string().required().max(64), title: t.string().required().max(200) },
+      handler: favoriteProduct,
+    }),
+  ],
+  dataSources: [
+    defineDataSource({
+      name: "store.products",
+      params: { limit: t.number().int().min(1).max(64).default(64) },
+      result: t.object({ items: products }),
+      loader: loadProducts,
+    }),
+  ],
   components: [
     defineReactComponent({
       name: "Storefront",
@@ -56,7 +68,7 @@ export const registry = createRegistry({
       origin: "native",
       container: true,
       component: Collection,
-      props: { title: text, products },
+      props: { title: text, products: t.list(product).max(64) },
     }),
     defineReactComponent({
       name: "StoreProduct",
@@ -64,6 +76,7 @@ export const registry = createRegistry({
       container: false,
       component: Item,
       props: { product: product.required() },
+      events: { favorite: {} },
     }),
     defineReactComponent({
       name: "StoreEmpty",

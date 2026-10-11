@@ -1,5 +1,5 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
-import { Image, preparePage } from "@cms/runtime";
+import { Image, preparePageWithData } from "@cms/runtime";
 import { registry } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
@@ -15,10 +15,13 @@ export async function loadStore(
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {} };
-    model.plan = preparePage(storeComposition(page.document, catalog), {
+    model.plan = await preparePageWithData(storeComposition(page.document, catalog), {
       natives: definitionsFor(catalog),
       scope: { context: { locale: "ru", store: catalog } },
       breakpoints: registry.breakpoints,
+      actions: registry.actions,
+      sources: registry.dataSources,
+      sourceOptions: { app: { catalog }, ...(options.signal ? { signal: options.signal } : {}) },
     });
     if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
     const refs = [

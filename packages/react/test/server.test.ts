@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import type { CmsClient, PageResponse, ReadOptions } from "@cms/core";
 import type { IrDocument } from "@cms/ir";
 import { loadPage } from "../src/server.js";
+import { createRegistry, defineAction, defineDataSource, t } from "@cms/component-registry";
 const id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11";
 function component(): IrDocument {
   return {
@@ -36,6 +37,67 @@ function cms(): CmsClient {
     clearCache: vi.fn(),
   };
 }
+it("MF-010/SDK-014/033: loadPage загружает данные до SSR и передаёт режим preview без секретов", async () => {
+  const client = cms(),
+    response = page();
+  const loader = vi.fn(() => ["one", "two"]),
+    handler = vi.fn();
+  const registry = createRegistry({
+    components: [],
+    actions: [defineAction({ name: "test.select", args: { id: t.string().required() }, handler })],
+    dataSources: [
+      defineDataSource({ name: "test.items", params: {}, result: t.list(t.string()), loader }),
+    ],
+    breakpoints: { sm: 640 },
+  });
+  response.document = {
+    irVersion: "1.0",
+    kind: "page",
+    root: "repeat",
+    dataSources: { featured: { source: "test.items" } },
+    nodes: {
+      repeat: {
+        id: "repeat",
+        type: "Repeat",
+        bindings: { items: "$data.featured" },
+        children: ["button"],
+      },
+      button: {
+        id: "button",
+        type: "Button",
+        bindings: { label: "$item" },
+        on: { click: { action: "test.select", args: { id: "$item" } } },
+      },
+    },
+  };
+  vi.mocked(client.getPage).mockResolvedValue(response);
+  const read = {
+    preview: { token: "private-preview", changesetId: id },
+    signal: new AbortController().signal,
+  };
+  const plan = await loadPage(client, "/a", {
+    registry,
+    read,
+    sourceOptions: { app: { secret: "private-loader-key" } },
+  });
+  expect(plan!.roots.map((node) => node.props.label)).toEqual(["one", "two"]);
+  expect(plan!.roots.map((node) => node.events!.click![0]!.args.id)).toEqual(["one", "two"]);
+  expect(plan!.interactionMode).toBe("design");
+  expect(plan!.diagnostics).toEqual([]);
+  expect(loader).toHaveBeenCalledOnce();
+  expect(loader).toHaveBeenCalledWith(
+    {},
+    expect.objectContaining({
+      app: { secret: "private-loader-key" },
+      signal: expect.any(AbortSignal),
+    }),
+  );
+  expect(handler).not.toHaveBeenCalled();
+  expect(JSON.stringify(plan)).not.toMatch(/private-preview|private-loader-key|loader|handler/);
+  expect(
+    (await loadPage(client, "/a", { registry, read, mode: "interact" }))!.interactionMode,
+  ).toBe("interact");
+});
 it("loads live documents with the same preview scope without serializing credentials", async () => {
   const client = cms();
   const read: ReadOptions = {

@@ -32,10 +32,12 @@ export function ProductCard({
   product,
   image,
   className = "",
+  onFavorite,
 }: {
   product: Product;
   image?: ImageProps | null | undefined;
   className?: string;
+  onFavorite?: () => Promise<boolean>;
 }) {
   const details = (
     <>
@@ -71,6 +73,15 @@ export function ProductCard({
           >
             {details}
           </ProductDialog>
+          {onFavorite && (
+            <Button
+              className="button-ghost favorite-button"
+              aria-label={`В избранное: ${product.title}`}
+              onClick={() => void onFavorite()}
+            >
+              В избранное
+            </Button>
+          )}
         </div>
       </div>
     </article>

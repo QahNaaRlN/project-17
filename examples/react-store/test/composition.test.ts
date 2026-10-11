@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { preparePage } from "@cms/runtime";
+import { preparePageWithData } from "@cms/runtime";
 import { storeComposition, definitionsFor } from "../src/composition.js";
 import { loadStore } from "../src/load.js";
 import { cms, page } from "./fixtures.js";
@@ -32,14 +32,17 @@ it("MF-010/STORE-001: storefront manifest, plan and React consume one registry",
     fields: { products: { type: "list" } },
   });
 });
-it("DS-030: native components apply generated classes, including the root wrapper", () => {
+it("DS-030: native components apply generated classes, including the root wrapper", async () => {
   const initial = model();
   const response = page(initial.catalog);
   for (const id of ["n_store", "n_product", "n_empty"])
     response.document.nodes[id]!.design = { padding: { raw: 12 } };
-  const plan = preparePage(storeComposition(response.document, initial.catalog!), {
+  const plan = await preparePageWithData(storeComposition(response.document, initial.catalog!), {
     natives: definitionsFor(initial.catalog!),
     scope: { context: { store: initial.catalog } },
+    actions: registry.actions,
+    sources: registry.dataSources,
+    sourceOptions: { app: { catalog: initial.catalog } },
   });
   expect(plan.diagnostics).toEqual([]);
   const html = renderToString(createElement(StoreApp, { initialModel: { ...initial, plan } }));
@@ -73,14 +76,17 @@ it("SDK-013: invalid native bindings reject the example composition with a sanit
     });
   }
 });
-it("STORE-001: reads the historical one-node draft without mutating it", () => {
+it("STORE-001: reads the historical one-node draft without mutating it", async () => {
   const response = page();
   delete response.document.nodes.n_store!.children;
   const before = JSON.stringify(response.document);
   const doc = storeComposition(response.document, catalog);
-  const plan = preparePage(doc, {
+  const plan = await preparePageWithData(doc, {
     natives: definitionsFor(catalog),
     scope: { context: { store: catalog } },
+    actions: registry.actions,
+    sources: registry.dataSources,
+    sourceOptions: { app: { catalog } },
   });
   expect(plan.diagnostics).toEqual([]);
   expect(plan.roots[0]!.children.map((n) => n.type)).toEqual([

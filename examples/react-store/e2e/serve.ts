@@ -77,6 +77,14 @@ const fixture = createServer(async (req, res) => {
   delete value.products[0]!.priceRub;
   if (mode === "empty") value.products = [];
   const document = storeDocument(value);
+  if (mode === "sourceerror") document.dataSources!.featured!.source = "store.unavailable";
+  if (mode === "actiontitle")
+    document.nodes.n_product!.on = {
+      favorite: {
+        action: "store.favorite",
+        args: { id: "$item.id", title: { lit: "Имя из документа CMS" } },
+      },
+    };
   if (mode === "reorder") document.nodes.n_store!.children = ["n_about", "n_collection", "n_hero"];
   if (mode === "hideabout")
     document.nodes.n_about!.when = { op: "eq", args: [{ lit: 1 }, { lit: 2 }] };

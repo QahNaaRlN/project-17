@@ -20,3 +20,6 @@ export type {
 } from "./types.js";
 export { t, Field, SlotField } from "./dsl.js";
 export type { FieldsInput, ResolveFields, ResolveField, SlotsInput } from "./dsl.js";
+export { defineAction, defineDataSource, actionContract, sourceContract } from "./operations.js";
+export type { ActionDefinition, DataSourceDefinition } from "./operations.js";
+export type { ActionContext, LoaderContext, PageItems } from "@cms/runtime";

@@ -8,7 +8,10 @@ signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cm
 без кэша. Теперь реализованы безопасные привязки/условия, форматтеры,
 план IR со стилями, Repeat/Composed/Slot и React-адаптер.
 Единый native component registry генерирует manifest и runtime-описания;
-полный CLI, действия, загрузчики и preview bridge остаются следующими пакетами.
+CLI/DSL/sourceRef, действия registry и загрузчики до SSR теперь реализованы.
+Preview bridge остаётся следующим пакетом; streaming/selective hydration и полная
+изоляция native-ошибок ещё не реализованы.
+[Действия и данные](../runtime-actions-data.md) фиксирует текущий срез SDK-014/033.
 [Границы renderer](../react-ir-renderer.md), [границы registry](../component-registry.md).
 [README runtime](../../packages/runtime/README.md),
 [выдача изображений](../asset-delivery-images.md),

@@ -213,6 +213,10 @@ importers:
         specifier: workspace:*
         version: link:../ir
 
+      '@cms/manifest':
+        specifier: workspace:*
+        version: link:../manifest
+
   packages/sdk-core:
     dependencies:
       '@cms/ir':

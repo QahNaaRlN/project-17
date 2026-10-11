@@ -8,6 +8,40 @@ async function control(request: APIRequestContext, mode: string, title?: string)
 test.beforeEach(async ({ request }) => {
   await control(request, "ready");
 });
+test("IR-050/SDK-014: источник создаёт карточки, CMS управляет событием, Enter исполняет действие", async ({
+  page,
+  request,
+}) => {
+  await control(request, "actiontitle");
+  const response = await request.get("/");
+  expect(await response.text()).toContain("Ваза «Линия»");
+  await page.goto("/");
+  await expect(page.locator(".product-card")).toHaveCount(3);
+  const favorite = page.getByRole("button", { name: "В избранное: Ваза «Линия»" });
+  await favorite.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status")).toHaveText("«Имя из документа CMS» добавлен в избранное");
+  await favorite.click();
+  await expect(page.getByRole("status")).toHaveText("«Имя из документа CMS» уже в избранном");
+  await control(request, "ready");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await page.getByRole("button", { name: "В избранное: Чаша «Круг»" }).click();
+  await expect(page.getByRole("status")).toHaveText("«Чаша «Круг»» добавлен в избранное");
+});
+test("SDK-014: ошибка загрузчика даёт empty и сохраняет остальные разделы, повтор восстанавливает каталог", async ({
+  page,
+  request,
+}) => {
+  await control(request, "sourceerror");
+  await page.goto("/");
+  await expect(page.getByText("Новые вещи скоро появятся")).toBeVisible();
+  await expect(page.locator(".product-card")).toHaveCount(0);
+  await expect(page.locator(".hero")).toBeVisible();
+  await expect(page.locator(".about")).toBeVisible();
+  await control(request, "ready");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await expect(page.locator(".product-card")).toHaveCount(3);
+});
 test("MF-005: running application serves the CLI artifact hash", async ({ request }) => {
   const response = await request.get("/.well-known/cms-manifest-hash");
   expect(response.status()).toBe(200);

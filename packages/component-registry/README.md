@@ -84,5 +84,7 @@ may produce a schema candidate requiring the existing CMS migration/review flow.
 The server has no code-index upload API: `uploaded: false` remains explicit.
 The executable prints only known error codes, never exception/HTTP response bodies.
 `@cms/component-registry/cli` exposes build/push APIs and detailed safe compiler
-diagnostics. Actions and loaders remain separate packages. See
+diagnostics. `defineAction` and `defineDataSource` use the same DSL, infer handler
+arguments and loader results, and participate in manifest/source-index generation.
+Handler/loader code is never serialized. See [actions and sources](../../docs/runtime-actions-data.md) and
 [implemented scope](../../docs/registry-dsl-cli.md).

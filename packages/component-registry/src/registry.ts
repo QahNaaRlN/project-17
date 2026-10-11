@@ -4,6 +4,12 @@ import type { NativeDefinition } from "@cms/runtime";
 import type { SchemaFields, ReadonlyJson } from "./types.js";
 import type { InferProps } from "./types.js";
 import { fields, SlotField, type FieldsInput, type ResolveFields, type SlotsInput } from "./dsl.js";
+import {
+  defineAction,
+  defineDataSource,
+  type ActionDefinition,
+  type DataSourceDefinition,
+} from "./operations.js";
 
 export type ComponentContract = Omit<Component, "props" | "sourceRef"> & { props: Fields };
 export type ComponentDefinition<P extends SchemaFields = SchemaFields, I = unknown> = Omit<
@@ -14,6 +20,7 @@ export type ComponentDefinition<P extends SchemaFields = SchemaFields, I = unkno
   props: P;
   component: I;
   validate?: (values: Record<string, unknown>) => boolean;
+  provide?: (values: Record<string, unknown>) => Record<string, unknown>;
 };
 export type DefinitionInput<P extends FieldsInput, I> = Omit<
   ComponentDefinition<ResolveFields<P>, I>,
@@ -21,6 +28,12 @@ export type DefinitionInput<P extends FieldsInput, I> = Omit<
 > & { props: P; provides?: FieldsInput; slots?: SlotsInput };
 export interface RegistryOptions {
   components: readonly ComponentDefinition[];
+  actions?: readonly (Omit<ActionDefinition, "handler"> & {
+    handler: (args: never, context: never) => unknown;
+  })[];
+  dataSources?: readonly (Omit<DataSourceDefinition, "loader"> & {
+    loader: (params: never, context: never) => unknown;
+  })[];
   breakpoints?: Manifest["breakpoints"];
   tokens?: Manifest["tokens"];
   icons?: string[];
@@ -29,6 +42,8 @@ export interface RegistryOptions {
 }
 export interface Registry {
   readonly components: readonly ComponentDefinition[];
+  readonly actions: readonly ActionDefinition[];
+  readonly dataSources: readonly DataSourceDefinition[];
   readonly breakpoints: Manifest["breakpoints"];
   readonly tokens: Manifest["tokens"];
   readonly icons: string[];
@@ -86,6 +101,7 @@ export function registerComponent<const P extends FieldsInput, I>(
     name: definition.name,
     component: definition.component,
     ...(definition.validate === undefined ? {} : { validate: definition.validate }),
+    ...(definition.provide === undefined ? {} : { provide: definition.provide }),
   }) as unknown as ComponentDefinition<ResolveFields<P>, I>;
 }
 export function defineComponent<const P extends FieldsInput, R>(
@@ -97,8 +113,19 @@ export function createRegistry(options: RegistryOptions): Registry {
   const components = options.components.map((component) => registerComponent(component));
   if (new Set(components.map((component) => component.name)).size !== components.length)
     throw new Error("CMS_REGISTRY_NAME_DUPLICATE");
+  const actions = (options.actions ?? []).map((item) =>
+    defineAction(item as unknown as ActionDefinition),
+  );
+  const dataSources = (options.dataSources ?? []).map((item) =>
+    defineDataSource(item as unknown as DataSourceDefinition),
+  );
+  for (const items of [actions, dataSources])
+    if (new Set(items.map((item) => item.name)).size !== items.length)
+      throw new Error("CMS_REGISTRY_NAME_DUPLICATE");
   return Object.freeze({
     components: Object.freeze(components),
+    actions: Object.freeze(actions),
+    dataSources: Object.freeze(dataSources),
     breakpoints: snapshot(options.breakpoints ?? {}),
     tokens: snapshot(options.tokens ?? {}),
     icons: snapshot(options.icons ?? []),
@@ -120,6 +147,8 @@ export function nativeDefinitions(registry: Registry): Record<string, NativeDefi
         ),
         ...(definition.container === undefined ? {} : { container: definition.container }),
         ...(definition.validate === undefined ? {} : { validate: definition.validate }),
+        ...(definition.events === undefined ? {} : { events: Object.keys(definition.events) }),
+        ...(definition.provide === undefined ? {} : { provide: definition.provide }),
       },
     ]),
   );

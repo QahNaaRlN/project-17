@@ -1,5 +1,6 @@
 import { canonicalJson, manifestHash, validateManifest, type Manifest } from "@cms/manifest";
 import { componentContract, type Registry } from "./registry.js";
+import { actionContract, sourceContract } from "./operations.js";
 
 export interface ManifestOptions {
   app: Manifest["app"];
@@ -17,6 +18,20 @@ export function buildManifest(registry: Registry, options: ManifestOptions): Man
       icons: registry.icons,
       schemas: registry.schemas,
       capabilities: registry.capabilities,
+      ...(registry.actions.length
+        ? {
+            actions: Object.fromEntries(
+              registry.actions.map((item) => [item.name, actionContract(item)]),
+            ),
+          }
+        : {}),
+      ...(registry.dataSources.length
+        ? {
+            dataSources: Object.fromEntries(
+              registry.dataSources.map((item) => [item.name, sourceContract(item)]),
+            ),
+          }
+        : {}),
       components: Object.fromEntries(
         registry.components.map((definition) => [definition.name, componentContract(definition)]),
       ),

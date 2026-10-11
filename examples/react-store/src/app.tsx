@@ -3,7 +3,7 @@ import { Menu, RefreshCw, X } from "lucide-react";
 import type { StoreModel } from "./model.js";
 import { CmsPage } from "@cms/react";
 import { StoreRenderContext } from "./sections.js";
-import { storeRegistry } from "./registry.js";
+import { storeRegistry, registry } from "./registry.js";
 export { CatalogImage, ProductCard } from "./cards.js";
 import { Button } from "./ui/button.js";
 
@@ -14,6 +14,9 @@ export function StoreApp({ initialModel }: AppProps) {
   const [model, setModel] = useState(initialModel);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [interact, setInteract] = useState(!initialModel.preview);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [actionNotice, setActionNotice] = useState("");
   const request = useRef<AbortController | null>(null);
   const alive = useRef(true);
   async function refresh(showLoading = true) {
@@ -58,6 +61,15 @@ export function StoreApp({ initialModel }: AppProps) {
         <span>Project 17 / Демонстрационная витрина</span>
         <div>
           <span className="mode-label">{model.preview ? "Черновик" : "Опубликовано"}</span>
+          {model.preview && (
+            <Button
+              className="button-ghost interaction-button"
+              aria-pressed={interact}
+              onClick={() => setInteract(!interact)}
+            >
+              {interact ? "Режим дизайна" : "Включить взаимодействие"}
+            </Button>
+          )}
           <Button
             className="button-ghost refresh-button"
             disabled={busy}
@@ -100,6 +112,11 @@ export function StoreApp({ initialModel }: AppProps) {
         </nav>
       )}
       <main id="home" aria-busy={busy}>
+        {actionNotice && (
+          <p className="action-notice" role="status">
+            {actionNotice}
+          </p>
+        )}
         {busy ? (
           <section className="loading-view" role="status" aria-label="Загрузка контента">
             <span className="eyebrow">Загружаем страницу</span>
@@ -112,7 +129,26 @@ export function StoreApp({ initialModel }: AppProps) {
           </section>
         ) : model.status === "ready" && c ? (
           <StoreRenderContext.Provider value={model}>
-            {model.plan && <CmsPage plan={model.plan} registry={storeRegistry} />}
+            {model.plan && (
+              <CmsPage
+                plan={model.plan}
+                registry={storeRegistry}
+                actions={registry.actions}
+                mode={interact ? "interact" : "design"}
+                app={{
+                  favorite(id: string, title: string) {
+                    const already = favorites.includes(id);
+                    setFavorites((items) => (items.includes(id) ? items : [...items, id]));
+                    setActionNotice(
+                      already ? `«${title}» уже в избранном` : `«${title}» добавлен в избранное`,
+                    );
+                  },
+                }}
+                onActionError={() =>
+                  setActionNotice("Не получилось выполнить действие. Попробуйте снова.")
+                }
+              />
+            )}
           </StoreRenderContext.Provider>
         ) : (
           <section className="error-state" role={model.status === "error" ? "alert" : "status"}>
