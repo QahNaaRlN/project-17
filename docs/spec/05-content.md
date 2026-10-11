@@ -164,6 +164,9 @@ complete-asset-upload {assetId}
 
 ### 6.2. Трансформации изображений
 
+Gateway, подписанные image models, cache/purge и адаптивный `@cms/runtime Image`
+реализованы в [пакете выдачи изображений](../asset-delivery-images.md).
+
 | ID | Требование |
 |---|---|
 | CNT-050 | Изображения отдаются через `/assets/v1/{env}/{assetId}/{fileHash}?w=&h=&fit=&fmt=` за CDN. Обработку выполняет imgproxy; URL подписываются, чтобы ограничить множество вариантов. |
@@ -176,7 +179,9 @@ complete-asset-upload {assetId}
 unique/singleton, L2-ссылки, метаданные ассетов, HTTP и Delivery чтение подключены
 ([граница и API](../entities-assets.md)). Upload pipeline CNT-041/042 и приватное
 S3/MinIO подключены ([обработка и ограничения](../asset-upload-processing.md)).
-Превью SVG, метаданные/превью видео, imgproxy CNT-050–052,
+Gateway/imgproxy CNT-050–051 и первый runtime Image CNT-052 подключены
+([контракт и конфигурация](../asset-delivery-images.md)); внешний CDN требует
+операторской настройки. Превью SVG при загрузке, метаданные/превью видео,
 upcast/материализация CNT-023 и locale fallback CNT-031 ещё не реализованы.
 Старые версии требуют явного исправления в CS; новые относительно окружения
 отклоняются с `SCHEMA_VERSION_AHEAD`. Даункаст не выполняется.

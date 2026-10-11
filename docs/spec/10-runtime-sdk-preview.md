@@ -2,6 +2,11 @@
 
 ## 1. Пакеты
 
+Первый framework-neutral `@cms/runtime` реализован для Image CNT-052:
+signed variants → src/srcset/sizes и focalPoint. Общий renderer, `@cms/core`,
+адаптеры и preview bridge ещё не подключены. [README runtime](../../packages/runtime/README.md),
+[выдача изображений](../asset-delivery-images.md).
+
 | Пакет | Каталог | Ответственность | MVP |
 |---|---|---|---|
 | `@cms/ir` | `packages/ir` | JSON Schema IR, сгенерированные типы TS, conformance-фикстуры | да |

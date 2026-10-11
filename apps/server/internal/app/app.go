@@ -19,6 +19,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
+	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
@@ -99,6 +100,14 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		}
 	}
 	var purger jobs.Purger = jobs.LogPurger{Log: log}
+	var images *imagedelivery.Service
+	if cfg.Images.PublicURL != "" {
+		images, err = imagedelivery.New(cfg.Images)
+		if err != nil {
+			return err
+		}
+		images.Pool = pool
+	}
 	if cfg.CDNPurgeURL != "" {
 		purger = jobs.HTTPPurger{URL: cfg.CDNPurgeURL, Token: cfg.CDNPurgeToken}
 	}
@@ -128,7 +137,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	assetService.Register(bus)
 
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService}),
+		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

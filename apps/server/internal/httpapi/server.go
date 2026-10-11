@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
@@ -39,6 +40,7 @@ type Deps struct {
 	Log     *slog.Logger
 	Version string
 	Assets  *assets.Service
+	Images  *imagedelivery.Service
 }
 
 // NewRouter собирает маршруты сервера.
@@ -63,6 +65,7 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	r.Route("/delivery/v1/{project}/{env}", deliveryRoutes(d))
+	r.Get("/assets/v1/{env}/{id}/{hash}", imageHandler(d))
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
