@@ -198,7 +198,7 @@ func OperationRight(opType string) (auth.Right, bool) {
 		return auth.ContentWrite, true
 	case EntityDelete, EntityRestore:
 		return auth.ContentDelete, true
-	case AssetUpdateMeta:
+	case AssetCreate, AssetUpdateMeta, AssetReplaceFile:
 		return auth.AssetWrite, true
 	}
 	if opType == schemaflow.Apply {
@@ -283,8 +283,8 @@ func validateApply(p applyPayload) error {
 			if op.Target != nil || op.SchemaTarget == nil || op.SchemaTarget.Kind != "schema" || op.SchemaTarget.SchemaName == "" {
 				return commandbus.Validation(map[string]string{field + ".target": "нужна цель {kind: schema, schemaName}"})
 			}
-		} else if op.SchemaTarget != nil || (op.Type == DocumentCreate || op.Type == EntityCreate) != (op.Target == nil) {
-			return commandbus.Validation(map[string]string{field + ".target": "target обязателен для всех операций, кроме document.create, и запрещён для неё"})
+		} else if op.SchemaTarget != nil || (op.Type == DocumentCreate || op.Type == EntityCreate || op.Type == AssetCreate) != (op.Target == nil) {
+			return commandbus.Validation(map[string]string{field + ".target": "target обязателен для изменения объекта и запрещён для операций создания"})
 		}
 		if len(op.Payload) == 0 {
 			return commandbus.Validation(map[string]string{field + ".payload": "обязательно"})
@@ -467,6 +467,8 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 			rec, err = s.applySchema(in)
 		} else if in.Type == EntityCreate {
 			rec, err = s.createEntity(in)
+		} else if in.Type == AssetCreate {
+			rec, err = s.createAsset(in)
 		} else if isContentOperation(in.Type) {
 			rec, err = s.applyContent(*in.Target, ops.Op{Type: in.Type, Payload: in.Payload})
 		} else if in.Type == DocumentCreate {

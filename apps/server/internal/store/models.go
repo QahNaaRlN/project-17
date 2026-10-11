@@ -46,6 +46,37 @@ type Approval struct {
 	InvalidatedAt *time.Time `json:"invalidatedAt"`
 }
 
+type AssetFile struct {
+	ProjectID  uuid.UUID `json:"projectId"`
+	Sha256     []byte    `json:"sha256"`
+	StorageKey string    `json:"storageKey"`
+	MimeType   string    `json:"mimeType"`
+	SizeBytes  int64     `json:"sizeBytes"`
+	Width      *int32    `json:"width"`
+	Height     *int32    `json:"height"`
+	DurationMs *int32    `json:"durationMs"`
+	Blurhash   *string   `json:"blurhash"`
+	Status     string    `json:"status"`
+	PreviewKey *string   `json:"previewKey"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type AssetUpload struct {
+	ID           uuid.UUID `json:"id"`
+	ProjectID    uuid.UUID `json:"projectId"`
+	ActorID      uuid.UUID `json:"actorId"`
+	Filename     string    `json:"filename"`
+	MimeType     string    `json:"mimeType"`
+	SizeBytes    int64     `json:"sizeBytes"`
+	SourceSha256 []byte    `json:"sourceSha256"`
+	StorageKey   string    `json:"storageKey"`
+	Status       string    `json:"status"`
+	FileSha256   []byte    `json:"fileSha256"`
+	ErrorCode    *string   `json:"errorCode"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
 type Changeset struct {
 	ID           uuid.UUID  `json:"id"`
 	ProjectID    uuid.UUID  `json:"projectId"`

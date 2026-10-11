@@ -172,7 +172,8 @@ Authorization: Bearer cms_pub_…
 - Реализованы `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`. Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
 - Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
 - Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` вида `{project}:{env}:{objectId}`; `/page` и `/routes` зависят также от `{project}:{env}:routes`. Ключи включают проект и окружение, чтобы purge одного окружения не задевал другие; после публикации эти ключи сбрасываются задачей `cdn_purge` (06 §7.3.1). На совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
-- Пока не реализованы: локали и fallback (API-032), сущности и ассеты, кэш ответов на origin (Redis, NFR-002 — с нагрузочными тестами M6), лимиты запросов.
+- Чтение сущностей и метаданных ассетов подключено; загрузка и обработка файлов описаны в [пакете загрузки](../asset-upload-processing.md).
+- Пока не реализованы: локали и fallback (API-032), бинарная выдача ассетов CNT-050–052, кэш ответов на origin (Redis, NFR-002 — с нагрузочными тестами M6), лимиты запросов.
 
 ### 5.3. Черновой режим
 
@@ -234,6 +235,11 @@ Authorization: Preview eyJhbGciOi…
 | Delivery API (origin) | 500 запросов/с на ключ доставки |
 
 ### Подключённое чтение сущностей и метаданных ассетов
+
+`GET /api/v1/asset-uploads/{id}` требует `asset.write` и возвращает статус
+собственной загрузки актора в проекте: pending/processing/ready/rejected,
+expiresAt, fileHash готового файла и errorCode отклонения. Запись файла в
+Change Set остаётся отдельной операцией; см. [пакет загрузки](../asset-upload-processing.md).
 
 `GET /api/v1/entities/{id}` и `/assets/{id}` (content.read) принимают `environment`
 или `changesetId`; без окружения читается head. Delivery endpoints —

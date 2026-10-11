@@ -4,7 +4,7 @@ WORKDIR /src
 COPY . .
 ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath \
+    CGO_ENABLED=0 go build -tags nodynamic -trimpath \
       -ldflags "-s -w -X github.com/qahnaarln/project-17/apps/server/internal/app.Version=${VERSION}" \
       -o /out/cms ./cmd/cms
 

@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -219,6 +220,22 @@ func (c *Context) validateContent(ctx context.Context, d Document, o store.Objec
 		return ir.Result{}, err
 	}
 	if o.Kind == "asset" {
+		if data["managedFile"] == true {
+			hash, err := hex.DecodeString(fmt.Sprint(data["fileHash"]))
+			if err != nil || len(hash) != 32 {
+				return problem("CONTENT_ASSET_NOT_READY", "/fileHash", "", nil), nil
+			}
+			f, err := c.q.ReadyAssetFile(ctx, store.ReadyAssetFileParams{ProjectID: c.ProjectID, Sha256: hash})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return problem("CONTENT_ASSET_NOT_READY", "/fileHash", "", nil), nil
+			}
+			if err != nil {
+				return ir.Result{}, err
+			}
+			if data["mimeType"] != f.MimeType || fmt.Sprint(data["size"]) != fmt.Sprint(f.SizeBytes) {
+				return problem("CONTENT_ASSET_FILE_MISMATCH", "/fileHash", "", nil), nil
+			}
+		}
 		metadata := map[string]any{}
 		for _, key := range []string{"alt", "title", "focalPoint", "tags"} {
 			if value, ok := data[key]; ok {

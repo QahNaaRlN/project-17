@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/assets"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
@@ -37,6 +38,7 @@ type Deps struct {
 	Bus     *commandbus.Bus
 	Log     *slog.Logger
 	Version string
+	Assets  *assets.Service
 }
 
 // NewRouter собирает маршруты сервера.
@@ -65,6 +67,18 @@ func NewRouter(d Deps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
 		r.Post("/commands/{name}", commandHandler(d))
+		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			s := d.Assets
+			if s == nil {
+				s = &assets.Service{Pool: d.Pool}
+			}
+			u, err := s.Get(r.Context(), actorFrom(r.Context()), id)
+			respond(w, r, d, u, err)
+		})
 		r.Get("/manifest", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.DesignRead); err != nil {

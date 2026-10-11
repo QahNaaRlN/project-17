@@ -6,6 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/assets"
+	"github.com/riverqueue/river"
 	"io"
 	"log/slog"
 	"net"
@@ -89,11 +91,18 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	}
 	defer pool.Close()
 
+	assetService := &assets.Service{Pool: pool}
+	if cfg.S3Endpoint != "" {
+		assetService.Storage, err = assets.NewS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Secure)
+		if err != nil {
+			return err
+		}
+	}
 	var purger jobs.Purger = jobs.LogPurger{Log: log}
 	if cfg.CDNPurgeURL != "" {
 		purger = jobs.HTTPPurger{URL: cfg.CDNPurgeURL, Token: cfg.CDNPurgeToken}
 	}
-	queue, err := jobs.NewProcessor(pool, purger, log)
+	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) })
 	if err != nil {
 		return err
 	}
@@ -116,9 +125,10 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	publishing.Register(bus)
 	delivery.Register(bus)
 	manifestregistry.Register(bus)
+	assetService.Register(bus)
 
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version}),
+		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

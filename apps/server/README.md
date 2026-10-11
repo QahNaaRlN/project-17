@@ -19,6 +19,20 @@
 | `CMS_SHUTDOWN_TIMEOUT` | `15s` | Время на завершение запросов и фоновых задач при остановке |
 | `CMS_CDN_PURGE_URL` | — | Вебхук purge CDN: `POST {"keys": [...]}`; не задан — purge только пишется в журнал |
 | `CMS_CDN_PURGE_TOKEN` | — | Токен вебхука (`Authorization: Bearer`) |
+| `CMS_S3_ENDPOINT` | — | S3/MinIO host:port без схемы и пути; bucket закрыт |
+| `CMS_S3_ACCESS_KEY` / `CMS_S3_SECRET_KEY` | — | Ключи сервера для bucket (задаются вместе с endpoint и bucket) |
+| `CMS_S3_BUCKET` | — | Приватный bucket файлов и staging загрузок |
+| `CMS_S3_SECURE` | `true` | TLS; `false` только для локального MinIO |
+
+Endpoint должен быть доступен и серверу, и клиенту: его host входит в подпись
+pre-signed URL, заменять host после подписания нельзя. Для контейнеров используйте
+общий DNS/reverse proxy. CORS разрешает PUT с домена Studio; lifecycle удаляет
+только префикс `uploads/` через сутки. Адресуемые SHA-256 файлы имеют префикс
+`projects/` и этим правилом не удаляются. Без S3 конфигурации остальной сервер
+работает, команды загрузки возвращают `ASSET_STORAGE_UNAVAILABLE`.
+
+Контракт загрузки, готовности, `asset.create` / `asset.replaceFile`, ограничения
+обработки и следующий пакет описаны в [загрузке ассетов](../../docs/asset-upload-processing.md).
 
 ## Быстрый старт
 
@@ -127,6 +141,12 @@ pnpm --filter @cms/server test   # тесты с -race и порогом пок�
 ```
 
 Интеграционным тестам нужен PostgreSQL: либо `CMS_TEST_DATABASE_URL` (любая база на сервере; тесты создают и удаляют свои базы), либо Docker — тогда тесты сами поднимут контейнер `postgres:16-alpine` из зеркала `mirror.gcr.io` (testcontainers). Образы берутся из зеркала Google, потому что Docker Hub ограничивает анонимные загрузки с раннеров CI.
+
+Тест приватного S3 требует Docker и собирает MinIO из официальных исходников,
+закреплённых на коммите `0d7408fc9969caf07de6a8c3a84f9fbb10a6739e`
+(`RELEASE.2025-04-22T22-12-26Z`). Публичные готовые образы этой версии
+недоступны. Первая сборка требует сети и занимает несколько минут; Docker
+сохраняет её слои для следующих запусков.
 
 ## Регистрация manifest
 
