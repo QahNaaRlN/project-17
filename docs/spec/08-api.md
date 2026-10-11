@@ -173,7 +173,8 @@ Authorization: Bearer cms_pub_…
 - Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
 - Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` вида `{project}:{env}:{objectId}`; `/page` и `/routes` зависят также от `{project}:{env}:routes`. Ключи включают проект и окружение, чтобы purge одного окружения не задевал другие; после публикации эти ключи сбрасываются задачей `cdn_purge` (06 §7.3.1). На совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
 - Чтение сущностей и метаданных ассетов подключено; загрузка и обработка файлов описаны в [пакете загрузки](../asset-upload-processing.md).
-- Пока не реализованы: локали и fallback (API-032), бинарная выдача ассетов CNT-050–052, кэш ответов на origin (Redis, NFR-002 — с нагрузочными тестами M6), лимиты запросов.
+- Выдача изображений CNT-050–052 подключена через подписанную модель и gateway; [контракт и конфигурация](../asset-delivery-images.md). Raw PDF/видео не выдаются этим endpoint.
+- Пока не реализованы: локали и fallback (API-032), кэш ответов на origin (Redis, NFR-002 — с нагрузочными тестами M6), лимиты запросов.
 
 ### 5.3. Черновой режим
 
@@ -247,3 +248,11 @@ Change Set остаётся отдельной операцией; см. [пак
 существующие ключи доступа, preview, ETag и surrogate keys. Метаданные ассета
 не заменяют endpoint бинарного файла CNT-050. Подробности и оставшиеся проверки:
 [сущности и ссылки](../entities-assets.md).
+
+`GET /delivery/v1/{project}/{env}/asset/{id}/image` требует delivery/preview ключ,
+отвечает `no-store` и возвращает подписанные варианты. Браузер получает байты
+через `/assets/v1/{env}/{assetId}/{fileHash}` без передачи delivery key.
+Gateway проверяет всю capability, текущую версию, файл, scope/preview key и срок.
+Статусы: 403 ASSET_URL_INVALID, 404 ASSET_IMAGE_NOT_FOUND, 503
+ASSET_IMAGES_UNAVAILABLE, 502 ASSET_IMAGE_UPSTREAM; любые ошибки `no-store`.
+Параметры и CDN политика: [пакет выдачи](../asset-delivery-images.md).

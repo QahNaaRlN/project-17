@@ -1,0 +1,40 @@
+# Local assets profile: run CMS on the host so browser and server share localhost:9000.
+# Values below are development fixtures. Production uses separate random keys and a read-only imgproxy S3 identity.
+name: cms-images
+services:
+  minio:
+    profiles: [assets]
+    build:
+      context: ../../apps/server/internal/assets/testdata/minio
+    command: [server, /data, --console-address, ":9001"]
+    environment:
+      MINIO_ROOT_USER: test-access
+      MINIO_ROOT_PASSWORD: test-secret
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+  imgproxy:
+    profiles: [assets]
+    image: ghcr.io/imgproxy/imgproxy:v4.0.17@sha256:db0b4b9cd690c8b3590203dea300fb759a18c4ec2af7b37424f0bdef23ce317d
+    environment:
+      IMGPROXY_KEY: "2222222222222222222222222222222222222222222222222222222222222222"
+      IMGPROXY_SALT: "33333333333333333333333333333333"
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: http://minio:9000
+      IMGPROXY_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test-access
+      AWS_SECRET_ACCESS_KEY: test-secret
+      IMGPROXY_ALLOWED_SOURCES: s3://assets/projects/
+      IMGPROXY_ALLOWED_PROCESSING_OPTIONS: rs,g
+      IMGPROXY_MAX_SRC_RESOLUTION: "40"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "26214400"
+      IMGPROXY_MAX_RESULT_DIMENSION: "2560"
+      IMGPROXY_MAX_ANIMATION_FRAMES: "1"
+      IMGPROXY_STRIP_METADATA: "true"
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on: [minio]
+volumes:
+  minio-data:

@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"log/slog"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type Config struct {
 	S3SecretKey     string
 	S3Bucket        string
 	S3Secure        bool
+	Images          imagedelivery.Config
 }
 
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
@@ -39,6 +41,12 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		S3Secure:        getenv("CMS_S3_SECURE") != "false",
 	}
 	var errs []error
+	cfg.Images = imagedelivery.Config{PublicURL: getenv("CMS_ASSET_PUBLIC_URL"), ProxyURL: getenv("CMS_IMGPROXY_URL"), Bucket: cfg.S3Bucket, Key: getenv("CMS_ASSET_SIGNING_KEY"), ProxyKey: getenv("CMS_IMGPROXY_KEY"), ProxySalt: getenv("CMS_IMGPROXY_SALT")}
+	if cfg.Images.PublicURL != "" || cfg.Images.ProxyURL != "" || cfg.Images.Key != "" || cfg.Images.ProxyKey != "" || cfg.Images.ProxySalt != "" {
+		if _, err := imagedelivery.New(cfg.Images); err != nil {
+			errs = append(errs, fmt.Errorf("CMS_ASSET_*/CMS_IMGPROXY_*: %w", err))
+		}
+	}
 	if cfg.S3Endpoint != "" || cfg.S3AccessKey != "" || cfg.S3SecretKey != "" || cfg.S3Bucket != "" {
 		if cfg.S3Endpoint == "" || cfg.S3AccessKey == "" || cfg.S3SecretKey == "" || cfg.S3Bucket == "" {
 			errs = append(errs, errors.New("CMS_S3_ENDPOINT, ACCESS_KEY, SECRET_KEY, BUCKET нужны вместе"))

@@ -38,6 +38,7 @@ func accessFrom(ctx context.Context) delivery.Access {
 func deliveryRoutes(d Deps) func(chi.Router) {
 	return func(r chi.Router) {
 		r.Use(authenticateDelivery(d))
+		r.Get("/asset/{id}/image", imageModelHandler(d))
 		r.Get("/page", func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Query().Get("path")
 			if !strings.HasPrefix(path, "/") || len(path) > MaxDeliveryPath {

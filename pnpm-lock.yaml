@@ -92,6 +92,21 @@ importers:
         specifier: ^15.0.4
         version: 15.0.4
 
+  packages/runtime:
+    devDependencies:
+      '@stryker-mutator/core':
+        specifier: ^10.0.0
+        version: 10.0.0(@types/node@22.20.5)
+      '@stryker-mutator/vitest-runner':
+        specifier: ^10.0.0
+        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@22.20.5))(vitest@4.1.11)
+      '@vitest/coverage-v8':
+        specifier: 4.1.11
+        version: 4.1.11(vitest@4.1.11)
+      fast-check:
+        specifier: ^4.10.2
+        version: 4.10.2
+
 packages:
 
   '@apidevtools/json-schema-ref-parser@11.9.3':

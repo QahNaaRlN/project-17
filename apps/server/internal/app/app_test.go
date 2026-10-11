@@ -106,7 +106,9 @@ func TestServeLifecycle(t *testing.T) {
 	var out bytes.Buffer
 	go func() {
 		done <- app.Run(ctx, []string{"serve"},
-			getenv(map[string]string{"CMS_DATABASE_URL": url, "CMS_HTTP_ADDR": "127.0.0.1:0", "CMS_SHUTDOWN_TIMEOUT": "5s"}),
+			getenv(map[string]string{"CMS_DATABASE_URL": url, "CMS_HTTP_ADDR": "127.0.0.1:0", "CMS_SHUTDOWN_TIMEOUT": "5s",
+				"CMS_S3_ENDPOINT": "localhost:9000", "CMS_S3_ACCESS_KEY": "test-access", "CMS_S3_SECRET_KEY": "test-secret", "CMS_S3_BUCKET": "assets", "CMS_S3_SECURE": "false",
+				"CMS_ASSET_PUBLIC_URL": "http://localhost:8080", "CMS_ASSET_SIGNING_KEY": strings.Repeat("11", 32), "CMS_IMGPROXY_URL": "http://localhost:8081", "CMS_IMGPROXY_KEY": strings.Repeat("22", 32), "CMS_IMGPROXY_SALT": strings.Repeat("33", 16)}),
 			&out, func(addr string) { addrc <- addr })
 	}()
 	var addr string

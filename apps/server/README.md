@@ -23,6 +23,10 @@
 | `CMS_S3_ACCESS_KEY` / `CMS_S3_SECRET_KEY` | — | Ключи сервера для bucket (задаются вместе с endpoint и bucket) |
 | `CMS_S3_BUCKET` | — | Приватный bucket файлов и staging загрузок |
 | `CMS_S3_SECURE` | `true` | TLS; `false` только для локального MinIO |
+| `CMS_ASSET_PUBLIC_URL` | — | Origin gateway/CDN изображений без пути |
+| `CMS_ASSET_SIGNING_KEY` | — | Отдельный hex ключ браузерных URL, не менее 32 байт |
+| `CMS_IMGPROXY_URL` | — | Внутренний base URL imgproxy |
+| `CMS_IMGPROXY_KEY` / `CMS_IMGPROXY_SALT` | — | Hex key ≥32 bytes / salt ≥16 bytes, совпадают с imgproxy |
 
 Endpoint должен быть доступен и серверу, и клиенту: его host входит в подпись
 pre-signed URL, заменять host после подписания нельзя. Для контейнеров используйте
@@ -33,6 +37,12 @@ pre-signed URL, заменять host после подписания нельз
 
 Контракт загрузки, готовности, `asset.create` / `asset.replaceFile`, ограничения
 обработки и следующий пакет описаны в [загрузке ассетов](../../docs/asset-upload-processing.md).
+
+Выдача подписанных изображений CNT-050–052 и первый `@cms/runtime Image`
+подключены отдельным [пакетом](../../docs/asset-delivery-images.md): модель по
+delivery/preview ключу, gateway с повторной проверкой версии, закрытый imgproxy,
+CDN cache/purge. Без конфигурации images API отвечает `ASSET_IMAGES_UNAVAILABLE`.
+Локальный compose profile, права S3 reader и ограничения обработчика — в пакете.
 
 ## Быстрый старт
 

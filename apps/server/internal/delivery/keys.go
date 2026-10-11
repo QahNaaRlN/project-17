@@ -120,8 +120,10 @@ type Access struct {
 	Environment   string
 	// Draft — черновой режим по preview-токену (08 §5.3): объекты Change Set ChangesetID
 	// берутся из рабочих версий, остальные — из head.
-	Draft       bool
-	ChangesetID *uuid.UUID
+	Draft          bool
+	ChangesetID    *uuid.UUID
+	ExpiresAt      time.Time
+	PreviewKeyHash string
 }
 
 // ErrUnauthenticated — ключ не передан, не найден или отозван.
