@@ -8,6 +8,38 @@ test.beforeEach(async ({ request }) => {
   await control(request, "ready");
 });
 
+test("IR-040/SDK-011: CMS меняет порядок разделов и условие показа без изменения React", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("main > section").first()).toHaveClass(/hero/);
+  await control(request, "reorder");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await expect(page.locator("main > section").first()).toHaveClass(/about/);
+  await expect(page.locator(".product-card")).toHaveCount(3);
+  await control(request, "hideabout");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await expect(page.locator(".about")).toHaveCount(0);
+  await expect(page.locator(".product-card")).toHaveCount(3);
+});
+
+test("DS-030/031: атомы из CMS применяются после обновления и реагируют на ширину", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto("/");
+  await control(request, "adaptive");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await expect(page.locator(".about")).toHaveCSS("padding-top", "12px");
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(page.locator(".about")).toHaveCSS("padding-top", "24px");
+  await control(request, "ready");
+  await page.getByRole("button", { name: "Обновить контент" }).click();
+  await expect(page.locator(".about")).not.toHaveCSS("padding-top", "24px");
+});
+
 test("SSR содержит CMS-контент и не раскрывает ключ; браузер гидратирует диалог", async ({
   page,
   request,

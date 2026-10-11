@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { catalog } from "../scripts/catalog.js";
+import { storeDocument } from "../src/composition.js";
 
 // Deterministic CMS boundary for CI; the real SDK, HTTP server, SSR and browser run unchanged.
 const id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11";
@@ -75,17 +76,16 @@ const fixture = createServer(async (req, res) => {
   });
   delete value.products[0]!.priceRub;
   if (mode === "empty") value.products = [];
+  const document = storeDocument(value);
+  if (mode === "reorder") document.nodes.n_store!.children = ["n_about", "n_collection", "n_hero"];
+  if (mode === "hideabout")
+    document.nodes.n_about!.when = { op: "eq", args: [{ lit: 1 }, { lit: 2 }] };
+  if (mode === "adaptive")
+    document.nodes.n_about!.design = { padding: { base: { raw: 12 }, sm: { raw: 24 } } };
   res.end(
     JSON.stringify({
       page: { objectId: id, versionId: id, path: "/store", params: {} },
-      document: {
-        irVersion: "1.0",
-        kind: "page",
-        root: "n_store",
-        nodes: {
-          n_store: { id: "n_store", type: "Storefront", props: { config: { base: value } } },
-        },
-      },
+      document,
       components: {},
       data: {},
       dataSources: {},

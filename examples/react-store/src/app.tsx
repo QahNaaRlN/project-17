@@ -1,79 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, ImageOff, Menu, RefreshCw, X } from "lucide-react";
-import { priceLabel, type ImageProps, type Product, type StoreModel } from "./model.js";
+import { Menu, RefreshCw, X } from "lucide-react";
+import type { StoreModel } from "./model.js";
+import { CmsPage } from "@cms/react";
+import { StoreRenderContext, storeRegistry } from "./sections.js";
+export { CatalogImage, ProductCard } from "./cards.js";
 import { Button } from "./ui/button.js";
-import { ProductDialog } from "./ui/dialog.js";
 
-export function CatalogImage({
-  image,
-  alt,
-  className = "",
-}: {
-  image?: ImageProps | null | undefined;
-  alt: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [image?.src]);
-  return (
-    <div className={`catalog-image ${className}`}>
-      {image && !failed ? (
-        <img {...image} alt={alt} onError={() => setFailed(true)} />
-      ) : (
-        <div className="image-fallback">
-          <ImageOff size={23} aria-hidden="true" />
-          <span>Изображение недоступно</span>
-        </div>
-      )}
-    </div>
-  );
-}
-export function ProductCard({
-  product,
-  image,
-}: {
-  product: Product;
-  image?: ImageProps | null | undefined;
-}) {
-  const details = (
-    <>
-      <CatalogImage image={image} alt={product.title} />
-      <div className="dialog-bottom">
-        <span>{priceLabel(product.priceRub)}</span>
-        <span className="muted">Демонстрационный товар</span>
-      </div>
-    </>
-  );
-  return (
-    <article className="product-card">
-      <div className={`product-art tone-${product.tone}`}>
-        <CatalogImage image={image} alt={product.title} />
-        <span className="product-tag">{product.category}</span>
-      </div>
-      <div className="product-body">
-        <span className="material">{product.material}</span>
-        <h3>{product.title}</h3>
-        <div className="product-bottom">
-          <span className="price">{priceLabel(product.priceRub)}</span>
-          <ProductDialog
-            title={product.title}
-            description={product.description}
-            trigger={
-              <Button
-                className="button-ghost detail-button"
-                aria-label={`Подробнее: ${product.title}`}
-              >
-                Подробнее <ArrowUpRight size={15} aria-hidden="true" />
-              </Button>
-            }
-          >
-            {details}
-          </ProductDialog>
-        </div>
-      </div>
-    </article>
-  );
-}
 export interface AppProps {
   initialModel: StoreModel;
 }
@@ -178,58 +110,9 @@ export function StoreApp({ initialModel }: AppProps) {
             </div>
           </section>
         ) : model.status === "ready" && c ? (
-          <>
-            <section className="hero">
-              <div className="hero-copy">
-                <p className="eyebrow">Коллекция / Предметы для дома</p>
-                <h1>
-                  {c.title}
-                  <em>{c.subtitle}</em>
-                </h1>
-                <p className="intro">{c.description}</p>
-                <a className="button button-primary hero-cta" href="#collection">
-                  {c.ctaLabel}
-                  <ArrowUpRight size={17} aria-hidden="true" />
-                </a>
-              </div>
-              <div className="hero-art">
-                <CatalogImage image={model.images.hero} alt="Предметы коллекции" />
-              </div>
-            </section>
-            <section className="collection" id="collection" aria-label="Коллекция">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Небольшая подборка</p>
-                  <h2>{c.collectionTitle}</h2>
-                </div>
-                <span className="item-count">
-                  {c.products.length === 0 ? "Нет предметов" : `${c.products.length} в коллекции`}
-                </span>
-              </div>
-              {c.products.length ? (
-                <div className="product-grid">
-                  {c.products.map((p) => (
-                    <ProductCard key={p.id} product={p} image={model.images[`product:${p.id}`]} />
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <h3>Новые вещи скоро появятся</h3>
-                  <p>Сейчас в этой коллекции нет предметов.</p>
-                </div>
-              )}
-            </section>
-            <section className="about" id="about">
-              <span className="about-mark" aria-hidden="true">
-                тф.
-              </span>
-              <div>
-                <p className="eyebrow">Наш подход</p>
-                <h2>{c.aboutTitle}</h2>
-                <p>{c.aboutText}</p>
-              </div>
-            </section>
-          </>
+          <StoreRenderContext.Provider value={model}>
+            {model.plan && <CmsPage plan={model.plan} registry={storeRegistry} />}
+          </StoreRenderContext.Provider>
         ) : (
           <section className="error-state" role={model.status === "error" ? "alert" : "status"}>
             <span className="eyebrow">Демонстрационная витрина</span>

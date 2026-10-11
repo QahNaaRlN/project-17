@@ -44,9 +44,9 @@ export const catalog: Catalog = {
     },
   ],
 };
-export const storefrontContract = {
+const contract = {
   origin: "native",
-  container: false,
+  container: true,
   props: {
     config: {
       type: "object",
@@ -88,4 +88,51 @@ export const storefrontContract = {
       },
     },
   },
+};
+export const storefrontContract = {
+  ...contract,
+  provides: {
+    store: { type: "object", required: true, fields: contract.props.config.fields },
+  },
+};
+
+export const storeContracts = {
+  Storefront: storefrontContract,
+  ...Object.fromEntries(
+    [
+      ["StoreHero", ["title", "subtitle", "description", "ctaLabel"]],
+      ["StoreAbout", ["title", "text"]],
+    ].map(([name, fields]) => [
+      name,
+      {
+        origin: "native",
+        container: false,
+        props: Object.fromEntries(
+          (fields as string[]).map((field) => [
+            field,
+            { type: "text", content: true, required: true, maxLength: 2000 },
+          ]),
+        ),
+      },
+    ]),
+  ),
+  StoreCollection: {
+    origin: "native",
+    container: true,
+    props: {
+      title: { type: "text", content: true, required: true },
+      products: storefrontContract.props.config.fields.products,
+    },
+  },
+  StoreProduct: {
+    origin: "native",
+    container: false,
+    props: {
+      product: {
+        ...storefrontContract.props.config.fields.products.of,
+        required: true,
+      },
+    },
+  },
+  StoreEmpty: { origin: "native", container: false, props: {} },
 };

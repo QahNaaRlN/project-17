@@ -61,7 +61,13 @@ const model = await cms.getImage(assetId, {
 отклоняется; Studio для редактирования будет использовать свой Query API.
 
 Локаль/fallback не эмулируются; карты локализованного контента остаются данными.
-Вычисление привязок/условий, форматтеры, registry/data loaders, renderer, React,
-SSR и preview bridge остаются следующими пакетами.
+`readPath`, `evaluateBinding`, `evaluatePredicate` и `formatValue` реализуют безопасные
+пути, шаблоны, условия и встроенные форматтеры. Путь читает только собственные свойства,
+исключает прототипы и не исполняет выражения. Default применяется только к null/undefined.
+Форматтеры используют явно выбранную локаль; date использует UTC и проверяет календарную дату.
+React и серверная загрузка плана находятся в `@cms/react`; registry/data loaders,
+streaming/selective hydration и preview bridge остаются следующими пакетами.
+
+Текущий контракт: [IR/React renderer](../../docs/react-ir-renderer.md).
 
 Контракт и границы: [docs/sdk-core-delivery.md](../../docs/sdk-core-delivery.md).

@@ -2,7 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { catalog, storefrontContract } from "./catalog.js";
+import { catalog, storeContracts } from "./catalog.js";
+import { storeDocument } from "../src/composition.js";
 
 const baseUrl = process.env.CMS_BASE_URL ?? "http://127.0.0.1:18080";
 if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(baseUrl).hostname))
@@ -48,7 +49,7 @@ if (manifestResponse.ok) {
 else throw new Error(`Manifest read failed: ${manifestResponse.status}`);
 manifest.components = {
   ...((manifest.components as Record<string, unknown>) ?? {}),
-  Storefront: storefrontContract,
+  ...storeContracts,
 };
 const registration = await command("register-manifest", { environment, manifest });
 if (registration.activation !== "active")
@@ -99,6 +100,21 @@ for (const key of ["hero", "vase", "lamp", "bowl"]) {
   else value.products.find((p) => p.id === key)!.asset = { assetId: id };
 }
 const path = "/store";
+const document = storeDocument(value);
+function nested(id: string): Record<string, unknown> {
+  const node = document.nodes[id]!;
+  return {
+    ...node,
+    ...(node.children ? { children: node.children.map(nested) } : {}),
+    ...(node.slots
+      ? {
+          slots: Object.fromEntries(
+            Object.entries(node.slots).map(([name, ids]) => [name, ids.map(nested)]),
+          ),
+        }
+      : {}),
+  };
+}
 const applied = await command("apply-operations", {
   changesetId: cs.id,
   expectedSeq: seq,
@@ -108,7 +124,7 @@ const applied = await command("apply-operations", {
       payload: {
         kind: "page",
         path,
-        root: { id: "n_store", type: "Storefront", props: { config: { base: value } } },
+        root: nested(document.root),
         meta: { title: "Тихая форма" },
       },
     },

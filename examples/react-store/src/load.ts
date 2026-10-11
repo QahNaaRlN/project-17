@@ -1,6 +1,7 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
-import { Image } from "@cms/runtime";
+import { Image, preparePage } from "@cms/runtime";
 import { parseCatalog, type StoreModel } from "./model.js";
+import { storeComposition, definitionsFor } from "./composition.js";
 
 export async function loadStore(
   cms: CmsClient,
@@ -13,6 +14,12 @@ export async function loadStore(
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {} };
+    model.plan = preparePage(storeComposition(page.document, catalog), {
+      natives: definitionsFor(catalog),
+      scope: { context: { locale: "ru", store: catalog } },
+      breakpoints: { sm: 640, md: 768, lg: 1024 },
+    });
+    if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
     const refs = [
       ...(catalog.heroAsset
         ? [{ key: "hero", asset: catalog.heroAsset, alt: "Предметы коллекции", hero: true }]

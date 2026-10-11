@@ -11,8 +11,9 @@ CMS нового поколения: контент и визуальная ко
 |---|---|
 | `packages/ir` | Формат IR: JSON Schema, типы, валидатор, фикстуры |
 | `packages/manifest` | Формат manifest: JSON Schema, типы, валидатор, канонический хэш, фикстуры |
-| `packages/sdk-core` | Клиент Delivery API: проверка IR, published LRU/ETag, preview без кэша |
-| `packages/runtime` | Первый примитив Image: подписанные варианты, srcset/sizes, focalPoint |
+| `packages/sdk-core` | Delivery API, published LRU/ETag, безопасные привязки и условия |
+| `packages/runtime` | План рендеринга IR: Repeat/Composed/Slot, атомарные стили и Image |
+| `packages/react` | React-адаптер и серверная загрузка страниц ([границы пакета](docs/react-ir-renderer.md)) |
 | `examples/react-store` | React-витрина из CMS: SSR, адаптивный каталог, Radix Dialog ([запуск](examples/react-store/README.md)) |
 | `apps/server` | CMS Core на Go: HTTP API, Command Bus, проекты и окружения, IR ([README](apps/server/README.md)) |
 | `deploy/compose` | Локальное окружение Docker Compose |

@@ -1,5 +1,6 @@
 import type { PageResponse } from "@cms/core";
 import type { Image } from "@cms/runtime";
+import type { RenderPlan } from "@cms/runtime";
 
 export interface AssetRef {
   assetId: string;
@@ -33,6 +34,7 @@ export interface StoreModel {
   catalog?: Catalog;
   images: Record<string, ImageProps | null>;
   refreshAt?: number;
+  plan?: RenderPlan;
 }
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
