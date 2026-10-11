@@ -11,9 +11,9 @@
     "test": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:mutation": "stryker run",
-    "seed": "node --import tsx scripts/seed.ts",
+    "seed": "pnpm manifest:build && node --import tsx scripts/seed.ts",
     "preview:renew": "node --import tsx scripts/renew-preview.ts",
-    "manifest:build": "node --import tsx scripts/build-manifest.ts"
+    "manifest:build": "cms manifest build --registry src/registry.ts --export registry --root ../.. --tsconfig tsconfig.json --app-id store-example --app-version 1.0.0 --framework react"
   },
   "dependencies": {
     "@cms/core": "workspace:*",

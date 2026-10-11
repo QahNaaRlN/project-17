@@ -1,23 +1,19 @@
-import { createRegistry, nativeDefinitions } from "@cms/component-registry";
+import { createRegistry, nativeDefinitions, t } from "@cms/component-registry";
 import { createReactRegistry, defineReactComponent } from "@cms/react";
 import { Storefront, Hero, Collection, Item, Empty, About } from "./sections.js";
-const text = { type: "text", content: true, required: true, maxLength: 2000 } as const;
-const string = { type: "string", required: true, maxLength: 2000 } as const;
-const product = {
-  type: "object",
-  fields: {
-    id: string,
-    title: string,
-    description: string,
-    material: string,
-    category: string,
-    tone: { type: "enum", values: ["sand", "sage", "clay"], required: true },
-    priceRub: { type: "number", integer: true, min: 0, max: 1_000_000_000 },
-    asset: { type: "asset", assetKind: "image" },
-  },
-} as const;
-// Literal descriptors retain their types for defineReactComponent inference.
-const products = { type: "list", required: true, max: 64, of: product } as const;
+const text = t.text().content().required().max(2000);
+const string = t.string().required().max(2000);
+const product = t.object({
+  id: string,
+  title: string,
+  description: string,
+  material: string,
+  category: string,
+  tone: t.enum(["sand", "sage", "clay"]).required(),
+  priceRub: t.number().int().min(0).max(1_000_000_000),
+  asset: t.asset("image"),
+});
+const products = t.list(product).required().max(64);
 const fields = {
   brand: string,
   title: string,
@@ -27,7 +23,7 @@ const fields = {
   collectionTitle: string,
   aboutTitle: string,
   aboutText: string,
-  heroAsset: { type: "asset", assetKind: "image" },
+  heroAsset: t.asset("image"),
   products,
 } as const;
 const strings = (values: Record<string, unknown>) =>
@@ -41,8 +37,8 @@ export const registry = createRegistry({
       origin: "native",
       container: true,
       component: Storefront,
-      props: { config: { type: "object", responsive: true, required: true, fields } },
-      provides: { store: { type: "object", required: true, fields } },
+      props: { config: t.object(fields).responsive().required() },
+      provides: { store: t.object(fields).required() },
     }),
     defineReactComponent({
       name: "StoreHero",
@@ -67,7 +63,7 @@ export const registry = createRegistry({
       origin: "native",
       container: false,
       component: Item,
-      props: { product: { ...product, required: true } },
+      props: { product: product.required() },
     }),
     defineReactComponent({
       name: "StoreEmpty",

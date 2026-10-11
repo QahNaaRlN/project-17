@@ -23,6 +23,24 @@ function response() {
   return { value: value as unknown as ServerResponse, headers, body: () => body };
 }
 describe("STORE-004/005/007: HTTP и SSR", () => {
+  it.each(["GET", "HEAD"])(
+    "MF-005: exposes this application's built hash without loading CMS content: %s",
+    async (method) => {
+      const load = vi.fn();
+      const hash = "sha256:" + "a".repeat(64);
+      const res = response();
+      await storeHandler(
+        load,
+        async () => ({ scripts: [], styles: [] }),
+        undefined,
+        hash,
+      )({ method, url: "/.well-known/cms-manifest-hash" } as IncomingMessage, res.value);
+      expect(res.value.statusCode).toBe(200);
+      expect(res.body()).toBe(method === "GET" ? hash + "\n" : "");
+      expect(load).not.toHaveBeenCalled();
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    },
+  );
   it("рендерит текст и безопасную модель до JavaScript", () => {
     const m = model();
     m.catalog!.title = "<script>unsafe</script>";

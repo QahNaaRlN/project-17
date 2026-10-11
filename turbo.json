@@ -10,6 +10,11 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@cms/store-example#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".cms/**"],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

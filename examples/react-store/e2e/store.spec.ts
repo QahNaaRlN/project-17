@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 async function control(request: APIRequestContext, mode: string, title?: string) {
   const response = await request.post("http://127.0.0.1:18084/control", { data: { mode, title } });
@@ -6,6 +7,13 @@ async function control(request: APIRequestContext, mode: string, title?: string)
 }
 test.beforeEach(async ({ request }) => {
   await control(request, "ready");
+});
+test("MF-005: running application serves the CLI artifact hash", async ({ request }) => {
+  const response = await request.get("/.well-known/cms-manifest-hash");
+  expect(response.status()).toBe(200);
+  expect((await response.text()).trim()).toBe(
+    (await readFile(".cms/manifest.hash", "utf8")).trim(),
+  );
 });
 
 test("IR-040/SDK-011: CMS меняет порядок разделов и условие показа без изменения React", async ({

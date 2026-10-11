@@ -6,7 +6,7 @@ import {
   componentContract,
 } from "../src/index.js";
 import { buildManifest, manifestArtifact } from "../src/manifest.js";
-import type { ComponentDefinition } from "../src/index.js";
+import type { ComponentDefinition, SchemaFields } from "../src/index.js";
 const app = { id: "test-app", version: "1.0.0", framework: "other" } as const;
 const implementation = () => "rendered";
 const definition = () =>
@@ -120,7 +120,11 @@ it("MF-010: rejects duplicate names, unsafe prop names and invalid names", () =>
     expect(() => defineComponent({ ...definition(), name })).toThrow("CMS_REGISTRY_NAME_INVALID");
   for (const key of ["constructor", "prototype", "__proto__"])
     expect(() =>
-      defineComponent({ ...definition(), props: Object.fromEntries([[key, { type: "string" }]]) }),
+      defineComponent({
+        ...definition(),
+        component: implementation,
+        props: Object.fromEntries([[key, { type: "string" }]]),
+      }),
     ).toThrow("CMS_REGISTRY_PROP_INVALID");
 });
 it("MF-001: rejects non-JSON and cyclic metadata instead of silently changing contracts", () => {
@@ -147,19 +151,29 @@ it("MF-001: rejects non-JSON and cyclic metadata instead of silently changing co
     { nested: () => true },
   ])
     expect(() =>
-      defineComponent({ ...definition(), description: value } as unknown as ComponentDefinition),
+      defineComponent({ ...definition(), description: value } as unknown as ComponentDefinition<
+        SchemaFields,
+        typeof implementation
+      >),
     ).toThrow("CMS_REGISTRY_METADATA_INVALID");
   const shared = { since: "1.0" };
   const common = { type: "string" as const };
   expect(
-    defineComponent({ ...definition(), props: { first: common, second: common } }).props,
+    defineComponent({
+      ...definition(),
+      component: implementation,
+      props: { first: common, second: common },
+    }).props,
   ).toEqual({ first: common, second: common });
   expect(
     defineComponent({ ...definition(), deprecated: shared, slots: { footer: { max: 2 } } })
       .deprecated,
   ).toEqual(shared);
   expect(defineComponent({ ...definition(), deprecated: null }).deprecated).toBeNull();
-  expect(defineComponent({ ...definition(), props: Object.create(null) }).props).toEqual({});
+  expect(
+    defineComponent({ ...definition(), component: implementation, props: Object.create(null) })
+      .props,
+  ).toEqual({});
 });
 it("MF-001: validates reserved names, invalid constraints, slots and unsupported versions before output", () => {
   for (const component of [
