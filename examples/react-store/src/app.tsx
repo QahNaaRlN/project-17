@@ -83,11 +83,11 @@ export function StoreApp({ initialModel }: AppProps) {
   const [menu, setMenu] = useState(false);
   const request = useRef<AbortController | null>(null);
   const alive = useRef(true);
-  async function refresh() {
+  async function refresh(showLoading = true) {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setBusy(true);
+    if (showLoading) setBusy(true);
     try {
       const response = await fetch("/api/store", { signal: controller.signal, cache: "no-store" });
       if (!response.ok && response.status !== 404) throw new Error("STORE_READ_FAILED");
@@ -111,7 +111,7 @@ export function StoreApp({ initialModel }: AppProps) {
     if (model.refreshAt === undefined || model.status !== "ready") return;
     const timer = setTimeout(
       () => {
-        void refresh();
+        void refresh(false);
       },
       Math.max(5000, Math.min(model.refreshAt - Date.now(), 2_147_483_647)),
     );

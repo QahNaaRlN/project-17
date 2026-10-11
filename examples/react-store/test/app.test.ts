@@ -141,6 +141,33 @@ it("STORE-006: долгий срок URL не переполняет тайме�
   });
   expect(fetch).not.toHaveBeenCalled();
 });
+it("STORE-003/006: фоновое обновление изображений сохраняет открытые подробности", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  let resolve!: (response: Response) => void;
+  const pending = new Promise<Response>((r) => {
+    resolve = r;
+  });
+  vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
+  const initial = model();
+  initial.refreshAt = 1000;
+  await mount(createElement(StoreApp, { initialModel: initial }));
+  await click(".detail-button");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Загрузка контента"]')).toBeNull();
+  const next = model();
+  next.catalog!.products[0]!.description = "Описание обновлено в CMS";
+  await act(async () => {
+    resolve(new Response(JSON.stringify(next)));
+    await pending;
+  });
+  expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
+    "Описание обновлено в CMS",
+  );
+});
 it("STORE-005/006: пустая подборка и неизвестная цена отображаются явно", async () => {
   const empty = model();
   empty.catalog!.products = [];
