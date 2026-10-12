@@ -60,6 +60,9 @@ type opPlan struct {
 // а у Change Set ставится hasConflicts. Вызывающий держит блокировку Change Set.
 func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutions map[uuid.UUID]string, actor auth.Actor) (RebaseResult, error) {
 	res := RebaseResult{Rebased: []uuid.UUID{}, Removed: []uuid.UUID{}, Conflicts: []Conflict{}}
+	if err := q.ClearRedo(ctx, cs.ID); err != nil {
+		return res, err
+	}
 	stale, err := q.ChangesetBaseMismatches(ctx, cs.ID)
 	if err != nil {
 		return res, err
@@ -116,6 +119,9 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			choice := resolutions[op.ID]
 			if op.UndoOf != nil && dropped[*op.UndoOf] {
 				choice = ResolutionTheirs // отмена исключённой операции исключается вместе с ней
+			}
+			if op.RedoOf != nil && dropped[*op.RedoOf] {
+				choice = ResolutionTheirs
 			}
 			var step opPlan
 			var conflict *Conflict

@@ -4,6 +4,15 @@ export const documentId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
   changesetId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c22";
 export function fixture(): Session {
   return {
+    history: {
+      seq: 1,
+      items: [],
+      nextBeforeSeq: null,
+      canUndo: false,
+      canRedo: false,
+      undoReason: "NOTHING_TO_UNDO",
+      redoReason: "NOTHING_TO_REDO",
+    },
     config: { project: "store", environment: "staging", appOrigin: "http://127.0.0.1:18083" },
     changeset: {
       id: changesetId,
@@ -82,9 +91,12 @@ export function persist(session: Session, operations: Operation[]) {
       );
   }
   session.changeset.seq += operations.length;
+  session.history.seq = session.changeset.seq;
 }
 export function mockApi(session = fixture()) {
   const api: Api = {
+    history: vi.fn(async () => structuredClone(session.history)),
+    changeHistory: vi.fn(async () => {}),
     pages: vi.fn(async () => ({
       items: [{ id: documentId, path: "/store", title: "Store", hasHead: true }],
       nextCursor: null,

@@ -40,4 +40,5 @@ head (как у существующего чтения/редактирован
 создание и сохранение после открытия. Пороги покрытия сохраняются.
 
 Пакет не завершает M4. Остались production identity, DnD/палитра, Structure,
-undo/redo UI, content editor, review/history, SSE/presence и Agent.
+content editor, review/publish, SSE/presence и Agent. История и undo/redo теперь
+реализованы в [следующем пакете](studio-history.md).

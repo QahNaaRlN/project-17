@@ -105,6 +105,8 @@ type Operation struct {
 	Reason       *string            `json:"reason"`
 	ClientOpID   *string            `json:"clientOpId"`
 	UndoOf       *uuid.UUID         `json:"undoOf"`
+	RedoOf       *uuid.UUID         `json:"redoOf"`
+	BatchID      *uuid.UUID         `json:"batchId"`
 	Status       string             `json:"status"` // applied | conflict | dropped (rebase, 06 §4)
 	CreatedAt    time.Time          `json:"createdAt"`
 }
@@ -122,7 +124,7 @@ func ListOperations(ctx context.Context, q *store.Queries, projectID, changesetI
 	for i, r := range rows {
 		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Status: r.Status,
 			Type: r.Type, Payload: r.Payload, Before: r.Before, After: r.After, Reason: r.Reason,
-			ClientOpID: r.ClientOpID, UndoOf: r.UndoOf, CreatedAt: r.CreatedAt}
+			ClientOpID: r.ClientOpID, UndoOf: r.UndoOf, RedoOf: r.RedoOf, BatchID: r.BatchID, CreatedAt: r.CreatedAt}
 		if r.TargetObjectID != nil {
 			out[i].Target = *r.TargetObjectID
 		} else if r.TargetSchemaName != nil {

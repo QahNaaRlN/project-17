@@ -14,6 +14,37 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-050/052: адаптер разрешает только историю CS и замороженные undo/redo", async () => {
+  const { origin, post, fetcher } = await setup();
+  for (const query of ["", "?beforeSeq=20"])
+    expect(
+      (await fetch(origin + `/api/studio/api/v1/changesets/${changesetId}/history` + query)).status,
+    ).toBe(200);
+  for (const query of [
+    "?beforeSeq=0",
+    "?beforeSeq=bad",
+    "?beforeSeq=1&beforeSeq=2",
+    "?afterSeq=0",
+    "?beforeSeq=2147483648",
+  ])
+    expect(
+      (await fetch(origin + `/api/studio/api/v1/changesets/${changesetId}/history` + query)).status,
+    ).toBe(400);
+  for (const command of ["undo", "redo"]) {
+    const route = "/api/studio/api/v1/commands/" + command;
+    expect((await post(route, { payload: { changesetId, expectedSeq: 3 } })).status).toBe(200);
+    const [, init] = fetcher.mock.calls.at(-1)!;
+    expect(init!.headers).toMatchObject({ "Idempotency-Key": "test-key" });
+    for (const payload of [
+      { changesetId, expectedSeq: -1 },
+      { changesetId, expectedSeq: 2147483648 },
+      { changesetId: "bad", expectedSeq: 1 },
+      { changesetId, expectedSeq: 1, operationId: documentId },
+      { changesetId },
+    ])
+      expect((await post(route, { payload })).status).toBe(400);
+  }
+});
 it("STU-040/041/042: адаптер ограничивает каталог/курсор и target создания", async () => {
   const { origin, fetcher, post } = await setup();
   for (const path of [

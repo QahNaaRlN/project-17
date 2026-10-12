@@ -20,6 +20,7 @@ export interface DocumentRecord {
   body: IrDocument;
 }
 export interface Session {
+  history: History;
   config: Config;
   changeset: Changeset;
   record: DocumentRecord;
@@ -32,6 +33,13 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  history(session: Session, beforeSeq?: number, signal?: AbortSignal): Promise<History>;
+  changeHistory(
+    session: Session,
+    action: "undo" | "redo",
+    key: string,
+    signal: AbortSignal,
+  ): Promise<void>;
   pages(cursor?: string, signal?: AbortSignal): Promise<List<PageItem>>;
   drafts(documentId: string, cursor?: string, signal?: AbortSignal): Promise<List<Changeset>>;
   createDraft(title: string, key: string): Promise<Changeset>;
@@ -44,6 +52,26 @@ export interface Api {
     signal: AbortSignal,
   ): Promise<void>;
   preview(session: Session, signal: AbortSignal): Promise<{ token: string; expiresAt: string }>;
+}
+export interface HistoryAction {
+  id: string;
+  firstSeq: number;
+  lastSeq: number;
+  actorId: string;
+  actorName: string;
+  createdAt: string;
+  kind: "edit" | "undo" | "redo";
+  reason: string | null;
+  operations: { type: string; target: string | null; status: string }[];
+}
+export interface History {
+  seq: number;
+  items: HistoryAction[];
+  nextBeforeSeq: number | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  undoReason: string | null;
+  redoReason: string | null;
 }
 export interface PageItem {
   id: string;

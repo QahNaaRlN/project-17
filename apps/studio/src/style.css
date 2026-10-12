@@ -139,6 +139,31 @@ header {
   flex: 1;
   min-height: 650px;
 }
+.history-panel {
+  padding: 12px 24px;
+  border-top: 1px solid #d8dfe8;
+  background: #fff;
+}
+.history-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.history-heading h2 {
+  margin-right: auto;
+}
+.history-panel ol {
+  max-height: 220px;
+  overflow: auto;
+  padding-left: 24px;
+}
+.history-panel li {
+  padding: 6px 0;
+}
+.history-panel li small {
+  display: block;
+}
 .layers,
 .properties {
   background: #fff;

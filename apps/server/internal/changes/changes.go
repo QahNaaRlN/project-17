@@ -84,6 +84,11 @@ func Register(bus *commandbus.Bus) {
 		Authorize: func(actor auth.Actor, _ seqPayload) error { return requireAnyWrite(actor) },
 		Handle:    handleUndo,
 	})
+	commandbus.Register(bus, commandbus.Command[seqPayload, ApplyResult]{
+		Name:      "redo",
+		Authorize: func(actor auth.Actor, _ seqPayload) error { return requireAnyWrite(actor) },
+		Handle:    handleRedo,
+	})
 	commandbus.Register(bus, commandbus.Command[changesetRef, Changeset]{
 		Name:      "abandon-changeset",
 		Authorize: func(actor auth.Actor, _ changesetRef) error { return requireAnyWrite(actor) },
@@ -234,6 +239,7 @@ type OperationInput struct {
 }
 
 type applyPayload struct {
+	Group       bool             `json:"group,omitempty"`
 	ChangesetID uuid.UUID        `json:"changesetId"`
 	ExpectedSeq int32            `json:"expectedSeq"`
 	Operations  []OperationInput `json:"operations"`
@@ -295,11 +301,12 @@ func validateApply(p applyPayload) error {
 
 // session — рабочие версии документов, затронутых командой, в пределах одной транзакции.
 type session struct {
-	ctx   context.Context
-	q     *store.Queries
-	actor auth.Actor
-	cs    store.Changeset
-	docs  map[uuid.UUID]*workingDoc
+	batchID *uuid.UUID
+	ctx     context.Context
+	q       *store.Queries
+	actor   auth.Actor
+	cs      store.Changeset
+	docs    map[uuid.UUID]*workingDoc
 }
 
 type workingDoc struct {
@@ -408,6 +415,7 @@ type recordInput struct {
 	inverse    *ops.Op
 	clientOpID *string
 	undoOf     *uuid.UUID
+	redoOf     *uuid.UUID
 }
 
 func (s *session) record(in recordInput) (AppliedOperation, error) {
@@ -429,7 +437,7 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 		ID: uuid.Must(uuid.NewV7()), ProjectID: s.actor.ProjectID, ChangesetID: s.cs.ID, Seq: s.cs.Seq,
 		ActorID: s.actor.ID, Source: "api", TargetObjectID: target, TargetSchemaName: in.schemaName, Type: in.opType, Payload: in.payload,
 		Before: nullableJSON(in.before), After: nullableJSON(in.after), Inverse: inverse,
-		Reason: reasonPtr, ClientOpID: in.clientOpID, UndoOf: in.undoOf,
+		Reason: reasonPtr, ClientOpID: in.clientOpID, UndoOf: in.undoOf, RedoOf: in.redoOf, BatchID: s.batchID,
 	})
 	if postgres.IsUniqueViolation(err) && in.clientOpID != nil {
 		return AppliedOperation{}, commandbus.NewError(http.StatusConflict, "CLIENT_OP_ID_REUSED", "Повтор clientOpId",
@@ -459,6 +467,10 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 	}
 	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
 	applied := make([]AppliedOperation, 0, len(p.Operations))
+	if p.Group {
+		id := uuid.Must(uuid.NewV7())
+		s.batchID = &id
+	}
 
 	for i, in := range p.Operations {
 		var rec recordInput
@@ -648,48 +660,10 @@ type seqPayload struct {
 	ExpectedSeq int32     `json:"expectedSeq"`
 }
 
-// handleUndo отменяет последнюю ещё не отменённую операцию добавлением обратной (§2.4):
+// handleUndo отменяет последнее действие (группу или одиночную операцию), добавляя inverse (§2.4):
 // история не переписывается.
 func handleUndo(ctx context.Context, tx pgx.Tx, actor auth.Actor, p seqPayload) (ApplyResult, error) {
-	q := store.New(tx)
-	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
-		return ApplyResult{}, err
-	}
-	cs, err := lockOpen(ctx, q, actor, p.ChangesetID)
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	if err := checkSeq(cs, p.ExpectedSeq); err != nil {
-		return ApplyResult{}, err
-	}
-	last, err := q.LastUndoableOperation(ctx, cs.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ApplyResult{}, commandbus.NewError(http.StatusConflict, "NOTHING_TO_UNDO", "Нечего отменять",
-			"В Change Set нет операций, которые можно отменить")
-	}
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	if last.Inverse == nil || last.TargetObjectID == nil {
-		return ApplyResult{}, commandbus.NewError(http.StatusConflict, "UNDO_NOT_SUPPORTED", "Отмена не поддерживается",
-			fmt.Sprintf("Операцию %s нельзя отменить; закройте Change Set (abandon-changeset)", last.Type)).
-			WithParams(map[string]any{"operationId": last.ID, "type": last.Type})
-	}
-	var inverse ops.Op
-	if err := json.Unmarshal(last.Inverse, &inverse); err != nil {
-		return ApplyResult{}, err
-	}
-	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
-	rec, err := s.applyToDocument(*last.TargetObjectID, inverse)
-	if err != nil {
-		return ApplyResult{}, fmt.Errorf("undo %s: %w", last.ID, err)
-	}
-	rec.undoOf = &last.ID
-	op, err := s.record(rec)
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	return s.finish([]AppliedOperation{op})
+	return handleHistory(ctx, tx, actor, p, false)
 }
 
 // --- abandon-changeset ---------------------------------------------------------------

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createStudioHandler } from "../../../apps/studio/src/handler.js";
 import type { PageResponse } from "@cms/core";
 type IrDocument = PageResponse["document"];
+import type { HistoryAction } from "../../../apps/studio/src/types.js";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
 export async function studioFixture(id: string, previewToken: string) {
@@ -31,11 +32,37 @@ export async function studioFixture(id: string, previewToken: string) {
   const draftTitles = new Map<string, string>(),
     createKeys = new Map<string, string>();
   const createdId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c99";
+  type Edit = { before: IrDocument; after: IrDocument; operations: HistoryAction["operations"] };
+  const undoStack: Edit[] = [],
+    redoStack: Edit[] = [],
+    actions: HistoryAction[] = [];
+  const historyKeys = new Map<string, { body: string; seq: number }>();
+  let historyId = 0;
+  function logHistory(kind: HistoryAction["kind"], operations: HistoryAction["operations"]) {
+    const firstSeq = seq + 1;
+    seq += operations.length;
+    actions.unshift({
+      id: "0192f1c7-4b1e-7c2b-9d10-" + (++historyId).toString(16).padStart(12, "0"),
+      firstSeq,
+      lastSeq: seq,
+      actorId: id,
+      actorName: "Studio actor",
+      createdAt: "2026-10-12T08:00:00.000Z",
+      reason: null,
+      kind,
+      operations,
+    });
+  }
   function reset(enabled: boolean) {
     active = enabled;
     seq = 1;
     fault = "";
     state = "open";
+    undoStack.length = 0;
+    redoStack.length = 0;
+    actions.length = 0;
+    historyKeys.clear();
+    historyId = 0;
     draftTitles.clear();
     createKeys.clear();
     draftTitles.set(id, "Studio browser draft");
@@ -113,6 +140,34 @@ export async function studioFixture(id: string, previewToken: string) {
         res.end(JSON.stringify({ manifest, manifestHash: "sha256:" + "a".repeat(64) }));
         return true;
       }
+      if (path.endsWith("/history")) {
+        const before = Number(
+          new URL(req.url!, "http://127.0.0.1").searchParams.get("beforeSeq") ?? 2147483647,
+        );
+        const items = actions.filter((item) => item.lastSeq < before);
+        const canUndo = state === "open" && undoStack.length > 0,
+          canRedo = state === "open" && redoStack.length > 0;
+        res.end(
+          JSON.stringify({
+            seq,
+            items: items.slice(0, 20),
+            nextBeforeSeq: items.length > 20 ? items[19]!.lastSeq : null,
+            canUndo,
+            canRedo,
+            undoReason: canUndo
+              ? null
+              : state !== "open"
+                ? "CHANGESET_STATE_INVALID"
+                : "NOTHING_TO_UNDO",
+            redoReason: canRedo
+              ? null
+              : state !== "open"
+                ? "CHANGESET_STATE_INVALID"
+                : "NOTHING_TO_REDO",
+          }),
+        );
+        return true;
+      }
       if (path === "/api/v1/pages") {
         res.end(
           JSON.stringify({
@@ -142,6 +197,52 @@ export async function studioFixture(id: string, previewToken: string) {
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);
+      if (["/api/v1/commands/undo", "/api/v1/commands/redo"].includes(path)) {
+        const key = String(req.headers["idempotency-key"]),
+          prior = historyKeys.get(key);
+        if (prior) {
+          if (prior.body !== body) {
+            fail(409, "IDEMPOTENCY_KEY_REUSED");
+            return true;
+          }
+          res.end(JSON.stringify({ result: { changeset: { ...changeset(), seq: prior.seq } } }));
+          return true;
+        }
+        if (fault === "history-reject") {
+          fail(403, "FORBIDDEN");
+          return true;
+        }
+        if (fault === "history-conflict") {
+          seq++;
+          fail(409, "CHANGESET_SEQ_CONFLICT");
+          return true;
+        }
+        if (envelope.payload.expectedSeq !== seq) {
+          fail(409, "CHANGESET_SEQ_CONFLICT");
+          return true;
+        }
+        if (state !== "open") {
+          fail(409, "CHANGESET_STATE_INVALID");
+          return true;
+        }
+        const undo = path.endsWith("undo"),
+          edit = (undo ? undoStack : redoStack).pop();
+        if (!edit) {
+          fail(409, undo ? "NOTHING_TO_UNDO" : "NOTHING_TO_REDO");
+          return true;
+        }
+        document = structuredClone(undo ? edit.before : edit.after);
+        (undo ? redoStack : undoStack).push(edit);
+        logHistory(undo ? "undo" : "redo", edit.operations);
+        historyKeys.set(key, { body, seq });
+        if (fault === "history-lost") {
+          fault = "";
+          fail(503, "STUDIO_RESPONSE_LOST");
+          return true;
+        }
+        res.end(JSON.stringify({ result: { changeset: changeset() } }));
+        return true;
+      }
       if (path === "/api/v1/commands/create-changeset") {
         const key = String(req.headers["idempotency-key"]);
         const prior = createKeys.get(key);
@@ -196,6 +297,7 @@ export async function studioFixture(id: string, previewToken: string) {
         fail(409, "CHANGESET_STATE_INVALID");
         return true;
       }
+      const before = structuredClone(document);
       for (const op of envelope.payload.operations) {
         const p = op.payload;
         if (op.type === "localContent.set")
@@ -210,8 +312,17 @@ export async function studioFixture(id: string, previewToken: string) {
             (document.nodes[p.nodeId]![op.type === "node.setDesign" ? "design" : "props"] ??= {}),
             p.set,
           );
-        seq++;
       }
+      const operations = envelope.payload.operations.map(
+        (op: { type: string; target: string }) => ({
+          type: op.type,
+          target: op.target,
+          status: "applied",
+        }),
+      );
+      undoStack.push({ before, after: structuredClone(document), operations });
+      redoStack.length = 0;
+      logHistory("edit", operations);
       if (fault === "lost") {
         fail(503, "STUDIO_RESPONSE_LOST");
         return true;

@@ -3,6 +3,9 @@ import { documentHash } from "@cms/runtime";
 import type { IrDocument } from "@cms/ir";
 import { StudioError, type Api, type Operation, type Rect, type Session } from "./types.js";
 export interface EditorState {
+  canvasPick: number;
+  historyRevision: number;
+  historyRetry: boolean;
   session: Session | null;
   document: IrDocument | null;
   selected: string | null;
@@ -48,6 +51,9 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    canvasPick: 0,
+    historyRevision: 0,
+    historyRetry: false,
     session: null,
     document: null,
     selected: null,
@@ -121,6 +127,10 @@ export function createEditor(
         });
     }
   }
+  let pendingHistory: { session: Session; action: "undo" | "redo"; key: string } | null = null;
+  function historyRead() {
+    return { historyRevision: store.getState().historyRevision + 1 };
+  }
   async function open(documentId: string, changesetId: string) {
     if (["saving", "uncertain"].includes(store.getState().status)) return;
     lifecycle.abort();
@@ -131,6 +141,7 @@ export function createEditor(
     initialized = false;
     store.setState({
       status: "loading",
+      canvasPick: 0,
       session: null,
       document: null,
       selected: null,
@@ -145,6 +156,7 @@ export function createEditor(
       const session = await api.open(documentId, changesetId, lifecycle.signal);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       store.setState({
+        ...historyRead(),
         session,
         document: structuredClone(session.record.body),
         selected: session.record.body.root,
@@ -169,9 +181,10 @@ export function createEditor(
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       const selected = store.getState().selected;
       store.setState({
+        ...historyRead(),
         session: current,
         document: structuredClone(current.record.body),
-        status: "ready",
+        status: pendingHistory ? "uncertain" : "ready",
         selected:
           selected && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
@@ -226,6 +239,7 @@ export function createEditor(
       const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       store.setState({
+        ...historyRead(),
         session: current,
         document: structuredClone(current.record.body),
         status: "ready",
@@ -240,6 +254,7 @@ export function createEditor(
         const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
         if (stamp !== epoch || lifecycle.signal.aborted) return;
         store.setState({
+          ...historyRead(),
           session: current,
           document: structuredClone(current.record.body),
           status: "ready",
@@ -250,6 +265,64 @@ export function createEditor(
       }
       invalidate();
     }
+  }
+  async function changeHistory(action: "undo" | "redo") {
+    const state = store.getState(),
+      session = state.session;
+    if (
+      !session ||
+      state.status !== "ready" ||
+      session.changeset.state !== "open" ||
+      !session.history[action === "undo" ? "canUndo" : "canRedo"]
+    )
+      return;
+    pendingHistory = { session, action, key: crypto.randomUUID() };
+    await sendHistory();
+  }
+  async function sendHistory() {
+    const attempt = pendingHistory;
+    if (!attempt || store.getState().status === "saving") return;
+    const stamp = epoch;
+    store.setState({ status: "saving", error: null, historyRetry: false });
+    let uncertain = false;
+    try {
+      await api.changeHistory(attempt.session, attempt.action, attempt.key, lifecycle.signal);
+      pendingHistory = null;
+    } catch (cause) {
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      uncertain = !(cause instanceof StudioError) || cause.uncertain;
+      if (!uncertain) pendingHistory = null;
+      store.setState({ error: cause instanceof StudioError ? cause.code : "HISTORY_UNCERTAIN" });
+    }
+    try {
+      const current = await api.open(
+        attempt.session.record.id,
+        attempt.session.changeset.id,
+        lifecycle.signal,
+      );
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      const selected = store.getState().selected;
+      store.setState({
+        ...historyRead(),
+        session: current,
+        document: structuredClone(current.record.body),
+        status: uncertain ? "uncertain" : "ready",
+        historyRetry: uncertain,
+        selected:
+          selected && Object.hasOwn(current.record.body.nodes, selected)
+            ? selected
+            : current.record.body.root,
+        instance: null,
+      });
+    } catch {
+      if (stamp === epoch && !lifecycle.signal.aborted)
+        store.setState({
+          status: "uncertain",
+          historyRetry: !!pendingHistory,
+          error: store.getState().error ?? "HISTORY_READ_FAILED",
+        });
+    }
+    invalidate();
   }
   function select(nodeId: string, instance: string | null = null) {
     if (!store.getState().document || !Object.hasOwn(store.getState().document!.nodes, nodeId))
@@ -302,6 +375,12 @@ export function createEditor(
           p.nodeId,
           typeof p.instance === "string" && p.instance.length <= 2000 ? p.instance : null,
         );
+        if (
+          state.mode === "design" &&
+          state.document &&
+          Object.hasOwn(state.document.nodes, p.nodeId)
+        )
+          store.setState({ canvasPick: state.canvasPick + 1 });
       } else if (
         initialized &&
         data.type === "layout" &&
@@ -343,6 +422,8 @@ export function createEditor(
     }
   }
   return {
+    changeHistory,
+    retryHistory: sendHistory,
     store,
     open,
     apply,

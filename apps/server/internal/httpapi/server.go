@@ -70,6 +70,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
 		workspaceRoutes(r, d)
+		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))
 		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id, ok := uuidParam(w, r, d, "id")

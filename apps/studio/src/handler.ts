@@ -76,11 +76,14 @@ export function createStudioHandler(
           path === "/api/v1/pages" ||
           path === "/api/v1/working-drafts" ||
           path === "/api/v1/manifest" ||
+          new RegExp(`^/api/v1/changesets/${uuid}/history$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
           "/api/v1/commands/apply-operations",
           "/api/v1/commands/create-preview-token",
           "/api/v1/commands/create-changeset",
+          "/api/v1/commands/undo",
+          "/api/v1/commands/redo",
         ].includes(path);
         if (!(req.method === "GET" && allowedGet) && !(req.method === "POST" && allowedPost))
           return error(404, "STUDIO_ROUTE_UNAVAILABLE");
@@ -91,7 +94,18 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (path === "/api/v1/pages" || path === "/api/v1/working-drafts") {
+          if (path.endsWith("/history")) {
+            if (
+              [...url.searchParams.keys()].some(
+                (key) => key !== "beforeSeq" || url.searchParams.getAll(key).length !== 1,
+              ) ||
+              (url.searchParams.has("beforeSeq") &&
+                (!/^[1-9][0-9]*$/.test(url.searchParams.get("beforeSeq")!) ||
+                  Number(url.searchParams.get("beforeSeq")) > 2147483647))
+            )
+              return error(400, "PARAM_INVALID");
+            upstream.search = url.search;
+          } else if (path === "/api/v1/pages" || path === "/api/v1/working-drafts") {
             const allowed = [
               "environment",
               "after",
@@ -143,6 +157,17 @@ export function createStudioHandler(
           }
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
+            return error(400, "PAYLOAD_INVALID");
+          if (
+            ["/api/v1/commands/undo", "/api/v1/commands/redo"].includes(path) &&
+            (Object.keys(envelope.payload).some(
+              (key) => !["changesetId", "expectedSeq"].includes(key),
+            ) ||
+              !new RegExp(`^${uuid}$`).test(String(envelope.payload.changesetId)) ||
+              !Number.isSafeInteger(envelope.payload.expectedSeq) ||
+              envelope.payload.expectedSeq < 0 ||
+              envelope.payload.expectedSeq > 2147483647)
+          )
             return error(400, "PAYLOAD_INVALID");
           if (
             (path.endsWith("create-preview-token") &&

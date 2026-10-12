@@ -12,7 +12,7 @@ import (
 )
 
 const listStudioDrafts = `-- name: ListStudioDrafts :many
-SELECT c.id, c.project_id, c.kind, c.title, c.description, c.owner_id, c.state, c.risk, c.targets, c.seq, c.content_hash, c.has_conflicts, c.created_at, c.updated_at, c.submitted_at, c.merged_at FROM changesets c
+SELECT c.id, c.project_id, c.kind, c.title, c.description, c.owner_id, c.state, c.risk, c.targets, c.seq, c.content_hash, c.has_conflicts, c.created_at, c.updated_at, c.submitted_at, c.merged_at, c.redo_barrier_seq FROM changesets c
 JOIN objects o ON o.id = $1 AND o.project_id = c.project_id
 LEFT JOIN changeset_objects co ON co.changeset_id = c.id AND co.object_id = o.id
 LEFT JOIN object_versions w ON w.id = co.working_version_id
@@ -67,6 +67,7 @@ func (q *Queries) ListStudioDrafts(ctx context.Context, arg ListStudioDraftsPara
 			&i.UpdatedAt,
 			&i.SubmittedAt,
 			&i.MergedAt,
+			&i.RedoBarrierSeq,
 		); err != nil {
 			return nil, err
 		}
