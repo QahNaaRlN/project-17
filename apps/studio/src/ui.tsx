@@ -7,6 +7,7 @@ import { fields, fieldOperations, designOperation, layers, type Field } from "./
 import { StudioError, type Api, type Session } from "./types.js";
 import { Workspace } from "./workspace.js";
 import { HistoryPanel } from "./history.js";
+import { StructurePanel } from "./structure-ui.js";
 const copy = {
   ru: {
     page: "Страница",
@@ -352,50 +353,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
       <Workspace {...{ api, editor, busy }} locale={state.locale} />
       {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
       <div className="workspace">
-        <aside className="layers">
-          <h2>{t.layers}</h2>
-          <div
-            role="tree"
-            aria-label={t.layers}
-            onKeyDown={(event) => {
-              const index = tree.findIndex((item) => item.id === state.selected);
-              let next: string | undefined;
-              if (event.key === "ArrowDown") next = tree[Math.min(index + 1, tree.length - 1)]?.id;
-              if (event.key === "ArrowUp") next = tree[Math.max(0, index - 1)]?.id;
-              if (event.key === "Home") next = tree[0]?.id;
-              if (event.key === "End") next = tree.at(-1)?.id;
-              if (event.key === "ArrowLeft" || event.key === "Escape")
-                next = tree[index]?.parent ?? undefined;
-              if (event.key === "ArrowRight" && tree[index + 1]?.parent === state.selected)
-                next = tree[index + 1]?.id;
-              if (next) {
-                event.preventDefault();
-                editor.select(next);
-                const buttons =
-                  event.currentTarget.querySelectorAll<HTMLElement>("[role=treeitem]");
-                buttons[tree.findIndex((item) => item.id === next)]?.focus();
-              }
-            }}
-          >
-            {tree.map((item) => (
-              <button
-                key={item.id}
-                role="treeitem"
-                aria-level={item.depth}
-                aria-selected={state.selected === item.id}
-                aria-expanded={tree.some((child) => child.parent === item.id) ? true : undefined}
-                tabIndex={state.selected === item.id ? 0 : -1}
-                style={{ paddingLeft: 12 + (item.depth - 1) * 16 }}
-                title={item.id}
-                onClick={() => editor.select(item.id)}
-              >
-                <span className="node-icon">◇</span>
-                {item.label}
-                {item.locked && <span aria-label={t.locked}> · 🔒</span>}
-              </button>
-            ))}
-          </div>
-        </aside>
+        <StructurePanel editor={editor} />
         <section className="canvas" aria-label={t.preview}>
           <div className="canvas-tools">
             <div role="group" aria-label={t.mode}>

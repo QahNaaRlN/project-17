@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import { documentHash } from "@cms/runtime";
 import type { IrDocument } from "@cms/ir";
 import { StudioError, type Api, type Operation, type Rect, type Session } from "./types.js";
+import { structuralApply } from "./structure.js";
 export interface EditorState {
   canvasPick: number;
   historyRevision: number;
@@ -29,6 +30,8 @@ function optimistic(source: IrDocument, operations: Operation[]): IrDocument {
         type: "text",
         value: p.locale ? { [String(p.locale)]: p.value } : (p.value as Record<string, unknown>),
       };
+    } else if (["node.insert", "node.remove", "node.move"].includes(operation.type)) {
+      structuralApply(document, operation);
     } else {
       const node = document.nodes[String(p.nodeId)];
       if (!node) throw new StudioError("NODE_NOT_FOUND");
@@ -200,7 +203,7 @@ export function createEditor(
         });
     }
   }
-  async function apply(operations: Operation[]) {
+  async function apply(operations: Operation[], selection?: string) {
     const state = store.getState(),
       session = state.session;
     if (
@@ -211,7 +214,10 @@ export function createEditor(
     )
       return;
     const stamp = epoch,
-      before = state.document;
+      before = state.document,
+      structural = operations.some((op) =>
+        ["node.insert", "node.remove", "node.move"].includes(op.type),
+      );
     let next: IrDocument;
     try {
       next = optimistic(before, operations);
@@ -219,10 +225,22 @@ export function createEditor(
       store.setState({ error: error instanceof StudioError ? error.code : "FIELD_INVALID" });
       return;
     }
-    store.setState({ document: next, status: "saving", error: null });
+    store.setState({
+      document: next,
+      status: "saving",
+      error: null,
+      selected: next.nodes[selection ?? state.selected ?? ""]
+        ? (selection ?? state.selected)
+        : next.root,
+      instance: structural ? null : state.instance,
+    });
     try {
       // Local values need authenticated reload in the application; design/props can use fast patch.
-      if (!operations.some((operation) => operation.type === "localContent.set")) {
+      if (
+        !operations.some((operation) =>
+          ["localContent.set", "node.insert", "node.remove", "node.move"].includes(operation.type),
+        )
+      ) {
         const ids = [...new Set(operations.map((op) => String(op.payload.nodeId)))];
         send("document.patch", {
           documentId: session.record.id,
@@ -243,13 +261,23 @@ export function createEditor(
         session: current,
         document: structuredClone(current.record.body),
         status: "ready",
+        selected: current.record.body.nodes[selection ?? state.selected ?? ""]
+          ? (selection ?? state.selected)
+          : current.record.body.root,
+        instance: structural ? null : state.instance,
       });
       invalidate();
     } catch (error) {
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       const code = error instanceof StudioError ? error.code : "SAVE_UNCERTAIN";
       // Every failed attempt must reread: a disconnected response may have committed.
-      store.setState({ document: before, status: "uncertain", error: code });
+      store.setState({
+        document: before,
+        status: "uncertain",
+        error: code,
+        selected: state.selected,
+        instance: structural ? null : state.instance,
+      });
       try {
         const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
         if (stamp !== epoch || lifecycle.signal.aborted) return;
@@ -259,6 +287,10 @@ export function createEditor(
           document: structuredClone(current.record.body),
           status: "ready",
           error: code,
+          selected: current.record.body.nodes[state.selected ?? ""]
+            ? state.selected
+            : current.record.body.root,
+          instance: structural ? null : state.instance,
         });
       } catch {
         /* explicit refresh is required before further writes */

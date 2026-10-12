@@ -28,7 +28,14 @@ export interface Session {
   manifestHash: string;
 }
 export interface Operation {
-  type: "node.setProps" | "node.setDesign" | "node.setBinding" | "localContent.set";
+  type:
+    | "node.setProps"
+    | "node.setDesign"
+    | "node.setBinding"
+    | "localContent.set"
+    | "node.insert"
+    | "node.remove"
+    | "node.move";
   target: string;
   payload: Record<string, unknown>;
 }

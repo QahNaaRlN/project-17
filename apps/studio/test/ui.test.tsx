@@ -126,6 +126,127 @@ it("STU-050: история показывает группы/автора, па
   expect(api.history).toHaveBeenLastCalledWith(expect.any(Object), 2, expect.any(AbortSignal));
   expect(document.querySelectorAll(".history-panel li")).toHaveLength(2);
 });
+it("STU-060/062/064: палитра, обязательные свойства, move/duplicate/delete и английский UI", async () => {
+  const { session, api } = await setup(true);
+  const component = () =>
+    [...document.querySelectorAll<HTMLSelectElement>("select")].find((s) =>
+      s.closest("label")?.textContent?.startsWith("Компонент"),
+    )!;
+  const add = () => button("Добавить блок");
+  await change(component(), "Stack");
+  await click(add());
+  const stack = editor.store.getState().selected!;
+  expect(session.record.body.nodes[stack]!.type).toBe("Stack");
+  await change(component(), "Heading");
+  await click(add());
+  const heading = editor.store.getState().selected!;
+  expect(session.record.body.nodes[stack]!.children).toEqual([heading]);
+  expect(api.apply).toHaveBeenLastCalledWith(
+    expect.anything(),
+    [
+      expect.objectContaining({ type: "localContent.set" }),
+      expect.objectContaining({ type: "node.insert" }),
+    ],
+    expect.any(String),
+    expect.any(AbortSignal),
+  );
+  await click(button("Дублировать"));
+  expect(session.record.body.nodes[stack]!.children).toHaveLength(2);
+  await click(button("Удалить"));
+  expect(editor.store.getState().selected).toBe(stack);
+  await click(layer(heading));
+  await click(button("Переместить"));
+  expect(session.record.body.nodes[stack]!.children).toHaveLength(0);
+  expect(session.record.body.nodes.n_root!.children).toContain(heading);
+  session.manifest.components!.Required = {
+    props: {
+      title: { type: "string", required: true, minLength: 1 },
+      choice: { type: "enum", required: true, values: ["a", "b"] },
+    },
+  };
+  await act(async () => {
+    await editor.refresh();
+  });
+  await change(component(), "Required");
+  const panel = document.querySelector('[aria-label="Палитра"]')!;
+  const title = [...panel.querySelectorAll<HTMLLabelElement>("label")]
+    .find((l) => l.textContent === "title")!
+    .querySelector("input")!;
+  await click(add());
+  expect(editor.store.getState().error).toBe("FIELD_INVALID");
+  await change(title, "Ready");
+  const choice = [...panel.querySelectorAll<HTMLSelectElement>("select")].find((s) =>
+    s.closest("label")?.textContent?.startsWith("choice"),
+  )!;
+  await change(choice, "a");
+  await click(add());
+  expect(session.record.body.nodes[editor.store.getState().selected!]!.props).toEqual({
+    title: "Ready",
+    choice: "a",
+  });
+  const search = document.querySelector<HTMLInputElement>('[aria-label="Палитра"] input')!;
+  await change(search, "required");
+  expect(component().options).toHaveLength(1);
+  await change(document.querySelector<HTMLSelectElement>('[aria-label="Язык"]')!, "en");
+  expect(document.querySelector('[aria-label="Palette"]')).not.toBeNull();
+  expect(button("Duplicate").disabled).toBe(false);
+});
+it("STU-062: Delete/Ctrl+D действуют в дереве и сохраняют редактирование полей", async () => {
+  const { api, session } = await setup(true);
+  await click(layer("n_heading"));
+  await act(async () => {
+    layer("n_heading").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "d", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  await flush();
+  expect(session.record.body.nodes.n_root!.children).toHaveLength(3);
+  const id = editor.store.getState().selected!;
+  await act(async () => {
+    layer(id).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
+    );
+  });
+  await flush();
+  expect(session.record.body.nodes[id]).toBeUndefined();
+  await click(layer("n_custom"));
+  const count = vi.mocked(api.apply).mock.calls.length;
+  await act(async () => {
+    input("property-title").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "d", ctrlKey: true, bubbles: true }),
+    );
+    input("property-title").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Delete", bubbles: true }),
+    );
+  });
+  expect(api.apply).toHaveBeenCalledTimes(count);
+  await act(async () => {
+    layer("n_custom").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Delete", isComposing: true, bubbles: true }),
+    );
+  });
+  expect(api.apply).toHaveBeenCalledTimes(count);
+});
+it("STU-061/064: нет целей в locked зоне, read-only и отказы сохраняют выбор", async () => {
+  const { session, api } = await setup(true);
+  await click(layer("n_heading"));
+  vi.mocked(api.apply).mockRejectedValueOnce(new StudioError("FORBIDDEN"));
+  await click(button("Удалить"));
+  expect(editor.store.getState().selected).toBe("n_heading");
+  expect(layer("n_heading")).toBeDefined();
+  session.record.body.nodes.n_root!.zone = { id: "lock", mode: "SYSTEM", locked: true };
+  await act(async () => {
+    await editor.refresh();
+  });
+  for (const text of ["Добавить блок", "Дублировать", "Удалить", "Переместить"])
+    expect(button(text).disabled).toBe(true);
+  delete session.record.body.nodes.n_root!.zone;
+  session.changeset.state = "approved";
+  await act(async () => {
+    await editor.refresh();
+  });
+  expect(button("Добавить блок").disabled).toBe(true);
+});
 it("STU-050/054: типы действий, другие страницы, конфликты/исключения и ru/en", async () => {
   const { session } = await setup(true);
   session.history.items = [

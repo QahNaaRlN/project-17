@@ -39,6 +39,8 @@ head (как у существующего чтения/редактирован
 выбор, создание, повторы, отказ и потерянный ответ; Chromium — открытие без ID,
 создание и сохранение после открытия. Пороги покрытия сохраняются.
 
-Пакет не завершает M4. Остались production identity, DnD/палитра, Structure,
+Пакет не завершает M4. Остались production identity, Structure/CodeMirror,
 content editor, review/publish, SSE/presence и Agent. История и undo/redo теперь
 реализованы в [следующем пакете](studio-history.md).
+Палитра, DnD/перемещение, удаление и дублирование реализованы
+в [пакете структуры](studio-structure.md).

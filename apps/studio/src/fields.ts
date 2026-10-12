@@ -15,6 +15,7 @@ const safe = (key: string) =>
 export function fields(doc: IrDocument, node: Node, manifest: Manifest, locale = "ru"): Field[] {
   const contract =
     (builtinCatalogue as unknown as Record<string, { props?: Record<string, Type> }>)[node.type] ??
+    manifest.primitives?.[node.type] ??
     manifest.components?.[node.type];
   return Object.entries(contract?.props ?? {}).map(([name, schema]) => {
     const binding = node.bindings?.[name];

@@ -22,8 +22,10 @@
 Пакет [страниц и рабочих черновиков](../studio-workspace.md) добавляет выбор
 из списков и создание собственного CS; вход в работу больше не требует двух ID.
 [История и отмена](../studio-history.md) добавляют просмотр действий CS и
-атомарный undo/redo одной пользовательской правки. Остались палитра/структура,
-content editor, approval/publish UI, identity, SSE/presence и Agent.
+атомарный undo/redo одной пользовательской правки. [Палитра и структура](../studio-structure.md)
+добавляют создание, перемещение/DnD, удаление и дублирование с новыми ID.
+Остались CodeMirror/JSON diff, content editor, approval/publish UI, identity,
+SSE/presence и Agent.
 
 ## 2. Сквозной сценарий приёмки
 

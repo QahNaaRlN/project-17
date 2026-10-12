@@ -74,6 +74,7 @@ renderer; локальный текст меняет перевод. Это не
 ## Следующие пакеты
 
 История и undo/redo подключены в [отдельном пакете](studio-history.md).
-Остались DnD/палитра, Structure/CodeMirror, контент-редактор,
+Палитра, DnD/перемещение и удаление/копирование подключены в
+[пакете структуры](studio-structure.md). Остались Structure/CodeMirror, контент-редактор,
 согласование/публикация, SSE/presence, Agent. В M3 остаются streaming/selective
 hydration, изоляция native render ошибок, rich text и остальной каталог.

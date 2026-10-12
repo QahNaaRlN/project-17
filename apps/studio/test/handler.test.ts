@@ -14,6 +14,34 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-061/064: адаптер пропускает структурные группы без изменения payload/seq/key", async () => {
+  const { post, fetcher } = await setup();
+  for (const type of ["node.insert", "node.remove", "node.move"]) {
+    const payload = {
+      changesetId,
+      expectedSeq: 5,
+      group: true,
+      operations: [
+        {
+          type,
+          target: documentId,
+          payload: {
+            nodeId: "n_test",
+            parentId: "n_root",
+            slot: "footer",
+            index: 0,
+            subtree: { id: "n_new", type: "Text" },
+          },
+        },
+      ],
+    };
+    expect((await post("/api/studio/api/v1/commands/apply-operations", { payload })).status).toBe(
+      200,
+    );
+    expect(JSON.parse(String(fetcher.mock.calls.at(-1)![1]!.body)).payload).toEqual(payload);
+    expect(fetcher.mock.calls.at(-1)![1]!.headers).toMatchObject({ "Idempotency-Key": "test-key" });
+  }
+});
 it("STU-050/052: адаптер разрешает только историю CS и замороженные undo/redo", async () => {
   const { origin, post, fetcher } = await setup();
   for (const query of ["", "?beforeSeq=20"])
