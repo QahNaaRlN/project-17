@@ -24,7 +24,9 @@
 [История и отмена](../studio-history.md) добавляют просмотр действий CS и
 атомарный undo/redo одной пользовательской правки. [Палитра и структура](../studio-structure.md)
 добавляют создание, перемещение/DnD, удаление и дублирование с новыми ID.
-Остались CodeMirror/JSON diff, content editor, approval/publish UI, identity,
+Пакет [проверок и публикации](../studio-publishing.md) добавляет подачу,
+диагностики, согласование по правам и явную публикацию (STU-070…074).
+Остались CodeMirror/JSON diff, content editor, identity,
 SSE/presence и Agent.
 
 ## 2. Сквозной сценарий приёмки

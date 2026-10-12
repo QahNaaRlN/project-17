@@ -30,6 +30,15 @@ export async function studioFixture(id: string, previewToken: string) {
     seq = 1,
     fault = "",
     state = "open";
+  let human = false;
+  const decisions: {
+    approverId: string;
+    decision: string;
+    comment: string | null;
+    valid: boolean;
+    createdAt: string;
+  }[] = [];
+  const workflowKeys = new Map<string, { body: string; result: unknown }>();
   const draftTitles = new Map<string, string>(),
     createKeys = new Map<string, string>();
   const createdId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c99";
@@ -59,6 +68,9 @@ export async function studioFixture(id: string, previewToken: string) {
     seq = 1;
     fault = "";
     state = "open";
+    human = false;
+    decisions.length = 0;
+    workflowKeys.clear();
     undoStack.length = 0;
     redoStack.length = 0;
     actions.length = 0;
@@ -116,10 +128,16 @@ export async function studioFixture(id: string, previewToken: string) {
       if (path === "/studio-control" && req.method === "POST") {
         let body = "";
         for await (const chunk of req) body += String(chunk);
-        const control = JSON.parse(body) as { reset?: boolean; fault?: string; state?: string };
+        const control = JSON.parse(body) as {
+          reset?: boolean;
+          fault?: string;
+          state?: string;
+          human?: boolean;
+        };
         if (control.reset) reset(true);
         fault = control.fault ?? "";
         state = control.state ?? state;
+        human = control.human ?? human;
         res.end("ok");
         return true;
       }
@@ -139,6 +157,68 @@ export async function studioFixture(id: string, previewToken: string) {
       }
       if (path === "/api/v1/manifest") {
         res.end(JSON.stringify({ manifest, manifestHash: "sha256:" + "a".repeat(64) }));
+        return true;
+      }
+      if (path.endsWith("/review")) {
+        res.end(
+          JSON.stringify({
+            changeset: changeset(path.split("/").at(-2)!),
+            risk: state === "open" ? null : "medium",
+            needsAttention: state === "failed",
+            requiredApprovals: human ? 1 : 0,
+            approvals: decisions.filter((d) => d.valid && d.decision === "approve").length,
+            history: decisions,
+            objects: [{ id, kind: "page", path: "/store", deleted: false }],
+            actions: {
+              submit: state === "open" ? null : "CHANGESET_NOT_OPEN",
+              reopen: ["failed", "approved", "in_review", "changes_requested"].includes(state)
+                ? null
+                : "CHANGESET_STATE_INVALID",
+              approve:
+                state !== "in_review"
+                  ? "CHANGESET_STATE_INVALID"
+                  : human
+                    ? null
+                    : "APPROVAL_FORBIDDEN_ACTOR",
+              "request-changes":
+                state !== "in_review"
+                  ? "CHANGESET_STATE_INVALID"
+                  : human
+                    ? null
+                    : "APPROVAL_FORBIDDEN_ACTOR",
+              publish: state === "approved" ? null : "CHANGESET_STATE_INVALID",
+            },
+            checks:
+              state === "open"
+                ? []
+                : [
+                    {
+                      stage: "ir",
+                      status: state === "failed" ? "failed" : "passed",
+                      blocking: true,
+                      details:
+                        state === "failed"
+                          ? {
+                              environments: {
+                                staging: {
+                                  documents: {
+                                    [id]: [
+                                      {
+                                        code: "PROP_REQUIRED",
+                                        severity: "error",
+                                        pointer: "/nodes/n_title/props/text",
+                                      },
+                                    ],
+                                  },
+                                },
+                              },
+                            }
+                          : {},
+                    },
+                    { stage: "policy", status: "passed", blocking: true, details: {} },
+                  ],
+          }),
+        );
         return true;
       }
       if (path.endsWith("/history")) {
@@ -198,6 +278,76 @@ export async function studioFixture(id: string, previewToken: string) {
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);
+      if (
+        [
+          "submit-changeset",
+          "reopen-changeset",
+          "approve-changeset",
+          "request-changes",
+          "publish",
+        ].some((command) => path.endsWith("/" + command))
+      ) {
+        const key = String(req.headers["idempotency-key"]),
+          prior = workflowKeys.get(key);
+        if (prior) {
+          if (prior.body !== body) fail(409, "IDEMPOTENCY_KEY_REUSED");
+          else res.end(JSON.stringify({ result: prior.result }));
+          return true;
+        }
+        if (fault === "workflow-reject") {
+          fail(403, "FORBIDDEN");
+          return true;
+        }
+        if (fault === "workflow-stale") seq++;
+        if (envelope.payload.expectedSeq !== seq) {
+          fail(409, "CHANGESET_SEQ_CONFLICT");
+          return true;
+        }
+        let result: unknown;
+        if (path.endsWith("submit-changeset"))
+          state = fault === "submit-invalid" ? "failed" : human ? "in_review" : "approved";
+        else if (path.endsWith("reopen-changeset")) {
+          state = "open";
+          decisions.forEach((d) => {
+            d.valid = false;
+          });
+        } else if (path.endsWith("approve-changeset") || path.endsWith("request-changes")) {
+          if (!human) {
+            fail(403, "APPROVAL_FORBIDDEN_ACTOR");
+            return true;
+          }
+          const approve = path.endsWith("approve-changeset");
+          state = approve ? "approved" : "changes_requested";
+          decisions.push({
+            approverId: createdId,
+            decision: approve ? "approve" : "request_changes",
+            comment: envelope.payload.comment ?? null,
+            valid: true,
+            createdAt: "2026-10-13T00:00:00Z",
+          });
+        } else {
+          if (state !== "approved") {
+            fail(409, "CHANGESET_STATE_INVALID");
+            return true;
+          }
+          state = "merged";
+          result = {
+            id: createdId,
+            changesetId: id,
+            environment: "staging",
+            createdAt: "2026-10-13T00:00:00Z",
+          };
+        }
+        result ??= { changeset: changeset() };
+        workflowKeys.set(key, { body, result });
+        if (fault === "workflow-lost") {
+          fault = "";
+          fail(503, "STUDIO_RESPONSE_LOST");
+          return true;
+        }
+        res.end(JSON.stringify({ result }));
+        return true;
+      }
       if (["/api/v1/commands/undo", "/api/v1/commands/redo"].includes(path)) {
         const key = String(req.headers["idempotency-key"]),
           prior = historyKeys.get(key);

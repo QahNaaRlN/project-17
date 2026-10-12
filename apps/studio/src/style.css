@@ -391,3 +391,51 @@ footer button {
     padding: 12px 8px;
   }
 }
+.publishing-panel {
+  padding: 16px 24px;
+  background: #fff;
+  border-top: 1px solid #d8dfe8;
+  overflow-wrap: anywhere;
+}
+.publishing-heading,
+.publishing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.publishing-actions {
+  align-items: flex-start;
+  margin: 12px 0;
+}
+.publishing-actions > div {
+  max-width: 340px;
+}
+.publishing-panel h2,
+.publishing-panel h3 {
+  font-size: 14px;
+}
+.publishing-panel li {
+  margin: 8px 0;
+}
+.publishing-panel summary {
+  cursor: pointer;
+}
+.publishing-panel code {
+  font-size: 11px;
+}
+.publication-confirmation {
+  border: 1px solid #9aaacc;
+  background: #f4f7fc;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.publication-confirmation button {
+  margin: 8px 8px 0 0;
+}
+.publication-confirmation textarea {
+  font: inherit;
+  min-height: 80px;
+  max-width: 600px;
+}

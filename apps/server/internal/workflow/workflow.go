@@ -130,6 +130,7 @@ func Register(bus *commandbus.Bus) {
 
 type changesetRef struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
+	ExpectedSeq *int32    `json:"expectedSeq,omitempty"`
 }
 
 // Check — результат этапа проверки.
@@ -451,6 +452,7 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 type reviewPayload struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
 	Comment     *string   `json:"comment"`
+	ExpectedSeq *int32    `json:"expectedSeq,omitempty"`
 }
 
 func requireComment(p reviewPayload) error {
@@ -475,6 +477,9 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 		return Review{}, err
 	}
 	if err := changes.RequireState(cs, "Согласование", "in_review"); err != nil {
+		return Review{}, err
+	}
+	if err := RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Review{}, err
 	}
 	// PUB-002: согласующий не автор ни одной операции, в том числе как onBehalfOf агента.
@@ -550,6 +555,9 @@ func handleReopen(ctx context.Context, tx pgx.Tx, actor auth.Actor, p changesetR
 		return Review{}, err
 	}
 	if err := changes.RequireOwner(cs, actor); err != nil {
+		return Review{}, err
+	}
+	if err := RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Review{}, err
 	}
 	if err := changes.RequireState(cs, "Возврат в работу", "failed", "changes_requested", "in_review", "approved"); err != nil {
@@ -675,7 +683,7 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 			}
 		}
 	} else {
-		req, err = validation.ZoneRequirements(ctx, q, projectID, cs.ID, cs.Targets)
+		req, err = validation.ZoneRequirementsSnapshot(ctx, q, projectID, cs.ID, cs.Targets)
 		if err != nil {
 			return ReviewDetail{}, err
 		}

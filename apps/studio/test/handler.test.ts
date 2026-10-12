@@ -14,6 +14,91 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-070/071/072/073/074: review and workflow stay within the configured adapter contract", async () => {
+  const { origin, post, fetcher } = await setup();
+  const review = `/api/studio/api/v1/changesets/${changesetId}/review`;
+  expect((await fetch(origin + review)).status).toBe(200);
+  expect((await fetch(origin + review + "?environment=production")).status).toBe(400);
+  for (const command of [
+    "submit-changeset",
+    "reopen-changeset",
+    "approve-changeset",
+    "request-changes",
+    "publish",
+  ]) {
+    const route = "/api/studio/api/v1/commands/" + command;
+    const payload = {
+      changesetId,
+      expectedSeq: 3,
+      ...(command === "publish" ? { environment: "staging" } : {}),
+      ...(command === "request-changes" ? { comment: "Revise" } : {}),
+    };
+    expect((await post(route, { payload })).status).toBe(200);
+    expect(JSON.parse(String(fetcher.mock.calls.at(-1)![1]!.body)).payload).toEqual(payload);
+    expect(fetcher.mock.calls.at(-1)![1]!.headers).toMatchObject({ "Idempotency-Key": "test-key" });
+    for (const bad of [
+      { ...payload, expectedSeq: -1 },
+      { ...payload, expectedSeq: 2147483648 },
+      { ...payload, changesetId: "bad" },
+      { ...payload, targets: ["production"] },
+    ])
+      expect((await post(route, { payload: bad })).status).toBe(400);
+  }
+  for (const environment of [undefined, "production"])
+    expect(
+      (
+        await post("/api/studio/api/v1/commands/publish", {
+          payload: { changesetId, expectedSeq: 3, environment },
+        })
+      ).status,
+    ).toBe(403);
+  for (const comment of [undefined, " ", 1, "x".repeat(2001)])
+    expect(
+      (
+        await post("/api/studio/api/v1/commands/request-changes", {
+          payload: { changesetId, expectedSeq: 3, comment },
+        })
+      ).status,
+    ).toBe(400);
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/set-approval-policy", {
+        payload: { low: 0, medium: 0, high: 0 },
+      })
+    ).status,
+  ).toBe(404);
+});
+it("STU-071: adapter forwards only narrow validation diagnostics from rejected commands", async () => {
+  const { post, fetcher } = await setup();
+  fetcher.mockResolvedValueOnce(
+    Response.json(
+      {
+        code: "VALIDATION_FAILED",
+        detail: config.credential,
+        params: {
+          documents: {
+            [documentId]: [
+              {
+                code: "PROP_REQUIRED",
+                severity: "error",
+                pointer: "/nodes/n_heading",
+                message: config.credential,
+              },
+            ],
+          },
+        },
+      },
+      { status: 422 },
+    ),
+  );
+  const result = await post("/api/studio/api/v1/commands/publish", {
+    payload: { changesetId, expectedSeq: 3, environment: "staging" },
+  });
+  expect(result.status).toBe(422);
+  const text = await result.text();
+  expect(text).toContain("PROP_REQUIRED");
+  expect(text).not.toContain(config.credential);
+});
 it("STU-061/064: адаптер пропускает структурные группы без изменения payload/seq/key", async () => {
   const { post, fetcher } = await setup();
   for (const type of ["node.insert", "node.remove", "node.move"]) {

@@ -65,7 +65,22 @@ func LockProjectEnvironments(ctx context.Context, q *store.Queries, project uuid
 // Load locks the environment first: manifest and published pointers cannot change during
 // validation/publication. A candidate is accepted only for its linked schema CS and base.
 func Load(ctx context.Context, q *store.Queries, project uuid.UUID, environment string, cs *uuid.UUID) (*Context, error) {
-	env, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: project, Name: environment})
+	return load(ctx, q, project, environment, cs, true)
+}
+
+// LoadSnapshot is for Query API under a repeatable-read snapshot; it acquires no write lock.
+func LoadSnapshot(ctx context.Context, q *store.Queries, project uuid.UUID, environment string, cs *uuid.UUID) (*Context, error) {
+	return load(ctx, q, project, environment, cs, false)
+}
+
+func load(ctx context.Context, q *store.Queries, project uuid.UUID, environment string, cs *uuid.UUID, lock bool) (*Context, error) {
+	var env store.Environment
+	var err error
+	if lock {
+		env, err = q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: project, Name: environment})
+	} else {
+		env, err = q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: project, Name: environment})
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Окружение не найдено", environment)
 	}

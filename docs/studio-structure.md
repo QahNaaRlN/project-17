@@ -23,6 +23,7 @@ L5–L6 блокируют неверную структуру/политику;
 Studio не выдаёт доступность вставки за разрешение на публикацию. Без resolved
 контракта Composed его копирование/перемещение не предлагается этим пакетом.
 
-Это частичный M4, STU-003/020 и часть STU-023/032/033. Далее: review/publish UI,
-production identity, SSE/presence, content editor и Agent. CodeMirror/JSON diff,
+Это частичный M4, STU-003/020 и часть STU-023/032/033.
+[Review/publish UI](studio-publishing.md) реализован следующим пакетом.
+Далее: production identity, SSE/presence, content editor и Agent. CodeMirror/JSON diff,
 междокументный буфер, wrap и component.extract остаются отдельными задачами.

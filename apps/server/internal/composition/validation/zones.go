@@ -12,6 +12,15 @@ import (
 
 // ZoneRequirements includes edited documents and affected published live consumers.
 func ZoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string) (zonepolicy.Result, error) {
+	return zoneRequirements(ctx, q, project, cs, targets, Load)
+}
+
+// ZoneRequirementsSnapshot keeps review queries read-only and consistent with their snapshot.
+func ZoneRequirementsSnapshot(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string) (zonepolicy.Result, error) {
+	return zoneRequirements(ctx, q, project, cs, targets, LoadSnapshot)
+}
+
+func zoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string, loadContext func(context.Context, *store.Queries, uuid.UUID, string, *uuid.UUID) (*Context, error)) (zonepolicy.Result, error) {
 	versions, err := q.ChangesetWorkingVersions(ctx, cs)
 	if err != nil {
 		return zonepolicy.Result{}, err
@@ -72,7 +81,7 @@ func ZoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UU
 		add(zonepolicy.Affected(a, b, mode, nil, !sameString(before[id].Path, d.Path)))
 	}
 	for _, target := range targets {
-		c, err := Load(ctx, q, project, target, &cs)
+		c, err := loadContext(ctx, q, project, target, &cs)
 		if err != nil {
 			return merged, err
 		}

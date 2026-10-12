@@ -80,9 +80,11 @@ X-CMS-Project: store
 | `submit-changeset` | `changesetId`, `targets` | автор CS |
 | `reopen-changeset` | `changesetId` | автор CS |
 | `abandon-changeset` | `changesetId` | автор CS, `project.admin` |
-| `approve-changeset` | `changesetId`, `environment`, `comment?` | роль согласующего (PUB-001…003) |
+| `approve-changeset` | `changesetId`, `expectedSeq?`, `comment?` | человек с `content.publish`, не автор (PUB-001…003) |
+| `request-changes` | `changesetId`, `expectedSeq?`, `comment` | человек с `content.publish`, не автор (PUB-001…003) |
+| `reopen-changeset` | `changesetId`, `expectedSeq?` | владелец CS; сбрасывает согласования |
 | `request-changes` | `changesetId`, `comment` | роль согласующего |
-| `publish` | `changesetId`, `environment` | `content.publish` (окружение) |
+| `publish` | `changesetId`, `environment`, `expectedSeq?` | `content.publish` (окружение) |
 | `promote` | `publicationId`, `toEnvironment` | `content.publish` (целевое окружение) |
 | `rollback` | `publicationId`, `resetHead?` | `content.publish` (окружение) |
 | `claim-schema-changeset` | `changesetId`, `expectedSeq` | человек с `schema.apply`; открытый кандидат сервиса |
@@ -114,6 +116,7 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
 | `GET /api/v1/changesets/{id}/history?beforeSeq=` | Метаданные 20 целых действий CS и canUndo/canRedo в одном снимке; design.read (STU-050) |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
+| `GET /api/v1/changesets/{id}/review` | Состояние, риск, проверки, роли/счётчики/история согласований, needsAttention, краткие objects без тел и actions для текущего актора; согласованный снимок без блокировок записи (STU-070) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
 | `GET /api/v1/events` (SSE) | Поток событий проекта для Studio: изменения CS, проверки, публикации, presence |

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { Config } from "./types.js";
+import { problemDiagnostics } from "./review.js";
 export interface ServerConfig extends Config {
   baseUrl: string;
   studioOrigin: string;
@@ -45,9 +46,9 @@ export function createStudioHandler(
       "Content-Security-Policy",
       `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src ${config.appOrigin}; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`,
     );
-    function error(status: number, code: string) {
+    function error(status: number, code: string, diagnostics = problemDiagnostics(undefined)) {
       res.writeHead(status, { "Content-Type": "application/problem+json" });
-      res.end(JSON.stringify({ code }));
+      res.end(JSON.stringify({ code, ...(diagnostics.length ? { diagnostics } : {}) }));
     }
     try {
       if (
@@ -77,6 +78,7 @@ export function createStudioHandler(
           path === "/api/v1/working-drafts" ||
           path === "/api/v1/manifest" ||
           new RegExp(`^/api/v1/changesets/${uuid}/history$`).test(path) ||
+          new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
           "/api/v1/commands/apply-operations",
@@ -84,6 +86,11 @@ export function createStudioHandler(
           "/api/v1/commands/create-changeset",
           "/api/v1/commands/undo",
           "/api/v1/commands/redo",
+          "/api/v1/commands/submit-changeset",
+          "/api/v1/commands/reopen-changeset",
+          "/api/v1/commands/approve-changeset",
+          "/api/v1/commands/request-changes",
+          "/api/v1/commands/publish",
         ].includes(path);
         if (!(req.method === "GET" && allowedGet) && !(req.method === "POST" && allowedPost))
           return error(404, "STUDIO_ROUTE_UNAVAILABLE");
@@ -159,6 +166,37 @@ export function createStudioHandler(
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
           if (
+            [
+              "submit-changeset",
+              "reopen-changeset",
+              "approve-changeset",
+              "request-changes",
+              "publish",
+            ].some((command) => path.endsWith("/" + command))
+          ) {
+            const p = envelope.payload;
+            const allowed = [
+              "changesetId",
+              "expectedSeq",
+              ...(path.endsWith("/publish") ? ["environment"] : []),
+              ...(path.endsWith("/request-changes") ? ["comment"] : []),
+            ];
+            if (
+              Object.keys(p).some((key) => !allowed.includes(key)) ||
+              !new RegExp(`^${uuid}$`).test(String(p.changesetId)) ||
+              !Number.isSafeInteger(p.expectedSeq) ||
+              p.expectedSeq < 0 ||
+              p.expectedSeq > 2147483647 ||
+              (path.endsWith("/request-changes") &&
+                (typeof p.comment !== "string" ||
+                  !p.comment.trim() ||
+                  [...p.comment].length > 2000))
+            )
+              return error(400, "PAYLOAD_INVALID");
+            if (path.endsWith("/publish") && p.environment !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          }
+          if (
             ["/api/v1/commands/undo", "/api/v1/commands/redo"].includes(path) &&
             (Object.keys(envelope.payload).some(
               (key) => !["changesetId", "expectedSeq"].includes(key),
@@ -219,13 +257,15 @@ export function createStudioHandler(
         // Do not forward Set-Cookie, Location, request metadata or upstream error details.
         if (!result.ok) {
           let code = "CMS_REQUEST_FAILED";
+          let diagnostics = problemDiagnostics(undefined);
           try {
             const problem = await result.json();
             if (/^[A-Z0-9_]{1,80}$/.test(problem.code)) code = problem.code;
+            diagnostics = problemDiagnostics(problem.params);
           } catch {
             /* safe generic code */
           }
-          return error(result.status, code);
+          return error(result.status, code, diagnostics);
         }
         res.writeHead(result.status, { "Content-Type": "application/json" });
         res.end(await result.text());

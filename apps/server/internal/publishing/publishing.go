@@ -72,6 +72,7 @@ func Register(bus *commandbus.Bus) {
 type publishPayload struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
 	Environment string    `json:"environment"`
+	ExpectedSeq *int32    `json:"expectedSeq,omitempty"`
 }
 
 func reasonPtr(ctx context.Context) *string {
@@ -112,6 +113,9 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		return Publication{}, err
 	}
 	if err := changes.RequireState(cs, "Публикация", "approved"); err != nil {
+		return Publication{}, err
+	}
+	if err := workflow.RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Publication{}, err
 	}
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID) // упорядочены по ID объекта

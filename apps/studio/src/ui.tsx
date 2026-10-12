@@ -8,6 +8,7 @@ import { StudioError, type Api, type Session } from "./types.js";
 import { Workspace } from "./workspace.js";
 import { HistoryPanel } from "./history.js";
 import { StructurePanel } from "./structure-ui.js";
+import { PublishingPanel } from "./publishing.js";
 const copy = {
   ru: {
     page: "Страница",
@@ -128,8 +129,13 @@ function Property({
   disabled: boolean;
   t: Copy;
 }) {
-  const [value, setValue] = useState(field.value === undefined ? "" : String(field.value));
+  const initial = field.value === undefined ? "" : String(field.value);
+  const [value, setValue] = useState(initial);
   const id = "property-" + field.name;
+  useEffect(() => {
+    editor.formDirty(id, field.editable && value !== initial);
+    return () => editor.formDirty(id, false);
+  }, [editor, id, field.editable, initial, value]);
   if (!field.editable)
     return (
       <div className="readonly-field">
@@ -213,6 +219,12 @@ function Design({
     initial = (initial as Record<string, unknown>)[point] ?? initial.base;
   if (initial && typeof initial === "object" && "raw" in initial) initial = initial.raw;
   const [value, setValue] = useState(initial === undefined ? "" : String(initial));
+  const initialText = initial === undefined ? "" : String(initial),
+    id = "design-" + name;
+  useEffect(() => {
+    editor.formDirty(id, value !== initialText);
+    return () => editor.formDirty(id, false);
+  }, [editor, id, initialText, value]);
   return (
     <form
       className="field"
@@ -432,7 +444,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
               {state.instance && <p className="hint">{t.instance}</p>}
               {fields(doc, selected, session.manifest, state.locale).map((field) => (
                 <Property
-                  key={`${selected.id}:${session.changeset.seq}:${state.locale}:${field.name}`}
+                  key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${state.locale}:${field.name}`}
                   {...{ field, node: selected, session, editor, disabled, t }}
                 />
               ))}
@@ -459,7 +471,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
               </datalist>
               {(["padding", "gap"] as const).map((name) => (
                 <Design
-                  key={`${selected.id}:${session.changeset.seq}:${point}:${name}`}
+                  key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${point}:${name}`}
                   {...{ name, node: selected, session, editor, disabled, t, point }}
                 />
               ))}
@@ -469,6 +481,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
           )}
         </aside>
       </div>
+      <PublishingPanel editor={editor} />
       {session && (
         <HistoryPanel
           {...{ session, api, editor, busy }}

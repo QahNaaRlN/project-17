@@ -4,7 +4,7 @@ import { structuralApply } from "../src/structure.js";
 export const documentId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
   changesetId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c22";
 export function fixture(): Session {
-  return {
+  const session: Omit<Session, "review"> = {
     history: {
       seq: 1,
       items: [],
@@ -71,6 +71,26 @@ export function fixture(): Session {
       },
     },
   };
+  return {
+    ...session,
+    review: {
+      needsAttention: false,
+      changeset: session.changeset,
+      risk: null,
+      requiredApprovals: 0,
+      approvals: 0,
+      checks: [],
+      history: [],
+      objects: [{ id: documentId, kind: "page", path: "/store", deleted: false }],
+      actions: {
+        submit: null,
+        reopen: null,
+        approve: null,
+        "request-changes": null,
+        publish: null,
+      },
+    },
+  };
 }
 export function persist(session: Session, operations: Operation[]) {
   for (const operation of operations) {
@@ -98,6 +118,23 @@ export function persist(session: Session, operations: Operation[]) {
 }
 export function mockApi(session = fixture()) {
   const api: Api = {
+    workflow: vi.fn<Api["workflow"]>(async (_session, action) => {
+      session.changeset.state = {
+        submit: "approved",
+        reopen: "open",
+        approve: "approved",
+        "request-changes": "changes_requested",
+        publish: "merged",
+      }[action];
+      return action === "publish"
+        ? {
+            id: documentId,
+            changesetId,
+            environment: "staging",
+            createdAt: new Date().toISOString(),
+          }
+        : null;
+    }),
     history: vi.fn(async () => structuredClone(session.history)),
     changeHistory: vi.fn(async () => {}),
     pages: vi.fn(async () => ({
