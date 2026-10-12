@@ -523,18 +523,37 @@ func TestKnownVersionReuseAndClaimFailureRollback(t *testing.T) {
 func TestMigrationDownPreservesSchemaAudit(t *testing.T) {
 	e := setup(t)
 	r := register(e, manifest("1", "text"), "staging")
-	if err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	} // remove the empty asset upload migration first
-	if err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	} // remove the empty content migration first
-	err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Reach the schema publication migration, regardless of later empty migrations.
+	for {
+		var version int
+		if err := e.Pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		if version == 12 {
+			break
+		}
+		if version < 12 {
+			t.Fatalf("schema publication migration missing: %d", version)
+		}
+		if err := postgres.Migrate(ctx, e.Pool, "down", log); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := postgres.Migrate(ctx, e.Pool, "down", log)
 	if err == nil || !strings.Contains(err.Error(), "schema publication data prevents downgrade") {
 		t.Fatal(err)
 	}
 	if count(e, "operations") != 1 {
 		t.Fatal("migration removed journal")
+	}
+	// Current generated queries include additive columns; restore them before semantic verification.
+	if err := postgres.Migrate(ctx, e.Pool, "up", log); err != nil {
+		t.Fatal(err)
+	}
+	if count(e, "operations") != 1 {
+		t.Fatal("migration round trip changed audit")
 	}
 	if err := schemaflow.Verify(context.Background(), e.Q, e.Admin.ProjectID, *r.ChangesetID); err != nil {
 		t.Fatal(err)

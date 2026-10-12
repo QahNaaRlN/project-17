@@ -36,7 +36,7 @@ func (q *Queries) AddChangesetObject(ctx context.Context, arg AddChangesetObject
 const createChangeset = `-- name: CreateChangeset :one
 INSERT INTO changesets (id, project_id, kind, title, description, owner_id, state)
 VALUES ($1, $2, 'standard', $3, $4, $5, 'open')
-RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at
+RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq
 `
 
 type CreateChangesetParams struct {
@@ -73,6 +73,7 @@ func (q *Queries) CreateChangeset(ctx context.Context, arg CreateChangesetParams
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.MergedAt,
+		&i.RedoBarrierSeq,
 	)
 	return i, err
 }
@@ -161,7 +162,7 @@ func (q *Queries) CreateWorkingVersion(ctx context.Context, arg CreateWorkingVer
 }
 
 const getChangeset = `-- name: GetChangeset :one
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at FROM changesets WHERE id = $1 AND project_id = $2
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets WHERE id = $1 AND project_id = $2
 `
 
 type GetChangesetParams struct {
@@ -189,6 +190,7 @@ func (q *Queries) GetChangeset(ctx context.Context, arg GetChangesetParams) (Cha
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.MergedAt,
+		&i.RedoBarrierSeq,
 	)
 	return i, err
 }
@@ -359,9 +361,9 @@ func (q *Queries) GetWorkingDocument(ctx context.Context, arg GetWorkingDocument
 
 const insertOperation = `-- name: InsertOperation :one
 INSERT INTO operations (id, project_id, changeset_id, seq, actor_id, source, target_object_id, type,
-                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name
+                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name, batch_id, redo_of)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of
 `
 
 type InsertOperationParams struct {
@@ -381,6 +383,8 @@ type InsertOperationParams struct {
 	ClientOpID       *string    `json:"clientOpId"`
 	UndoOf           *uuid.UUID `json:"undoOf"`
 	TargetSchemaName *string    `json:"targetSchemaName"`
+	BatchID          *uuid.UUID `json:"batchId"`
+	RedoOf           *uuid.UUID `json:"redoOf"`
 }
 
 func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams) (Operation, error) {
@@ -401,6 +405,8 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		arg.ClientOpID,
 		arg.UndoOf,
 		arg.TargetSchemaName,
+		arg.BatchID,
+		arg.RedoOf,
 	)
 	var i Operation
 	err := row.Scan(
@@ -423,12 +429,14 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		&i.Status,
 		&i.CreatedAt,
 		&i.TargetSchemaName,
+		&i.BatchID,
+		&i.RedoOf,
 	)
 	return i, err
 }
 
 const lastUndoableOperation = `-- name: LastUndoableOperation :one
-SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at, o.target_schema_name FROM operations o
+SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at, o.target_schema_name, o.batch_id, o.redo_of FROM operations o
 WHERE o.changeset_id = $1 AND o.undo_of IS NULL AND o.status = 'applied'
   AND NOT EXISTS (SELECT 1 FROM operations u WHERE u.undo_of = o.id)
 ORDER BY o.seq DESC
@@ -459,6 +467,8 @@ func (q *Queries) LastUndoableOperation(ctx context.Context, changesetID uuid.UU
 		&i.Status,
 		&i.CreatedAt,
 		&i.TargetSchemaName,
+		&i.BatchID,
+		&i.RedoOf,
 	)
 	return i, err
 }
@@ -504,7 +514,7 @@ func (q *Queries) ListChangesetObjects(ctx context.Context, changesetID uuid.UUI
 }
 
 const listChangesets = `-- name: ListChangesets :many
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at FROM changesets
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets
 WHERE project_id = $1 AND ($2::text IS NULL OR state = $2)
 ORDER BY created_at DESC, id DESC
 LIMIT 100
@@ -541,6 +551,7 @@ func (q *Queries) ListChangesets(ctx context.Context, arg ListChangesetsParams) 
 			&i.UpdatedAt,
 			&i.SubmittedAt,
 			&i.MergedAt,
+			&i.RedoBarrierSeq,
 		); err != nil {
 			return nil, err
 		}
@@ -553,7 +564,7 @@ func (q *Queries) ListChangesets(ctx context.Context, arg ListChangesetsParams) 
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
 `
 
 type ListOperationsParams struct {
@@ -590,6 +601,8 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 			&i.Status,
 			&i.CreatedAt,
 			&i.TargetSchemaName,
+			&i.BatchID,
+			&i.RedoOf,
 		); err != nil {
 			return nil, err
 		}
@@ -602,7 +615,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 }
 
 const lockChangeset = `-- name: LockChangeset :one
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at FROM changesets WHERE id = $1 AND project_id = $2 FOR UPDATE
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
 
 type LockChangesetParams struct {
@@ -630,6 +643,7 @@ func (q *Queries) LockChangeset(ctx context.Context, arg LockChangesetParams) (C
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.MergedAt,
+		&i.RedoBarrierSeq,
 	)
 	return i, err
 }

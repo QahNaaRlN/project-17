@@ -7,6 +7,7 @@ import { Studio } from "../src/ui.js";
 import { createEditor, type Editor } from "../src/editor.js";
 import { mockApi, documentId, changesetId } from "./fixture.js";
 import { StudioError } from "../src/types.js";
+import type { HistoryAction } from "../src/types.js";
 let root: Root, editor: Editor, client: QueryClient;
 afterEach(async () => {
   await act(async () => {
@@ -75,6 +76,157 @@ const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent === text,
   )!;
+function action(
+  kind: HistoryAction["kind"],
+  type: string,
+  id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c01",
+): HistoryAction {
+  return {
+    id,
+    kind,
+    firstSeq: 1,
+    lastSeq: 1,
+    actorId: changesetId,
+    actorName: "Designer",
+    createdAt: "2026-10-12T00:00:00.000Z",
+    reason: null,
+    operations: [{ type, target: documentId, status: "applied" }],
+  };
+}
+it("STU-050: история показывает группы/автора, пагинацию и отказ чтения без сырых значений", async () => {
+  const { api, session } = await setup(true);
+  session.history.items = [action("edit", "localContent.set")];
+  session.history.items[0]!.firstSeq = 1;
+  session.history.items[0]!.lastSeq = 2;
+  session.changeset.seq = 2;
+  session.history.seq = 2;
+  session.history.nextBeforeSeq = 2;
+  await act(async () => {
+    await editor.refresh();
+  });
+  await flush();
+  expect(document.body.textContent).toContain("Изменение текста");
+  expect(document.body.textContent).toContain("Designer");
+  expect(document.body.textContent).toContain("#1–2");
+  vi.mocked(api.history).mockRejectedValueOnce(Error("secret"));
+  await click(button("Более ранние действия"));
+  await flush();
+  expect(document.body.textContent).toContain("Не удалось загрузить историю");
+  expect(document.body.textContent).not.toContain("secret");
+  await click(button("Перечитать черновик"));
+  await flush();
+  const older = action("undo", "node.setBinding", "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c02");
+  vi.mocked(api.history).mockResolvedValue({
+    ...session.history,
+    items: [older],
+    nextBeforeSeq: null,
+  });
+  await click(button("Более ранние действия"));
+  await flush();
+  expect(api.history).toHaveBeenLastCalledWith(expect.any(Object), 2, expect.any(AbortSignal));
+  expect(document.querySelectorAll(".history-panel li")).toHaveLength(2);
+});
+it("STU-050/054: типы действий, другие страницы, конфликты/исключения и ru/en", async () => {
+  const { session } = await setup(true);
+  session.history.items = [
+    action("edit", "node.setProps"),
+    action("edit", "node.setDesign", "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c02"),
+    action("edit", "unknown", "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c03"),
+    action("redo", "node.rename", "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c04"),
+  ];
+  session.history.items[1]!.operations[0]!.target = changesetId;
+  session.history.items[1]!.operations[0]!.status = "conflict";
+  session.history.items[2]!.operations[0]!.status = "dropped";
+  session.history.undoReason = "UNDO_NOT_SUPPORTED";
+  await act(async () => {
+    await editor.refresh();
+  });
+  await flush();
+  for (const text of [
+    "Изменение свойства",
+    "Изменение оформления",
+    "Есть изменения другого объекта",
+    "Конфликт",
+    "Исключено при переносе",
+    "Это действие не поддерживает отмену.",
+  ])
+    expect(document.body.textContent).toContain(text);
+  await change(document.querySelector<HTMLSelectElement>('[aria-label="Язык"]')!, "en");
+  expect(document.body.textContent).toContain("This action does not support undo.");
+  expect(document.body.textContent).toContain("Draft history");
+  session.history.undoReason = "UNKNOWN_CODE";
+  await act(async () => {
+    await editor.refresh();
+  });
+  await flush();
+  expect(document.body.textContent).toContain("Action unavailable");
+});
+it("STU-052: Ctrl/Cmd+Z/Shift+Z работают вне полей и не перехватывают локальную отмену", async () => {
+  const { api, session } = await setup(true);
+  session.history.canUndo = true;
+  session.history.canRedo = true;
+  session.history.undoReason = null;
+  session.history.redoReason = null;
+  await act(async () => {
+    await editor.refresh();
+  });
+  await flush();
+  const key = async (target: EventTarget, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    await act(async () => {
+      target.dispatchEvent(event);
+    });
+    await flush();
+    return event;
+  };
+  expect((await key(window, { key: "z", ctrlKey: true })).defaultPrevented).toBe(true);
+  expect(vi.mocked(api.changeHistory).mock.calls.at(-1)![1]).toBe("undo");
+  await key(window, { key: "я", code: "KeyZ", metaKey: true, shiftKey: true });
+  expect(vi.mocked(api.changeHistory).mock.calls.at(-1)![1]).toBe("redo");
+  await click(layer("n_heading"));
+  expect((await key(input("property-text"), { key: "z", ctrlKey: true })).defaultPrevented).toBe(
+    false,
+  );
+  const editable = document.createElement("div");
+  editable.contentEditable = "true";
+  editable.setAttribute("contenteditable", "true");
+  document.body.append(editable);
+  await key(editable, { key: "z", ctrlKey: true });
+  await key(window, { key: "z" });
+  await key(window, { key: "z", ctrlKey: true, altKey: true });
+  await key(window, { key: "z", ctrlKey: true, isComposing: true });
+  expect(api.changeHistory).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    editor.store.setState({ status: "saving" });
+  });
+  await key(window, { key: "z", ctrlKey: true });
+  expect(api.changeHistory).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    editor.store.setState({ status: "ready" });
+  });
+  await click(button("Отменить"));
+  await click(button("Повторить"));
+  expect(api.changeHistory).toHaveBeenCalledTimes(4);
+});
+it("STU-053: неизвестный исход блокирует кнопки до проверки того же запроса", async () => {
+  const { api, session } = await setup(true);
+  session.history.canUndo = true;
+  session.history.undoReason = null;
+  await act(async () => {
+    await editor.refresh();
+  });
+  await flush();
+  vi.mocked(api.changeHistory).mockRejectedValueOnce(new StudioError("NETWORK_UNCERTAIN", true));
+  await click(button("Отменить"));
+  await flush();
+  expect(button("Отменить").disabled).toBe(true);
+  await click(button("Проверить отмену или повтор"));
+  await flush();
+  expect(vi.mocked(api.changeHistory).mock.calls[0]).toEqual(
+    vi.mocked(api.changeHistory).mock.calls[1],
+  );
+  expect(button("Отменить").disabled).toBe(false);
+});
 async function selectPage() {
   await change(
     document.querySelector<HTMLSelectElement>('.open-bar select[aria-label="Страница"]')!,
@@ -359,6 +511,7 @@ it("STU-032: клавиатурное дерево, рамки и instance си�
     });
   });
   expect(document.querySelectorAll(".selection-frame")).toHaveLength(1);
+  expect(document.activeElement).toBe(layer("n_heading"));
   expect(document.body.textContent).toContain("Экземпляр повторения");
   expect(document.body.textContent).toContain("Предпросмотр подключён");
   await click(layer("n_heading"));

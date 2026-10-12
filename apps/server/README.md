@@ -66,7 +66,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/create-environment` | Окружение проекта |
 | `POST` | `/api/v1/commands/create-changeset` | Новый Change Set |
 | `POST` | `/api/v1/commands/apply-operations` | Пакет операций над документами (атомарно, с `expectedSeq`) |
-| `POST` | `/api/v1/commands/undo` | Отмена последней операции Change Set |
+| `POST` | `/api/v1/commands/undo` | Отмена последнего действия CS: группа или старая одиночная операция |
+| `POST` | `/api/v1/commands/redo` | Повтор последнего отменённого действия CS |
 | `POST` | `/api/v1/commands/abandon-changeset` | Закрыть Change Set без слияния |
 | `POST` | `/api/v1/commands/submit-changeset` | Подать на проверку: проверки, риск, переход в `in_review`/`approved`/`failed` |
 | `POST` | `/api/v1/commands/approve-changeset` | Согласовать (только человек, не автор) |
@@ -83,6 +84,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `GET` | `/api/v1/working-drafts?environment=&documentId=&after=` | Свои open/standard CS доступной страницы, `design.read`, 50 записей + `nextCursor` |
 | `GET` | `/api/v1/changesets/{id}` | Change Set и изменённые объекты |
 | `GET` | `/api/v1/changesets/{id}/operations?afterSeq=` | Журнал операций |
+| `GET` | `/api/v1/changesets/{id}/history?beforeSeq=` | История целыми действиями и доступность undo/redo; design.read |
 | `GET` | `/api/v1/changesets/{id}/review` | Проверки, риск и согласования |
 | `POST` | `/api/v1/commands/create-delivery-key` | Ключ доставки `cms_pub_…` окружения (показывается один раз) |
 | `POST` | `/api/v1/commands/revoke-delivery-key` | Отозвать ключ доставки |

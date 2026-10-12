@@ -112,6 +112,7 @@ X-CMS-Project: store
 | `GET /api/v1/working-drafts?environment=&documentId=&after=` | Свои open/standard CS выбранной страницы и окружения; `design.read`, 50 записей и `nextCursor` (STU-041/044) |
 | `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями, `needsAttention` и `manifestDiagnostics` по окружениям (CHG-034); для CS схем — кандидат и исходный manifest (MF-025) |
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
+| `GET /api/v1/changesets/{id}/history?beforeSeq=` | Метаданные 20 целых действий CS и canUndo/canRedo в одном снимке; design.read (STU-050) |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |

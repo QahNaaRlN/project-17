@@ -8,6 +8,7 @@ import {
   type Session,
   type List,
   type PageItem,
+  type History,
 } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function createApi(fetcher: typeof fetch = fetch): Api {
@@ -52,6 +53,20 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
     }
   }
   const api: Api = {
+    async history(session, beforeSeq, signal) {
+      return readHistory(session.changeset.id, session.changeset.seq, beforeSeq, signal);
+    },
+    async changeHistory(session, action, key, signal) {
+      await request(
+        `/api/v1/commands/${action}`,
+        signal,
+        {
+          payload: { changesetId: session.changeset.id, expectedSeq: session.changeset.seq },
+          reason: `Studio: ${action} action`,
+        },
+        key,
+      );
+    },
     async pages(cursor, signal) {
       const config = await api.config(signal);
       const value = await listing<PageItem>(
@@ -124,7 +139,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       if (!uuid.test(documentId) || !uuid.test(changesetId))
         throw new StudioError("IDENTIFIER_INVALID");
       const config = await api.config(signal);
-      const [changeset, record, active] = await Promise.all([
+      const [changeset, record, active, history] = await Promise.all([
         request<Changeset>(`/api/v1/changesets/${changesetId}`, signal),
         request<DocumentRecord>(
           `/api/v1/documents/${documentId}?changesetId=${changesetId}`,
@@ -134,6 +149,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
           `/api/v1/manifest?environment=${encodeURIComponent(config.environment)}`,
           signal,
         ),
+        readHistory(changesetId, undefined, undefined, signal),
       ]);
       if (
         record?.id !== documentId ||
@@ -154,6 +170,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
         !active.manifest.breakpoints
       )
         throw new StudioError("SESSION_INVALID");
+      if (history.seq !== changeset.seq) throw new StudioError("CHANGESET_SEQ_CONFLICT");
       // Query API reads are separate requests; reject a snapshot crossing a write.
       const after = await request<Changeset>(`/api/v1/changesets/${changesetId}`, signal);
       if (
@@ -162,7 +179,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
         after.state !== changeset.state
       )
         throw new StudioError("CHANGESET_SEQ_CONFLICT");
-      return { config, changeset, record, ...active };
+      return { config, changeset, record, history, ...active };
     },
     async apply(session, operations, key, signal) {
       await request(
@@ -173,6 +190,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
             changesetId: session.changeset.id,
             expectedSeq: session.changeset.seq,
             operations,
+            group: true,
           },
           reason: "Studio: edit page draft",
         },
@@ -197,6 +215,77 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       return result.result;
     },
   };
+  async function readHistory(
+    id: string,
+    expected?: number,
+    before?: number,
+    signal?: AbortSignal,
+  ): Promise<History> {
+    if (before !== undefined && (!Number.isSafeInteger(before) || before < 1))
+      throw new StudioError("PARAM_INVALID");
+    const data = await request<History>(
+      `/api/v1/changesets/${id}/history${before === undefined ? "" : `?beforeSeq=${before}`}`,
+      signal,
+    );
+    const reason = (value: unknown) =>
+      value === null || (typeof value === "string" && /^[A-Z0-9_]{1,80}$/.test(value));
+    if (
+      !data ||
+      !Number.isSafeInteger(data.seq) ||
+      data.seq < 0 ||
+      !Array.isArray(data.items) ||
+      typeof data.canUndo !== "boolean" ||
+      typeof data.canRedo !== "boolean" ||
+      !reason(data.undoReason) ||
+      !reason(data.redoReason) ||
+      data.canUndo !== (data.undoReason === null) ||
+      data.canRedo !== (data.redoReason === null) ||
+      data.items.length > 20 ||
+      !(
+        data.nextBeforeSeq === null ||
+        (Number.isSafeInteger(data.nextBeforeSeq) && data.nextBeforeSeq > 0)
+      ) ||
+      data.items.some(
+        (item, index) =>
+          !item ||
+          typeof item.id !== "string" ||
+          !uuid.test(item.id) ||
+          typeof item.actorId !== "string" ||
+          !uuid.test(item.actorId) ||
+          !Number.isSafeInteger(item.firstSeq) ||
+          item.firstSeq < 1 ||
+          !Number.isSafeInteger(item.lastSeq) ||
+          item.lastSeq < item.firstSeq ||
+          item.lastSeq > data.seq ||
+          (before !== undefined && item.lastSeq >= before) ||
+          (index > 0 && item.lastSeq >= data.items[index - 1]!.firstSeq) ||
+          typeof item.actorName !== "string" ||
+          typeof item.createdAt !== "string" ||
+          !Number.isFinite(Date.parse(item.createdAt)) ||
+          !["edit", "undo", "redo"].includes(item.kind) ||
+          !Array.isArray(item.operations) ||
+          item.operations.length === 0 ||
+          item.operations.some(
+            (op) =>
+              !op ||
+              typeof op.type !== "string" ||
+              !(op.target === null || (typeof op.target === "string" && uuid.test(op.target))) ||
+              !["applied", "conflict", "dropped"].includes(op.status),
+          ),
+      )
+    )
+      throw new StudioError("HISTORY_INVALID");
+    if (
+      data.nextBeforeSeq !== null &&
+      (data.items.length === 0 ||
+        data.nextBeforeSeq !== data.items.at(-1)?.lastSeq ||
+        (before !== undefined && data.nextBeforeSeq >= before))
+    )
+      throw new StudioError("HISTORY_INVALID");
+    if (expected !== undefined && data.seq !== expected)
+      throw new StudioError("CHANGESET_SEQ_CONFLICT");
+    return data;
+  }
   async function listing<T>(
     path: string,
     params: Record<string, string>,

@@ -12,7 +12,7 @@ import (
 )
 
 const claimSchemaChangeset = `-- name: ClaimSchemaChangeset :one
-UPDATE changesets SET owner_id=$2, updated_at=now() WHERE id=$1 RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at
+UPDATE changesets SET owner_id=$2, updated_at=now() WHERE id=$1 RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq
 `
 
 type ClaimSchemaChangesetParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) ClaimSchemaChangeset(ctx context.Context, arg ClaimSchemaChang
 		&i.UpdatedAt,
 		&i.SubmittedAt,
 		&i.MergedAt,
+		&i.RedoBarrierSeq,
 	)
 	return i, err
 }
@@ -115,7 +116,7 @@ func (q *Queries) RecordSchemaClaim(ctx context.Context, arg RecordSchemaClaimPa
 }
 
 const schemaOperations = `-- name: SchemaOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name FROM operations WHERE changeset_id=$1 AND type='schema.apply' AND status='applied' ORDER BY seq
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of FROM operations WHERE changeset_id=$1 AND type='schema.apply' AND status='applied' ORDER BY seq
 `
 
 func (q *Queries) SchemaOperations(ctx context.Context, changesetID uuid.UUID) ([]Operation, error) {
@@ -147,6 +148,8 @@ func (q *Queries) SchemaOperations(ctx context.Context, changesetID uuid.UUID) (
 			&i.Status,
 			&i.CreatedAt,
 			&i.TargetSchemaName,
+			&i.BatchID,
+			&i.RedoOf,
 		); err != nil {
 			return nil, err
 		}

@@ -58,8 +58,8 @@ ORDER BY co.object_id;
 
 -- name: InsertOperation :one
 INSERT INTO operations (id, project_id, changeset_id, seq, actor_id, source, target_object_id, type,
-                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name, batch_id, redo_of)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: ListOperations :many

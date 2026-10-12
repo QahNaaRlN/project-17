@@ -6,6 +6,7 @@ import type { Editor } from "./editor.js";
 import { fields, fieldOperations, designOperation, layers, type Field } from "./fields.js";
 import { StudioError, type Api, type Session } from "./types.js";
 import { Workspace } from "./workspace.js";
+import { HistoryPanel } from "./history.js";
 const copy = {
   ru: {
     page: "Страница",
@@ -271,6 +272,44 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
   useEffect(() => {
     document.documentElement.lang = state.locale;
   }, [state.locale]);
+  useEffect(() => {
+    if (!state.canvasPick || editor.store.getState().mode !== "design") return;
+    // In design mode, return focus from the cross-origin canvas to its keyboard alternative.
+    [...document.querySelectorAll<HTMLElement>('[role="treeitem"]')]
+      .find((item) => item.title === editor.store.getState().selected)
+      ?.focus({ preventScroll: true });
+  }, [editor, state.canvasPick]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        !(event.ctrlKey || event.metaKey) ||
+        !(event.key.toLowerCase() === "z" || event.code === "KeyZ")
+      )
+        return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
+        )
+      )
+        return;
+      const current = editor.store.getState(),
+        action = event.shiftKey ? "redo" : "undo";
+      if (
+        current.status !== "ready" ||
+        !current.session?.history[action === "undo" ? "canUndo" : "canRedo"]
+      )
+        return;
+      event.preventDefault();
+      void editor.changeHistory(action);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [editor]);
   const session = state.session,
     doc = state.document;
   const tree = doc ? layers(doc) : [],
@@ -472,6 +511,14 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
           )}
         </aside>
       </div>
+      {session && (
+        <HistoryPanel
+          {...{ session, api, editor, busy }}
+          locale={state.locale}
+          revision={state.historyRevision}
+          retry={state.historyRetry}
+        />
+      )}
       <footer>
         <div role="status">
           {t[state.status]}

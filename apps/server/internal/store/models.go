@@ -78,22 +78,23 @@ type AssetUpload struct {
 }
 
 type Changeset struct {
-	ID           uuid.UUID  `json:"id"`
-	ProjectID    uuid.UUID  `json:"projectId"`
-	Kind         string     `json:"kind"`
-	Title        string     `json:"title"`
-	Description  *string    `json:"description"`
-	OwnerID      uuid.UUID  `json:"ownerId"`
-	State        string     `json:"state"`
-	Risk         *string    `json:"risk"`
-	Targets      []string   `json:"targets"`
-	Seq          int32      `json:"seq"`
-	ContentHash  []byte     `json:"contentHash"`
-	HasConflicts bool       `json:"hasConflicts"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
-	SubmittedAt  *time.Time `json:"submittedAt"`
-	MergedAt     *time.Time `json:"mergedAt"`
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	Kind           string     `json:"kind"`
+	Title          string     `json:"title"`
+	Description    *string    `json:"description"`
+	OwnerID        uuid.UUID  `json:"ownerId"`
+	State          string     `json:"state"`
+	Risk           *string    `json:"risk"`
+	Targets        []string   `json:"targets"`
+	Seq            int32      `json:"seq"`
+	ContentHash    []byte     `json:"contentHash"`
+	HasConflicts   bool       `json:"hasConflicts"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	SubmittedAt    *time.Time `json:"submittedAt"`
+	MergedAt       *time.Time `json:"mergedAt"`
+	RedoBarrierSeq int32      `json:"redoBarrierSeq"`
 }
 
 type ChangesetManifestCandidate struct {
@@ -232,6 +233,8 @@ type Operation struct {
 	Status           string     `json:"status"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	TargetSchemaName *string    `json:"targetSchemaName"`
+	BatchID          *uuid.UUID `json:"batchId"`
+	RedoOf           *uuid.UUID `json:"redoOf"`
 }
 
 type PreviewSchemaSnapshot struct {

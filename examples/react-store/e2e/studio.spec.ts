@@ -5,6 +5,135 @@ test.beforeEach(async ({ request }) => {
   await request.post(origin + "/control", { data: { mode: "ready" } });
   await request.post(origin + "/studio-control", { data: { reset: true } });
 });
+test("STU-052: Ctrl+Z после выбора на холсте отменяет действие Studio", async ({ page }) => {
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Canvas edit");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  const heading = page
+    .frameLocator(".frame-wrap iframe")
+    .getByRole("heading", { name: "Canvas edit", exact: true });
+  await expect(heading).toBeVisible();
+  await heading.click();
+  await expect(page.getByRole("treeitem", { name: "◇ Heading", exact: true })).toBeFocused();
+  await page.keyboard.press("Control+z");
+  await expect(
+    page
+      .frameLocator(".frame-wrap iframe")
+      .getByRole("heading", { name: "Заголовок черновика", exact: true }),
+  ).toBeVisible();
+});
+test("STU-050/051/052: история, атомарная отмена текста и повтор с настоящим preview", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  const frame = page.frameLocator(".frame-wrap iframe");
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Текст для отмены");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(frame.getByRole("heading", { name: "Текст для отмены" })).toBeVisible();
+  const history = page.getByRole("region", { name: "История черновика", exact: true });
+  await expect(history.getByText("Изменение текста", { exact: true })).toBeVisible();
+  await expect(history.locator("li")).toHaveCount(1);
+  await history.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(frame.getByRole("heading", { name: "Заголовок черновика" })).toBeVisible();
+  await history.getByRole("button", { name: "Повторить", exact: true }).click();
+  await expect(frame.getByRole("heading", { name: "Текст для отмены" })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.keyboard.press("Control+z");
+  await expect(frame.getByRole("heading", { name: "Заголовок черновика" })).toBeVisible();
+  await page.keyboard.press("Control+Shift+z");
+  await expect(frame.getByRole("heading", { name: "Текст для отмены" })).toBeVisible();
+  await page.reload();
+  await expect(frame.getByRole("heading", { name: "Текст для отмены" })).toBeVisible();
+  await expect(history.locator("li")).toHaveCount(5);
+  await page.getByLabel("Язык", { exact: true }).selectOption("en");
+  await expect(frame.getByRole("heading", { name: "Draft heading", exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("studio-history.png"), fullPage: true });
+});
+test("STU-052: отмена ввода в поле не вызывает серверную отмену", async ({ page }) => {
+  const commands: string[] = [];
+  page.on("request", (req) => {
+    if (/\/commands\/(undo|redo)$/.test(req.url())) commands.push(req.url());
+  });
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Saved");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(
+    page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Saved" }),
+  ).toBeVisible();
+  const input = page.getByLabel("text", { exact: true });
+  await input.click();
+  await input.press("End");
+  await input.pressSequentially(" draft");
+  await input.press("Control+z");
+  expect(commands).toEqual([]);
+  await expect(
+    page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Saved" }),
+  ).toBeVisible();
+});
+test("STU-053: потерянный ответ undo восстанавливает preview и повторяет тот же ключ/seq", async ({
+  page,
+  request,
+}) => {
+  const commands: { key: string; body: string }[] = [];
+  page.on("request", (req) => {
+    if (req.url().endsWith("/commands/undo"))
+      commands.push({ key: req.headers()["idempotency-key"]!, body: req.postData()! });
+  });
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Saved");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(
+    page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Saved" }),
+  ).toBeVisible();
+  await request.post(origin + "/studio-control", { data: { fault: "history-lost" } });
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Проверить отмену или повтор", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Заголовок черновика" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Сохранить text", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Проверить отмену или повтор", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Повторить", exact: true })).toBeEnabled();
+  expect(commands).toHaveLength(2);
+  expect(commands[0]).toEqual(commands[1]);
+  await expect(page.locator(".history-panel li")).toHaveCount(2);
+});
+test("STU-053/054: отказ и конфликт undo не заменяют текущий текст", async ({ page, request }) => {
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Saved");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(
+    page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Saved" }),
+  ).toBeVisible();
+  for (const [fault, code] of [
+    ["history-reject", "FORBIDDEN"],
+    ["history-conflict", "CHANGESET_SEQ_CONFLICT"],
+  ]) {
+    await request.post(origin + "/studio-control", { data: { fault } });
+    await page.getByRole("button", { name: "Отменить", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: code! })).toBeVisible();
+    await expect(
+      page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Saved" }),
+    ).toBeVisible();
+  }
+  await request.post(origin + "/studio-control", { data: { state: "in_review", fault: "" } });
+  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Отменить", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Повторить", exact: true })).toBeDisabled();
+});
 test("STU-040/041/042/044: открытие страницы и нового черновика без ручного ввода ID", async ({
   page,
 }, testInfo) => {

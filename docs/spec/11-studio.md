@@ -4,9 +4,11 @@
 `apps/studio`, дерево/iframe/выбор/рамки, scalar формы из manifest, локальный текст,
 padding/gap с токенами и breakpoint, сохранение в CS и восстановление после отказа.
 Это частичный M4. Production-вход, DnD, Structure/Agent, content editor,
-approval/history, undo/redo UI и SSE ещё не реализованы.
+approval/publish UI и SSE ещё не реализованы.
 Пакет [«Страницы и рабочие черновики»](../studio-workspace.md) добавляет выбор
 страницы, своего открытого CS и создание нового без ручного ввода ID (STU-040…044).
+Пакет [«История и отмена правок»](../studio-history.md) добавляет историю CS,
+атомарную отмену/повтор пользовательской правки и горячие клавиши (STU-050…054).
 
 ## 1. Стек
 

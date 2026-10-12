@@ -1,6 +1,21 @@
 import { expect, it, vi } from "vitest";
 import { createApi } from "../src/api.js";
 import { fixture, documentId, changesetId } from "./fixture.js";
+import fc from "fast-check";
+import { StudioError } from "../src/types.js";
+it("STU-050: произвольные JSON ответы не вызывают исключение без безопасного кода", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.jsonValue(), async (body) => {
+      const api = createApi(async () => Response.json(body));
+      try {
+        await api.history(fixture(), undefined, new AbortController().signal);
+      } catch (error) {
+        expect(error).toBeInstanceOf(StudioError);
+      }
+    }),
+    { numRuns: 60, seed: 501 },
+  );
+});
 it("STU-040/041: списки используют настроенное окружение, курсор и выбранную страницу", async () => {
   const session = fixture();
   const fetcher = vi.fn<typeof fetch>(async (input) => {
@@ -60,12 +75,59 @@ it("STU-042/043: создание использует один target, имя �
   });
 });
 const signal = new AbortController().signal;
+it("STU-050/051/052: история и команды используют публичный API, group, seq и ключ", async () => {
+  const { api, fetcher, s } = setup();
+  fetcher.mockImplementation(async (input) =>
+    Response.json(
+      String(input).endsWith("/config")
+        ? s.config
+        : String(input).includes("/history")
+          ? s.history
+          : { result: {} },
+    ),
+  );
+  expect(await api.history(s, 1, signal)).toEqual(s.history);
+  for (const action of ["undo", "redo"] as const)
+    await api.changeHistory(s, action, "frozen-key", signal);
+  const call = fetcher.mock.calls.find(([p]) => String(p).endsWith("/commands/undo"))!;
+  expect(JSON.parse(String(call[1]!.body))).toEqual({
+    payload: { changesetId, expectedSeq: 1 },
+    reason: "Studio: undo action",
+  });
+  expect(call[1]!.headers).toMatchObject({ "Idempotency-Key": "frozen-key" });
+  await expect(api.history(s, 0, signal)).rejects.toThrow("PARAM_INVALID");
+  s.history.seq = 2;
+  await expect(
+    api.history({ ...s, changeset: { ...s.changeset, seq: 1 } }, undefined, signal),
+  ).rejects.toThrow("CHANGESET_SEQ_CONFLICT");
+});
+it.each([
+  null,
+  { seq: -1 },
+  { ...fixture().history, undoReason: 10 },
+  { ...fixture().history, canUndo: true },
+  { ...fixture().history, nextBeforeSeq: 1 },
+  { ...fixture().history, items: [null] },
+  { ...fixture().history, nextBeforeSeq: 0 },
+])("STU-050: повреждённая история отклоняется", async (body) => {
+  const api = createApi(async () => Response.json(body));
+  await expect(api.history(fixture(), undefined, signal)).rejects.toThrow("HISTORY_INVALID");
+});
+it("STU-053: история и документ разных seq не образуют смешанную сессию", async () => {
+  const { api, s } = setup();
+  s.history.seq = 2;
+  await expect(api.open(documentId, changesetId, signal)).rejects.toThrow("CHANGESET_SEQ_CONFLICT");
+});
 it("STU-021: чтение через конкурентную запись не выдаёт смешанный snapshot", async () => {
   const { api, fetcher, s } = setup();
   let reads = 0;
   const original = fetcher.getMockImplementation()!;
   fetcher.mockImplementation(async (input, init) => {
-    if (String(input).includes("/changesets/") && ++reads === 2)
+    if (
+      String(input).includes("/changesets/") &&
+      !String(input).endsWith("/history") &&
+      ++reads === 2
+    )
       return Response.json({ ...s.changeset, seq: s.changeset.seq + 1 });
     return original(input, init);
   });
@@ -80,13 +142,18 @@ function setup() {
         ? s.config
         : url.includes("/manifest")
           ? { manifest: s.manifest, manifestHash: s.manifestHash }
-          : url.includes("/documents/")
-            ? s.record
-            : url.includes("/changesets/")
-              ? s.changeset
-              : {
-                  result: { token: "jwt", expiresAt: new Date(Date.now() + 900_000).toISOString() },
-                },
+          : url.endsWith("/history")
+            ? s.history
+            : url.includes("/documents/")
+              ? s.record
+              : url.includes("/changesets/")
+                ? s.changeset
+                : {
+                    result: {
+                      token: "jwt",
+                      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+                    },
+                  },
     );
   });
   return { s, fetcher, api: createApi(fetcher) };
@@ -108,7 +175,7 @@ it("STU-001: читает публичные API и передаёт seq/idempot
   );
   const [, init] = fetcher.mock.calls.find(([url]) => String(url).includes("apply-operations"))!;
   expect(JSON.parse(String(init!.body))).toMatchObject({
-    payload: { changesetId, expectedSeq: 1 },
+    payload: { changesetId, expectedSeq: 1, group: true },
     reason: "Studio: edit page draft",
   });
   expect(init!.headers).toEqual({

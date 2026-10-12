@@ -3,6 +3,9 @@
 React/Vite, Zustand для документа и выбора, TanStack Query для bootstrap.
 Редактируются открытые `standard` Change Sets через публичный Command API.
 Доступны списки страниц и своих рабочих черновиков, создание именованного CS.
+История CS, отмена/повтор целой правки и Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z доступны
+через [пакет истории](../../docs/studio-history.md); в текстовых полях сочетания
+оставлены для отмены ввода. История и отмена относятся ко всему CS.
 SSE, production identity и полный M4 впереди.
 [Контракт и границы](../../docs/studio-editor.md).
 [Страницы и рабочие черновики](../../docs/studio-workspace.md).
@@ -34,7 +37,7 @@ SSE, production identity и полный M4 впереди.
 
 Сервер привязан к `127.0.0.1`, проверяет Host/Origin/Fetch Metadata и пропускает
 только manifest, CS, document, pages, working-drafts, apply-operations,
-create-changeset и create-preview-token. Он не
+create-changeset, history, undo/redo и create-preview-token. Он не
 предназначен для публичного ingress. Для production нужны пользовательские
 сессии и SSO, а не общий service credential.
 
