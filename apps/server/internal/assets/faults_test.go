@@ -88,7 +88,25 @@ func TestAssetDowngradePreservesAudit(t *testing.T) {
 	s := &Service{Pool: e.Pool, Storage: m}
 	s.Register(e.Bus)
 	u := ready(t, e, s, m, pngBytes(t, 2, 2))
-	err := postgres.Migrate(context.Background(), e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Reach the asset migration after removing later migrations with no fixture data.
+	for {
+		var version int
+		if err := e.Pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		if version == 14 {
+			break
+		}
+		if version < 14 {
+			t.Fatalf("asset migration missing: %d", version)
+		}
+		if err := postgres.Migrate(ctx, e.Pool, "down", log); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := postgres.Migrate(ctx, e.Pool, "down", log)
 	if err == nil || !strings.Contains(err.Error(), "asset upload or file data prevents downgrade") {
 		t.Fatal(err)
 	}
