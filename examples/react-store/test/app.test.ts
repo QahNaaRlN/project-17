@@ -249,3 +249,27 @@ it("STORE-006: ошибка изображения даёт fallback, новая
   );
   expect(document.querySelector("img")!.getAttribute("alt")).toBe("Ваза");
 });
+it("STORE-006: ошибка загрузки до подключения React тоже показывает fallback", async () => {
+  vi.spyOn(window.HTMLImageElement.prototype, "complete", "get").mockReturnValue(true);
+  vi.spyOn(window.HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(0);
+  await mount(
+    createElement(CatalogImage, {
+      image: { src: "https://example.test/missing.png" } as ImageProps,
+      alt: "Ваза",
+    }),
+  );
+  expect(document.querySelector("img")).toBeNull();
+  expect(document.body.textContent).toContain("Изображение недоступно");
+});
+it("STORE-006: загруженное до подключения React изображение остаётся видимым", async () => {
+  vi.spyOn(window.HTMLImageElement.prototype, "complete", "get").mockReturnValue(true);
+  vi.spyOn(window.HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(320);
+  await mount(
+    createElement(CatalogImage, {
+      image: { src: "https://example.test/loaded.png" } as ImageProps,
+      alt: "Ваза",
+    }),
+  );
+  expect(document.querySelector("img")!.getAttribute("alt")).toBe("Ваза");
+  expect(document.querySelector(".image-fallback")).toBeNull();
+});

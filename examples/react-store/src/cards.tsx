@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, ImageOff } from "lucide-react";
 import { priceLabel, type ImageProps, type Product } from "./model.js";
 import { Button } from "./ui/button.js";
@@ -15,11 +15,16 @@ export function CatalogImage({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [image?.src]);
+  const element = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    // An SSR image may have finished with an error before React attaches onError.
+    const img = element.current;
+    setFailed(!!img && img.complete && img.naturalWidth === 0);
+  }, [image?.src, image?.srcSet]);
   return (
     <div className={`catalog-image ${className}`}>
       {image && !failed ? (
-        <img {...image} alt={alt} onError={() => setFailed(true)} />
+        <img ref={element} {...image} alt={alt} onError={() => setFailed(true)} />
       ) : (
         <div className="image-fallback">
           <ImageOff size={23} aria-hidden="true" />

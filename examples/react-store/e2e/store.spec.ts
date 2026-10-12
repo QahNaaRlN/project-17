@@ -194,3 +194,31 @@ for (const width of [320, 375, 640, 768, 1280]) {
     }
   });
 }
+test("STORE-006: ошибка SSR изображения до гидратации показывает fallback", async ({
+  page,
+  request,
+}) => {
+  await control(request, "badimage");
+  let resume = () => {};
+  const scripts = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  await page.route("**/assets/*.js", async (route) => {
+    await scripts;
+    await route.continue();
+  });
+  try {
+    await page.goto("/", { waitUntil: "commit" });
+    const image = page.locator(".product-art img").first();
+    await image.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth === 0))
+      .toBe(true);
+    expect(await page.locator(".product-art .image-fallback").count()).toBe(0);
+  } finally {
+    resume();
+  }
+  await expect(
+    page.locator(".product-art").first().getByText("Изображение недоступно"),
+  ).toBeVisible();
+});
