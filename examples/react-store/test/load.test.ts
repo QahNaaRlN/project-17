@@ -4,6 +4,24 @@ import { cms, id, page, image, now } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
 afterEach(() => vi.restoreAllMocks());
 describe("STORE-001/005/006/007: чтение CMS", () => {
+  it("SDK-032/STU-033: рендерит локальный перевод в запрошенной локали", async () => {
+    const c = cms(),
+      data = page(catalog);
+    data.document.localContent = {
+      t_title: { type: "text", value: { ru: "Русский", en: "English" } },
+    };
+    data.document.nodes.n_store!.children!.push("n_title");
+    data.document.nodes.n_title = {
+      id: "n_title",
+      type: "Heading",
+      bindings: { text: "$local.t_title" },
+    };
+    vi.mocked(c.getPage).mockResolvedValue(data);
+    const result = await loadStore(c, "/store", { locale: "en" });
+    expect(result.locale).toBe("en");
+    expect(JSON.stringify(result.plan)).toContain("English");
+    expect(JSON.stringify(result.plan)).not.toContain("Русский");
+  });
   it("читает страницу без preview", async () => {
     const c = cms();
     const result = await loadStore(c, "/store");

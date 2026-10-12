@@ -30,6 +30,7 @@ export interface Catalog {
 }
 export type ImageProps = ReturnType<typeof Image>["props"];
 export interface StoreModel {
+  locale?: string;
   status: "ready" | "missing" | "error";
   preview: boolean;
   catalog?: Catalog;

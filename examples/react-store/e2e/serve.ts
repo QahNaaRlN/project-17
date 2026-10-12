@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
+import { studioFixture } from "./studio-fixture.js";
 
 // Deterministic CMS boundary for CI; the real SDK, HTTP server, SSR and browser run unchanged.
 const id = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11";
@@ -18,7 +19,9 @@ const previewToken =
 let mode = "ready";
 let title = catalog.title;
 let release: (() => void)[] = [];
+const editor = await studioFixture(id, previewToken);
 const fixture = createServer(async (req, res) => {
+  if (await editor.handle(req, res)) return;
   const path = new URL(req.url ?? "/", "http://127.0.0.1:18084").pathname;
   if (path === "/studio" || path === "/rogue") {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -34,6 +37,7 @@ const fixture = createServer(async (req, res) => {
     for await (const chunk of req) body += String(chunk);
     const next = JSON.parse(body) as { mode: string; title?: string };
     mode = next.mode;
+    editor.reset(false);
     title = next.title ?? catalog.title;
     if (mode !== "hold") {
       for (const resolve of release) resolve();
@@ -98,7 +102,7 @@ const fixture = createServer(async (req, res) => {
   });
   delete value.products[0]!.priceRub;
   if (mode === "empty") value.products = [];
-  const document = storeDocument(value);
+  const document = editor.document ?? storeDocument(value);
   if (mode === "sourceerror") document.dataSources!.featured!.source = "store.unavailable";
   if (mode === "actiontitle")
     document.nodes.n_product!.on = {

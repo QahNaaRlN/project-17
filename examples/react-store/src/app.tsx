@@ -42,12 +42,16 @@ export function StoreApp({ initialModel }: AppProps) {
       studioOrigin: initial.studioOrigin,
       initial,
       manifestHash: initial.manifestHash,
+      locale: latest.current.locale ?? "ru",
       ...(initial.changesetId ? { changesetId: initial.changesetId } : {}),
       onMode: (mode) => {
         if (!stopped) setInteract(mode === "interact");
       },
-      reload: async (signal) => {
-        const response = await fetch("/api/store", { signal, cache: "no-store" });
+      reload: async (signal, locale) => {
+        const response = await fetch("/api/store?locale=" + encodeURIComponent(locale), {
+          signal,
+          cache: "no-store",
+        });
         if (!response.ok) throw new Error("STORE_PREVIEW_UNAVAILABLE");
         const next = (await response.json()) as StoreModel;
         if (!next.bridge || !next.preview || stopped) throw new Error("STORE_PREVIEW_UNAVAILABLE");
@@ -64,7 +68,10 @@ export function StoreApp({ initialModel }: AppProps) {
           natives: definitionsFor(catalog),
           actions: registry.actions,
           breakpoints: registry.breakpoints,
-          scope: { context: { locale: "ru", store: catalog }, data: current.bridge!.data },
+          scope: {
+            context: { locale: current.locale ?? "ru", store: catalog },
+            data: current.bridge!.data,
+          },
         });
         bridge?.controller.notify("diagnostics", { items: plan.diagnostics });
         if (plan.diagnostics.length) throw new Error("STORE_PREVIEW_INVALID");

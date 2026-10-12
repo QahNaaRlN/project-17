@@ -7,16 +7,17 @@ import { storeComposition, definitionsFor } from "./composition.js";
 export async function loadStore(
   cms: CmsClient,
   path: string,
-  options: ReadOptions = {},
+  options: ReadOptions & { locale?: string } = {},
   bridge?: { studioOrigin: string; manifestHash: string },
 ): Promise<StoreModel> {
   const preview = !!options.preview;
+  const { locale = "ru", ...read } = options;
   try {
-    const page = await cms.getPage(path, options);
+    const page = await cms.getPage(path, read);
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
-    const model: StoreModel = { status: "ready", preview, catalog, images: {} };
-    const scope = { context: { locale: "ru", store: catalog } };
+    const model: StoreModel = { status: "ready", preview, catalog, images: {}, locale };
+    const scope = { context: { locale, store: catalog } };
     const composition = storeComposition(page.document, catalog);
     const data = await loadSources(composition.dataSources ?? {}, registry.dataSources, scope, {
       app: { catalog },
@@ -64,7 +65,7 @@ export async function loadStore(
       refs.map(async (ref) => {
         try {
           const image = await cms.getImage(ref.asset.assetId, {
-            ...options,
+            ...read,
             fmt: "webp",
             fit: "contain",
           });
