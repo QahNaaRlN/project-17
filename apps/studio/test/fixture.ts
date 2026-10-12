@@ -85,6 +85,12 @@ export function persist(session: Session, operations: Operation[]) {
 }
 export function mockApi(session = fixture()) {
   const api: Api = {
+    pages: vi.fn(async () => ({
+      items: [{ id: documentId, path: "/store", title: "Store", hasHead: true }],
+      nextCursor: null,
+    })),
+    drafts: vi.fn(async () => ({ items: [session.changeset], nextCursor: null })),
+    createDraft: vi.fn(async () => session.changeset),
     config: vi.fn(async () => session.config),
     open: vi.fn(async () => structuredClone(session)),
     apply: vi.fn(async (_session, operations) => {

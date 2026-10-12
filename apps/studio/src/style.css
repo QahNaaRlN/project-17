@@ -99,12 +99,29 @@ header {
   gap: 12px;
 }
 .open-bar {
+  flex-wrap: wrap;
   display: flex;
   gap: 12px;
   padding: 16px 24px;
   background: #fff;
   border-bottom: 1px solid #d8dfe8;
   align-items: end;
+}
+.picker-status,
+.create-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 8px 24px;
+}
+.workspace-picker > p {
+  padding: 8px 24px;
+  margin: 0;
+}
+.create-bar label {
+  flex: 1;
+  max-width: 390px;
 }
 .open-bar label {
   flex: 1;

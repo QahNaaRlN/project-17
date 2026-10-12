@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Studio } from "../src/ui.js";
 import { createEditor, type Editor } from "../src/editor.js";
 import { mockApi, documentId, changesetId } from "./fixture.js";
+import { StudioError } from "../src/types.js";
 let root: Root, editor: Editor, client: QueryClient;
 afterEach(async () => {
   await act(async () => {
@@ -74,11 +75,188 @@ const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent === text,
   )!;
+async function selectPage() {
+  await change(
+    document.querySelector<HTMLSelectElement>('.open-bar select[aria-label="Страница"]')!,
+    documentId,
+  );
+  await flush();
+}
+it("STU-042/044: созданный CS остаётся выбранным за первой страницей списка", async () => {
+  const { api } = await setup();
+  await selectPage();
+  vi.mocked(api.drafts).mockResolvedValue({ items: [], nextCursor: changesetId });
+  await click(button("Новый черновик"));
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Название черновика"]')!,
+    "New",
+  );
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  expect(document.querySelector<HTMLSelectElement>('[aria-label="Мой черновик"]')!.value).toBe(
+    changesetId,
+  );
+  expect(button("Открыть").disabled).toBe(false);
+});
+it("STU-043: два submit до ответа выполняют одну команду создания", async () => {
+  const { api, session } = await setup();
+  await selectPage();
+  await click(button("Новый черновик"));
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Название черновика"]')!,
+    "New",
+  );
+  let finish!: () => void;
+  vi.mocked(api.createDraft).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve(session.changeset);
+      }),
+  );
+  const form = document.querySelector<HTMLFormElement>(".create-bar")!;
+  await submit(form);
+  await submit(form);
+  expect(api.createDraft).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    finish();
+  });
+  await flush();
+  expect(editor.store.getState().status).toBe("ready");
+});
+it("STU-040/041/044: выбор без ID, смена страницы сбрасывает черновик и не открывает автоматически", async () => {
+  const { api, session } = await setup();
+  expect(document.querySelector(".open-bar input")).toBeNull();
+  expect(document.body.textContent).toContain("/store · Store");
+  await selectPage();
+  const picker = document.querySelector<HTMLSelectElement>('[aria-label="Мой черновик"]')!;
+  await change(picker, changesetId);
+  expect(button("Открыть").disabled).toBe(false);
+  expect(api.open).not.toHaveBeenCalled();
+  await submit(document.querySelector<HTMLFormElement>(".open-bar")!);
+  expect(window.location.hash).toContain(documentId);
+  const second = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c33";
+  vi.mocked(api.pages).mockResolvedValue({
+    items: [
+      { id: documentId, path: "/store", title: "", hasHead: true },
+      { id: second, path: "/second", title: "Second", hasHead: true },
+    ],
+    nextCursor: null,
+  });
+  await click(button("Обновить списки"));
+  await flush();
+  await change(document.querySelector<HTMLSelectElement>('select[aria-label="Страница"]')!, second);
+  await flush();
+  expect(picker.value).toBe("");
+  expect(button("Открыть").disabled).toBe(true);
+  expect(editor.store.getState().session?.record.id).toBe(session.record.id);
+});
+it("STU-042/043: потерянный ответ создания повторяет тот же запрос, затем открывает созданный CS", async () => {
+  const { api } = await setup();
+  await selectPage();
+  await click(button("Новый черновик"));
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Название черновика"]')!,
+    "Работа над страницей",
+  );
+  vi.mocked(api.createDraft).mockRejectedValueOnce(new StudioError("NETWORK_UNCERTAIN", true));
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  expect(document.body.textContent).toContain("второй черновик не создастся");
+  expect(button("Новый черновик").disabled).toBe(true);
+  expect(button("Отмена").disabled).toBe(true);
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  const calls = vi.mocked(api.createDraft).mock.calls;
+  expect(calls).toHaveLength(2);
+  expect(calls[0]).toEqual(calls[1]);
+  expect(calls[0]![0]).toBe("Работа над страницей");
+  expect(api.open).toHaveBeenCalledWith(documentId, changesetId, expect.any(AbortSignal));
+  expect(document.querySelector(".create-bar")).toBeNull();
+});
+it("STU-043: отказ открытия после создания повторяет открытие, не создание", async () => {
+  const { api } = await setup();
+  await selectPage();
+  await click(button("Новый черновик"));
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Название черновика"]')!,
+    "New",
+  );
+  vi.mocked(api.open).mockRejectedValueOnce(new StudioError("NOT_FOUND"));
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  expect(document.body.textContent).toContain("Не удалось открыть черновик");
+  expect(button("Открыть созданный черновик")).toBeDefined();
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  expect(api.createDraft).toHaveBeenCalledTimes(1);
+  expect(api.open).toHaveBeenCalledTimes(2);
+});
+it("STU-044: пустые списки, отказ чтения/создания и повтор доступны на обоих языках", async () => {
+  const { api } = await setup();
+  await selectPage();
+  vi.mocked(api.drafts).mockResolvedValue({ items: [], nextCursor: null });
+  await click(button("Обновить списки"));
+  await flush();
+  expect(document.body.textContent).toContain("У вас нет открытых черновиков");
+  await click(button("Новый черновик"));
+  await click(button("Отмена"));
+  expect(document.querySelector(".create-bar")).toBeNull();
+  await click(button("Новый черновик"));
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Название черновика"]')!,
+    "New",
+  );
+  vi.mocked(api.createDraft).mockRejectedValueOnce(new StudioError("FORBIDDEN"));
+  await submit(document.querySelector<HTMLFormElement>(".create-bar")!);
+  expect(document.body.textContent).toContain("Не удалось создать черновик");
+  await change(document.querySelector<HTMLSelectElement>('[aria-label="Язык"]')!, "en");
+  expect(document.body.textContent).toContain("Could not create draft");
+  await change(document.querySelector<HTMLSelectElement>('[aria-label="Language"]')!, "ru");
+  expect(button("Отмена").disabled).toBe(false);
+  await click(button("Отмена"));
+  vi.mocked(api.pages).mockRejectedValueOnce(Error("secret"));
+  await click(button("Обновить списки"));
+  await flush();
+  expect(document.body.textContent).toContain("Не удалось загрузить список");
+  expect(document.body.textContent).not.toContain("secret");
+  vi.mocked(api.pages).mockResolvedValue({ items: [], nextCursor: null });
+  await click(button("Обновить списки"));
+  await flush();
+  expect(document.body.textContent).toContain("Нет доступных страниц");
+  await change(document.querySelector<HTMLSelectElement>('[aria-label="Язык"]')!, "en");
+  expect(document.body.textContent).toContain("No available pages");
+});
+it("STU-040/044: пагинация обоих списков и страница только в CS", async () => {
+  const { api, session } = await setup();
+  vi.mocked(api.pages)
+    .mockResolvedValueOnce({
+      items: [{ id: documentId, path: "/store", title: "Draft only", hasHead: false }],
+      nextCursor: documentId,
+    })
+    .mockResolvedValue({ items: [], nextCursor: null });
+  await click(button("Обновить списки"));
+  await flush();
+  await selectPage();
+  expect(button("Новый черновик").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Страница существует только в черновике");
+  await click(button("Ещё страницы"));
+  await flush();
+  expect(api.pages).toHaveBeenLastCalledWith(documentId, expect.any(AbortSignal));
+  vi.mocked(api.drafts)
+    .mockResolvedValueOnce({ items: [session.changeset], nextCursor: changesetId })
+    .mockResolvedValue({ items: [], nextCursor: null });
+  // Refresh each cached page; return a cursor for the first draft page.
+  vi.mocked(api.pages).mockResolvedValue({
+    items: [{ id: documentId, path: "/store", title: "Draft only", hasHead: false }],
+    nextCursor: null,
+  });
+  await click(button("Обновить списки"));
+  await flush();
+  await click(button("Ещё черновики"));
+  await flush();
+  expect(api.drafts).toHaveBeenLastCalledWith(documentId, changesetId, expect.any(AbortSignal));
+});
 it("STU-001/003/010/021/026/033: открывает, выбирает, сохраняет текст/числа/токены, меняет локаль", async () => {
   const { api, session } = await setup();
   expect(document.body.textContent).toContain("Откройте страницу");
-  const ids = document.querySelectorAll<HTMLInputElement>(".open-bar input");
+  const ids = document.querySelectorAll<HTMLSelectElement>(".open-bar select");
   await change(ids[0]!, documentId);
+  await flush();
   await change(ids[1]!, changesetId);
   await submit(document.querySelector<HTMLFormElement>(".open-bar")!);
   expect(api.open).toHaveBeenCalled();

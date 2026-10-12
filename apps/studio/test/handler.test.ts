@@ -14,6 +14,42 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-040/041/042: адаптер ограничивает каталог/курсор и target создания", async () => {
+  const { origin, fetcher, post } = await setup();
+  for (const path of [
+    `/pages?environment=staging&after=${changesetId}`,
+    `/working-drafts?environment=staging&documentId=${documentId}`,
+  ]) {
+    expect((await fetch(origin + "/api/studio/api/v1" + path)).status).toBe(200);
+    expect(String(fetcher.mock.calls.at(-1)![0])).toBe(config.baseUrl + "/api/v1" + path);
+  }
+  for (const path of [
+    "/pages?environment=production",
+    "/pages",
+    "/working-drafts?environment=production&documentId=" + documentId,
+  ])
+    expect((await fetch(origin + "/api/studio/api/v1" + path)).status).toBe(403);
+  for (const path of [
+    "/pages?environment=staging&ownerId=x",
+    "/pages?environment=staging&after=bad",
+    "/pages?environment=staging&environment=staging",
+    "/working-drafts?environment=staging",
+    "/working-drafts?environment=staging&documentId=bad",
+  ])
+    expect((await fetch(origin + "/api/studio/api/v1" + path)).status).toBe(400);
+  const route = "/api/studio/api/v1/commands/create-changeset";
+  expect(
+    (await post(route, { payload: { title: "New draft", targets: ["staging"] } })).status,
+  ).toBe(200);
+  for (const targets of [undefined, [], ["production"], ["staging", "production"]])
+    expect((await post(route, { payload: { title: "New draft", targets } })).status).toBe(403);
+  for (const payload of [
+    { title: " ", targets: ["staging"] },
+    { title: "x".repeat(201), targets: ["staging"] },
+    { title: "new", targets: ["staging"], ownerId: documentId },
+  ])
+    expect((await post(route, { payload })).status).toBe(400);
+});
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });

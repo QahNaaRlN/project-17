@@ -32,6 +32,9 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  pages(cursor?: string, signal?: AbortSignal): Promise<List<PageItem>>;
+  drafts(documentId: string, cursor?: string, signal?: AbortSignal): Promise<List<Changeset>>;
+  createDraft(title: string, key: string): Promise<Changeset>;
   config(signal?: AbortSignal): Promise<Config>;
   open(documentId: string, changesetId: string, signal: AbortSignal): Promise<Session>;
   apply(
@@ -41,6 +44,16 @@ export interface Api {
     signal: AbortSignal,
   ): Promise<void>;
   preview(session: Session, signal: AbortSignal): Promise<{ token: string; expiresAt: string }>;
+}
+export interface PageItem {
+  id: string;
+  path: string;
+  title: string;
+  hasHead: boolean;
+}
+export interface List<T> {
+  items: T[];
+  nextCursor: string | null;
 }
 export class StudioError extends Error {
   constructor(

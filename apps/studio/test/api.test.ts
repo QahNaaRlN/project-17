@@ -1,6 +1,64 @@
 import { expect, it, vi } from "vitest";
 import { createApi } from "../src/api.js";
 import { fixture, documentId, changesetId } from "./fixture.js";
+it("STU-040/041: списки используют настроенное окружение, курсор и выбранную страницу", async () => {
+  const session = fixture();
+  const fetcher = vi.fn<typeof fetch>(async (input) => {
+    const path = String(input);
+    return Response.json(
+      path.endsWith("/config")
+        ? session.config
+        : {
+            items: path.includes("/pages?")
+              ? [{ id: documentId, path: "/store", title: "Store", hasHead: true }]
+              : [session.changeset],
+            nextCursor: changesetId,
+          },
+    );
+  });
+  const api = createApi(fetcher);
+  expect((await api.pages(changesetId, signal)).items[0]).toMatchObject({ path: "/store" });
+  expect((await api.drafts(documentId, changesetId, signal)).items[0]).toEqual(session.changeset);
+  expect(fetcher.mock.calls.map(([p]) => String(p))).toContain(
+    `/api/studio/api/v1/working-drafts?environment=staging&documentId=${documentId}&after=${changesetId}`,
+  );
+  await expect(api.pages("bad", signal)).rejects.toThrow("IDENTIFIER_INVALID");
+  await expect(api.drafts("bad", undefined, signal)).rejects.toThrow("IDENTIFIER_INVALID");
+});
+it.each([
+  { items: null, nextCursor: null },
+  { items: [], nextCursor: "bad" },
+  { items: [null], nextCursor: null },
+])("STU-044: повреждённые списки отклоняются", async (body) => {
+  const api = createApi(async (input) =>
+    Response.json(String(input).endsWith("/config") ? fixture().config : body),
+  );
+  await expect(api.pages()).rejects.toThrow("RESPONSE_INVALID");
+  await expect(api.drafts(documentId)).rejects.toThrow("RESPONSE_INVALID");
+});
+it("STU-042/043: создание использует один target, имя и предоставленный ключ повтора", async () => {
+  const s = fixture();
+  const fetcher = vi.fn<typeof fetch>(async (input) =>
+    Response.json(String(input).endsWith("/config") ? s.config : { result: s.changeset }),
+  );
+  const api = createApi(fetcher);
+  await api.createDraft(" Новый черновик ", "same-key");
+  await api.createDraft(" Новый черновик ", "same-key");
+  const calls = fetcher.mock.calls.filter(([p]) => String(p).includes("create-changeset"));
+  expect(calls).toHaveLength(2);
+  expect(calls[0]![1]).toEqual(calls[1]![1]);
+  expect(JSON.parse(String(calls[0]![1]!.body))).toEqual({
+    payload: { title: "Новый черновик", targets: ["staging"] },
+    reason: "Studio: create page draft",
+  });
+  await expect(api.createDraft(" ", "k")).rejects.toThrow("TITLE_INVALID");
+  await expect(api.createDraft("x".repeat(201), "k")).rejects.toThrow("TITLE_INVALID");
+  s.changeset.state = "merged";
+  await expect(api.createDraft("name", "k")).rejects.toMatchObject({
+    code: "RESPONSE_INVALID",
+    uncertain: true,
+  });
+});
 const signal = new AbortController().signal;
 it("STU-021: чтение через конкурентную запись не выдаёт смешанный snapshot", async () => {
   const { api, fetcher, s } = setup();
