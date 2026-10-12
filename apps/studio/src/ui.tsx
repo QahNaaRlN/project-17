@@ -5,6 +5,7 @@ import type { Node } from "@cms/ir";
 import type { Editor } from "./editor.js";
 import { fields, fieldOperations, designOperation, layers, type Field } from "./fields.js";
 import { StudioError, type Api, type Session } from "./types.js";
+import { Workspace } from "./workspace.js";
 const copy = {
   ru: {
     page: "Страница",
@@ -17,7 +18,7 @@ const copy = {
     select: "Выберите элемент в дереве или на странице",
     preview: "Предпросмотр страницы",
     loading: "Загрузка…",
-    idle: "Откройте страницу и черновик по ID",
+    idle: "Откройте страницу и свой черновик из списка",
     ready: "Черновик загружен",
     saving: "Сохранение…",
     uncertain: "Исход сохранения неизвестен. Перечитайте черновик перед новой правкой.",
@@ -55,7 +56,7 @@ const copy = {
     select: "Select an element in the tree or page",
     preview: "Page preview",
     loading: "Loading…",
-    idle: "Open a page and Change Set by ID",
+    idle: "Open a page and your draft from the list",
     ready: "Draft loaded",
     saving: "Saving…",
     uncertain: "Save outcome is unknown. Reload the draft before editing again.",
@@ -245,9 +246,9 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
   const saved = new URLSearchParams(
     typeof window === "undefined" ? "" : window.location.hash.slice(1),
   );
-  const [documentId, setDocumentId] = useState(saved.get("document") ?? ""),
-    [changesetId, setChangesetId] = useState(saved.get("changeset") ?? ""),
-    [point, setPoint] = useState("base");
+  const documentId = saved.get("document") ?? "",
+    changesetId = saved.get("changeset") ?? "";
+  const [point, setPoint] = useState("base");
   const frame = useRef<HTMLIFrameElement>(null);
   const config = useQuery({
     queryKey: ["studio-config"],
@@ -309,39 +310,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
           </select>
         </label>
       </header>
-      <form
-        className="open-bar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          window.location.hash = new URLSearchParams({
-            document: documentId,
-            changeset: changesetId,
-          }).toString();
-          void editor.open(documentId.trim(), changesetId.trim());
-        }}
-      >
-        <label>
-          {t.page}
-          <input
-            value={documentId}
-            onChange={(event) => setDocumentId(event.target.value)}
-            placeholder="UUID"
-            required
-            disabled={busy}
-          />
-        </label>
-        <label>
-          {t.draft}
-          <input
-            value={changesetId}
-            onChange={(event) => setChangesetId(event.target.value)}
-            placeholder="UUID"
-            required
-            disabled={busy}
-          />
-        </label>
-        <button disabled={busy}>{t.open}</button>
-      </form>
+      <Workspace {...{ api, editor, busy }} locale={state.locale} />
       {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
       <div className="workspace">
         <aside className="layers">

@@ -5,6 +5,60 @@ test.beforeEach(async ({ request }) => {
   await request.post(origin + "/control", { data: { mode: "ready" } });
   await request.post(origin + "/studio-control", { data: { reset: true } });
 });
+test("STU-040/041/042/044: открытие страницы и нового черновика без ручного ввода ID", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(origin + "/editor");
+  await page.getByLabel("Страница", { exact: true }).selectOption({ label: "/store · Store" });
+  await page
+    .getByLabel("Мой черновик", { exact: true })
+    .selectOption({ label: "Studio browser draft" });
+  await page.getByRole("button", { name: "Открыть", exact: true }).click();
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Новый черновик", exact: true }).click();
+  await page.getByLabel("Название черновика", { exact: true }).fill("Новая работа");
+  await page.getByRole("button", { name: "Создать и открыть", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Новая работа" })).toBeVisible();
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.getByLabel("text", { exact: true }).fill("Работа из нового черновика");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(
+    page
+      .frameLocator(".frame-wrap iframe")
+      .getByRole("heading", { name: "Работа из нового черновика" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page
+      .frameLocator(".frame-wrap iframe")
+      .getByRole("heading", { name: "Работа из нового черновика" }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("studio-workspace.png"), fullPage: true });
+});
+test("STU-043: повтор создания после потерянного ответа не создаёт дубль", async ({
+  page,
+  request,
+}) => {
+  const keys: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().endsWith("/commands/create-changeset"))
+      keys.push(req.headers()["idempotency-key"]!);
+  });
+  await page.goto(origin + "/editor");
+  await page.getByLabel("Страница", { exact: true }).selectOption({ label: "/store · Store" });
+  await page.getByRole("button", { name: "Новый черновик", exact: true }).click();
+  await page.getByLabel("Название черновика", { exact: true }).fill("Повторяемая работа");
+  await request.post(origin + "/studio-control", { data: { fault: "create-lost" } });
+  await page.getByRole("button", { name: "Создать и открыть", exact: true }).click();
+  await expect(page.getByText(/второй черновик не создастся/)).toBeVisible();
+  await page.getByRole("button", { name: "Повторить создание", exact: true }).click();
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+  await expect(page.getByLabel("Мой черновик", { exact: true }).locator("option")).toHaveCount(3);
+});
 test("STU-001/003/010/021/026/032/033, SDK-042: Studio сохраняет черновик и переживает перезагрузку", async ({
   page,
 }, testInfo) => {

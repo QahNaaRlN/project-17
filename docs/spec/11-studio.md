@@ -5,6 +5,8 @@
 padding/gap с токенами и breakpoint, сохранение в CS и восстановление после отказа.
 Это частичный M4. Production-вход, DnD, Structure/Agent, content editor,
 approval/history, undo/redo UI и SSE ещё не реализованы.
+Пакет [«Страницы и рабочие черновики»](../studio-workspace.md) добавляет выбор
+страницы, своего открытого CS и создание нового без ручного ввода ID (STU-040…044).
 
 ## 1. Стек
 

@@ -2,8 +2,10 @@
 
 React/Vite, Zustand для документа и выбора, TanStack Query для bootstrap.
 Редактируются открытые `standard` Change Sets через публичный Command API.
-SSE, поиск страниц, создание CS, production identity и полный M4 впереди.
+Доступны списки страниц и своих рабочих черновиков, создание именованного CS.
+SSE, production identity и полный M4 впереди.
 [Контракт и границы](../../docs/studio-editor.md).
+[Страницы и рабочие черновики](../../docs/studio-workspace.md).
 
 ## Локальный запуск
 
@@ -26,11 +28,13 @@ SSE, поиск страниц, создание CS, production identity и по
    pnpm --filter @cms/studio start
    ```
 
-5. Открыть `studioOrigin`, ввести ID документа и CS. Доступна также ссылка
+5. Открыть `studioOrigin`, выбрать страницу по маршруту, затем свой черновик
+   или «Новый черновик» и указать имя. Доступна также ссылка
    `/#document=<UUID>&changeset=<UUID>`; IDs не являются секретами.
 
 Сервер привязан к `127.0.0.1`, проверяет Host/Origin/Fetch Metadata и пропускает
-только manifest, CS, document, apply-operations и create-preview-token. Он не
+только manifest, CS, document, pages, working-drafts, apply-operations,
+create-changeset и create-preview-token. Он не
 предназначен для публичного ingress. Для production нужны пользовательские
 сессии и SSO, а не общий service credential.
 

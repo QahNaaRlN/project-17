@@ -73,11 +73,14 @@ export function createStudioHandler(
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const allowedGet =
+          path === "/api/v1/pages" ||
+          path === "/api/v1/working-drafts" ||
           path === "/api/v1/manifest" ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
           "/api/v1/commands/apply-operations",
           "/api/v1/commands/create-preview-token",
+          "/api/v1/commands/create-changeset",
         ].includes(path);
         if (!(req.method === "GET" && allowedGet) && !(req.method === "POST" && allowedPost))
           return error(404, "STUDIO_ROUTE_UNAVAILABLE");
@@ -88,20 +91,41 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          const key =
-            path === "/api/v1/manifest"
-              ? "environment"
-              : path.includes("/documents/")
-                ? "changesetId"
-                : null;
-          if (
-            [...url.searchParams.keys()].some((param) => param !== key) ||
-            (key && url.searchParams.getAll(key).length !== 1)
-          )
-            return error(400, "PARAM_INVALID");
-          if (key === "environment" && url.searchParams.get(key) !== config.environment)
-            return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
-          if (key) upstream.searchParams.set(key, url.searchParams.get(key)!);
+          if (path === "/api/v1/pages" || path === "/api/v1/working-drafts") {
+            const allowed = [
+              "environment",
+              "after",
+              ...(path.endsWith("working-drafts") ? ["documentId"] : []),
+            ];
+            if (
+              [...url.searchParams.keys()].some(
+                (key) => !allowed.includes(key) || url.searchParams.getAll(key).length !== 1,
+              ) ||
+              (url.searchParams.has("after") &&
+                !new RegExp(`^${uuid}$`).test(url.searchParams.get("after")!)) ||
+              (path.endsWith("working-drafts") &&
+                !new RegExp(`^${uuid}$`).test(url.searchParams.get("documentId") ?? ""))
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else {
+            const key =
+              path === "/api/v1/manifest"
+                ? "environment"
+                : path.includes("/documents/")
+                  ? "changesetId"
+                  : null;
+            if (
+              [...url.searchParams.keys()].some((param) => param !== key) ||
+              (key && url.searchParams.getAll(key).length !== 1)
+            )
+              return error(400, "PARAM_INVALID");
+            if (key === "environment" && url.searchParams.get(key) !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            if (key) upstream.searchParams.set(key, url.searchParams.get(key)!);
+          }
         } else {
           if (
             req.headers.origin !== config.studioOrigin ||
@@ -121,10 +145,22 @@ export function createStudioHandler(
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
           if (
-            path.endsWith("create-preview-token") &&
-            envelope.payload.environment !== config.environment
+            (path.endsWith("create-preview-token") &&
+              envelope.payload.environment !== config.environment) ||
+            (path.endsWith("create-changeset") &&
+              (!Array.isArray(envelope.payload.targets) ||
+                envelope.payload.targets.length !== 1 ||
+                envelope.payload.targets[0] !== config.environment))
           )
             return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          if (
+            path.endsWith("create-changeset") &&
+            (Object.keys(envelope.payload).some((key) => !["title", "targets"].includes(key)) ||
+              typeof envelope.payload.title !== "string" ||
+              envelope.payload.title.trim().length === 0 ||
+              [...envelope.payload.title].length > 200)
+          )
+            return error(400, "PAYLOAD_INVALID");
           if (
             path.endsWith("apply-operations") &&
             (!Array.isArray(envelope.payload.operations) ||

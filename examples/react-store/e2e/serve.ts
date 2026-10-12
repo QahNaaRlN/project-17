@@ -59,7 +59,7 @@ const fixture = createServer(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   if (
     req.headers.authorization !== `Bearer ${key}` &&
-    req.headers.authorization !== `Preview ${previewToken}`
+    !editor.acceptsPreview(req.headers.authorization)
   ) {
     res.writeHead(401);
     res.end(JSON.stringify({ code: "UNAUTHORIZED" }));

@@ -79,6 +79,8 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | `POST` | `/api/v1/commands/rollback` | Откатить публикацию |
 | `GET` | `/api/v1/environments` | Окружения |
 | `GET` | `/api/v1/changesets?state=` | Change Set'ы проекта |
+| `GET` | `/api/v1/pages?environment=&after=` | Страницы для Studio, `design.read`, 50 записей + `nextCursor` |
+| `GET` | `/api/v1/working-drafts?environment=&documentId=&after=` | Свои open/standard CS доступной страницы, `design.read`, 50 записей + `nextCursor` |
 | `GET` | `/api/v1/changesets/{id}` | Change Set и изменённые объекты |
 | `GET` | `/api/v1/changesets/{id}/operations?afterSeq=` | Журнал операций |
 | `GET` | `/api/v1/changesets/{id}/review` | Проверки, риск и согласования |

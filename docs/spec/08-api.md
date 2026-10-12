@@ -108,6 +108,8 @@ X-CMS-Project: store
 | `GET /api/v1/objects/{id}/usages` | Где используется (обратные ссылки) |
 | `GET /api/v1/documents/{id}/outline?changesetId=` | Компактная структура документа (дерево типов, имена, привязки) — для агента и дерева слоёв |
 | `GET /api/v1/changesets?state=&owner=` | Список CS |
+| `GET /api/v1/pages?environment=&after=` | Каталог страниц: head и свои рабочие страницы; `design.read`, 50 записей и `nextCursor` (STU-040/044) |
+| `GET /api/v1/working-drafts?environment=&documentId=&after=` | Свои open/standard CS выбранной страницы и окружения; `design.read`, 50 записей и `nextCursor` (STU-041/044) |
 | `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями, `needsAttention` и `manifestDiagnostics` по окружениям (CHG-034); для CS схем — кандидат и исходный manifest (MF-025) |
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |

@@ -6,6 +6,8 @@ import {
   type Config,
   type DocumentRecord,
   type Session,
+  type List,
+  type PageItem,
 } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function createApi(fetcher: typeof fetch = fetch): Api {
@@ -50,6 +52,73 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
     }
   }
   const api: Api = {
+    async pages(cursor, signal) {
+      const config = await api.config(signal);
+      const value = await listing<PageItem>(
+        "/api/v1/pages",
+        { environment: config.environment },
+        cursor,
+        signal,
+      );
+      if (
+        value.items.some(
+          (p) =>
+            !p ||
+            !uuid.test(p.id) ||
+            typeof p.path !== "string" ||
+            !p.path.startsWith("/") ||
+            p.path.startsWith("//") ||
+            typeof p.title !== "string" ||
+            typeof p.hasHead !== "boolean",
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
+    async drafts(documentId, cursor, signal) {
+      if (!uuid.test(documentId)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      const value = await listing<Changeset>(
+        "/api/v1/working-drafts",
+        { environment: config.environment, documentId },
+        cursor,
+        signal,
+      );
+      if (
+        value.items.some(
+          (d) =>
+            !d ||
+            !uuid.test(d.id) ||
+            typeof d.title !== "string" ||
+            d.state !== "open" ||
+            d.kind !== "standard" ||
+            !Array.isArray(d.targets) ||
+            !d.targets.includes(config.environment),
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
+    async createDraft(title, key) {
+      title = title.trim();
+      if ([...title].length < 1 || [...title].length > 200) throw new StudioError("TITLE_INVALID");
+      const config = await api.config();
+      const response = await request<{ result: Changeset }>(
+        "/api/v1/commands/create-changeset",
+        undefined,
+        { payload: { title, targets: [config.environment] }, reason: "Studio: create page draft" },
+        key,
+      );
+      if (
+        !uuid.test(response?.result?.id) ||
+        response.result.kind !== "standard" ||
+        response.result.state !== "open" ||
+        !Array.isArray(response.result.targets) ||
+        !response.result.targets.includes(config.environment)
+      )
+        throw new StudioError("RESPONSE_INVALID", true);
+      return response.result;
+    },
     config: (signal) => request<Config>("/config", signal),
     async open(documentId, changesetId, signal) {
       if (!uuid.test(documentId) || !uuid.test(changesetId))
@@ -128,5 +197,25 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       return result.result;
     },
   };
+  async function listing<T>(
+    path: string,
+    params: Record<string, string>,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<List<T>> {
+    if (cursor !== undefined && !uuid.test(cursor)) throw new StudioError("IDENTIFIER_INVALID");
+    const query = new URLSearchParams(params);
+    if (cursor) query.set("after", cursor);
+    const value = await request<List<T>>(`${path}?${query}`, signal);
+    if (
+      !Array.isArray(value?.items) ||
+      !(
+        value.nextCursor === null ||
+        (typeof value.nextCursor === "string" && uuid.test(value.nextCursor))
+      )
+    )
+      throw new StudioError("RESPONSE_INVALID");
+    return value;
+  }
   return api;
 }
