@@ -9,28 +9,54 @@ import {
   type List,
   type PageItem,
   type History,
+  type Account,
+  type WorkItem,
 } from "./types.js";
 import { validateReview, problemDiagnostics, safeDiagnostics } from "./review.js";
 import type { Review, Publication } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export function createApi(fetcher: typeof fetch = fetch): Api {
+export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => void): Api {
+  let csrf: string | undefined,
+    actor: string | undefined,
+    human = false;
   async function request<T>(
     path: string,
     signal?: AbortSignal,
     body?: unknown,
     key?: string,
   ): Promise<T> {
+    if (human && !path.startsWith("/auth/") && path !== "/config") {
+      try {
+        const account = await api.account(signal);
+        if (!account.authenticated) {
+          onSessionLost?.();
+          throw new StudioError("UNAUTHENTICATED");
+        }
+      } catch (cause) {
+        throw new StudioError(
+          cause instanceof StudioError ? cause.code : "SESSION_UNAVAILABLE",
+          body !== undefined,
+          cause instanceof StudioError ? cause.diagnostics : [],
+        );
+      }
+    }
     let response: Response;
     try {
       response = await fetcher("/api/studio" + path, {
         method: body === undefined ? "GET" : "POST",
         credentials: "same-origin",
         cache: "no-store",
+        ...(body === undefined && human && actor ? { headers: { "X-CMS-Actor": actor } } : {}),
         ...(signal ? { signal } : {}),
         ...(body === undefined
           ? {}
           : {
-              headers: { "Content-Type": "application/json", "Idempotency-Key": key! },
+              headers: {
+                "Content-Type": "application/json",
+                "Idempotency-Key": key!,
+                ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+                ...(human && actor ? { "X-CMS-Actor": actor } : {}),
+              },
               body: JSON.stringify(body),
             }),
       });
@@ -48,6 +74,13 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       } catch {
         /* no server detail/secrets in UI */
       }
+      if (
+        human &&
+        (response.status === 401 ||
+          code === "SESSION_CHANGED" ||
+          code === "PROJECT_ACCESS_REQUIRED")
+      )
+        onSessionLost?.();
       throw new StudioError(code, body !== undefined && response.status >= 500, diagnostics);
     }
     try {
@@ -57,6 +90,63 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
     }
   }
   const api: Api = {
+    async account(signal) {
+      const value = await request<Account>("/auth/session", signal);
+      if (
+        !value ||
+        typeof value.authenticated !== "boolean" ||
+        typeof value.hasAccess !== "boolean" ||
+        !Array.isArray(value.rights) ||
+        value.rights.some((r) => typeof r !== "string") ||
+        (value.authenticated &&
+          (!value.user ||
+            !uuid.test(value.user.id) ||
+            typeof value.user.name !== "string" ||
+            typeof value.csrfToken !== "string" ||
+            !/^[a-zA-Z0-9_-]{43}$/.test(value.csrfToken) ||
+            !Number.isFinite(Date.parse(value.expiresAt!))))
+      )
+        throw new StudioError("SESSION_INVALID");
+      if (value.authenticated && actor && actor !== value.user!.id) {
+        onSessionLost?.();
+        throw new StudioError("SESSION_CHANGED");
+      }
+      if (value.authenticated) actor = value.user!.id;
+      csrf = value.authenticated ? value.csrfToken : undefined;
+      return value;
+    },
+    async logout(signal) {
+      await api.account(signal);
+      await request("/auth/logout", signal, {}, crypto.randomUUID());
+      csrf = undefined;
+    },
+    async workItems(cursor, signal) {
+      const config = await api.config(signal);
+      const value = await listing<WorkItem>(
+        "/api/v1/work-items",
+        { environment: config.environment },
+        cursor,
+        signal,
+      );
+      if (
+        value.items.some(
+          (i) =>
+            !i ||
+            !uuid.test(i.id) ||
+            !uuid.test(i.documentId) ||
+            !uuid.test(i.ownerId) ||
+            typeof i.title !== "string" ||
+            typeof i.ownerName !== "string" ||
+            typeof i.own !== "boolean" ||
+            typeof i.path !== "string" ||
+            !i.path.startsWith("/") ||
+            i.path.startsWith("//") ||
+            !["open", "failed", "changes_requested", "in_review", "approved"].includes(i.state),
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
     async workflow(session, action, comment, key, signal) {
       const commands = {
         submit: "submit-changeset",
@@ -195,7 +285,11 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
         throw new StudioError("RESPONSE_INVALID", true);
       return response.result;
     },
-    config: (signal) => request<Config>("/config", signal),
+    async config(signal) {
+      const value = await request<Config>("/config", signal);
+      human = value.authMode === "oidc";
+      return value;
+    },
     async open(documentId, changesetId, signal) {
       if (!uuid.test(documentId) || !uuid.test(changesetId))
         throw new StudioError("IDENTIFIER_INVALID");

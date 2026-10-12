@@ -171,7 +171,8 @@ export function StructurePanel({ editor }: { editor: Editor }) {
         : [],
     [doc, session, dragging],
   );
-  const enabled = state.status === "ready" && session?.changeset.state === "open";
+  const enabled =
+    state.status === "ready" && session?.changeset.state === "open" && session.review.canEdit;
   const removable =
     !!doc && !!session && !!state.selected && canRemove(doc, state.selected, session.manifest);
   function label(p: Place) {

@@ -29,6 +29,15 @@
 
 ## 3. Command API
 
+Реализованный вход описан в [STU-080…084](../studio-identity.md): CMS обслуживает
+`GET /auth/login`, `/auth/callback`, `/auth/session` и `POST /auth/logout`.
+Studio проксирует их как `/api/studio/auth/{action}`; callback регистрируется у IdP
+на публичном origin Studio. Cookie-команды требуют `Origin`, `X-CSRF-Token`;
+`X-CMS-Actor` привязывает запрос редактора к ожидаемому человеку и отклоняет смену
+пользователя между проверкой сессии и командой. `GET /api/v1/work-items` принимает
+`environment` и UUID cursor `after`, возвращает до 50 доступных работ и `nextCursor`.
+Команды `create-role`, `bind-human-role`, `unbind-human-role` требуют `project.admin`.
+
 ### 3.1. Конверт
 
 ```http

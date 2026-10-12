@@ -9,6 +9,7 @@ import { Workspace } from "./workspace.js";
 import { HistoryPanel } from "./history.js";
 import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
+import { WorkItems } from "./work-items.js";
 const copy = {
   ru: {
     page: "Страница",
@@ -330,6 +331,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
   const busy = ["saving", "loading", "uncertain"].includes(state.status);
   const disabled =
     busy ||
+    !session?.review.canEdit ||
     session?.changeset.state !== "open" ||
     tree.find((item) => item.id === state.selected)?.locked === true;
   const rects =
@@ -363,6 +365,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
         </label>
       </header>
       <Workspace {...{ api, editor, busy }} locale={state.locale} />
+      <WorkItems api={api} editor={editor} />
       {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
       <div className="workspace">
         <StructurePanel editor={editor} />
@@ -513,7 +516,9 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
             </button>
           </>
         )}
-        {session && session.changeset.state !== "open" && <p>{t.readOnly}</p>}
+        {session && (!session.review.canEdit || session.changeset.state !== "open") && (
+          <p>{t.readOnly}</p>
+        )}
         {state.error && (
           <p role="alert">
             {errorText[state.locale][state.error] ?? t.problem} <code>{state.error}</code>

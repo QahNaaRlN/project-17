@@ -236,6 +236,7 @@ export function createEditor(
     if (
       !session ||
       !state.document ||
+      !session.review.canEdit ||
       state.status !== "ready" ||
       session.changeset.state !== "open"
     )

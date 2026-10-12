@@ -8,6 +8,7 @@ import type { HistoryAction } from "../../../apps/studio/src/types.js";
 import { structuralApply } from "../../../apps/studio/src/structure.js";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
+import { identityBoundary } from "./identity-boundary.js";
 export async function studioFixture(id: string, previewToken: string) {
   const previewTokens = new Set([previewToken]);
   const credential = "cms_svc_e2e_local_studio_actor";
@@ -42,6 +43,18 @@ export async function studioFixture(id: string, previewToken: string) {
   const draftTitles = new Map<string, string>(),
     createKeys = new Map<string, string>();
   const createdId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c99";
+  const identity = identityBoundary(id, createdId);
+  const userStudio = createStudioHandler(
+    {
+      baseUrl: "http://127.0.0.1:18084",
+      studioOrigin: "http://127.0.0.1:18084",
+      appOrigin: "http://127.0.0.1:18083",
+      project: "local-demo",
+      environment: "staging",
+      authMode: "oidc",
+    },
+    fileURLToPath(new URL("../../../apps/studio/dist/client", import.meta.url)),
+  );
   type Edit = { before: IrDocument; after: IrDocument; operations: HistoryAction["operations"] };
   const undoStack: Edit[] = [],
     redoStack: Edit[] = [],
@@ -69,6 +82,7 @@ export async function studioFixture(id: string, previewToken: string) {
     fault = "";
     state = "open";
     human = false;
+    identity.reset();
     decisions.length = 0;
     workflowKeys.clear();
     undoStack.length = 0;
@@ -122,7 +136,7 @@ export async function studioFixture(id: string, previewToken: string) {
         path.startsWith("/api/studio/") ||
         path.startsWith("/assets/index-")
       ) {
-        await studio(req, res);
+        await (identity.enabled ? userStudio : studio)(req, res);
         return true;
       }
       if (path === "/studio-control" && req.method === "POST") {
@@ -133,15 +147,21 @@ export async function studioFixture(id: string, previewToken: string) {
           fault?: string;
           state?: string;
           human?: boolean;
+          identity?: boolean;
+          expired?: boolean;
+          user?: string;
         };
         if (control.reset) reset(true);
         fault = control.fault ?? "";
         state = control.state ?? state;
         human = control.human ?? human;
+        identity.configure(control, res);
         res.end("ok");
         return true;
       }
+      if (identity.handle(req, res)) return true;
       if (!path.startsWith("/api/v1/")) return false;
+      const who = identity.user(req);
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-store");
       const fail = (status: number, code: string) => {
@@ -149,10 +169,39 @@ export async function studioFixture(id: string, previewToken: string) {
         res.end(JSON.stringify({ code, detail: credential }));
       };
       if (
-        req.headers.authorization !== "Bearer " + credential ||
+        (identity.enabled ? !who : req.headers.authorization !== "Bearer " + credential) ||
         req.headers["x-cms-project"] !== "local-demo"
       ) {
         fail(401, "UNAUTHENTICATED");
+        return true;
+      }
+      const denied = identity.enabled ? identity.denial(req) : null;
+      if (denied) {
+        fail(denied.status, denied.code);
+        return true;
+      }
+      const owner = !identity.enabled || who?.id === id;
+      if (path === "/api/v1/work-items") {
+        res.end(
+          JSON.stringify({
+            items:
+              owner || ["in_review", "approved"].includes(state)
+                ? [
+                    {
+                      id,
+                      title: draftTitles.get(id),
+                      documentId: id,
+                      path: "/store",
+                      ownerId: id,
+                      ownerName: "Alice",
+                      own: owner,
+                      state,
+                    },
+                  ]
+                : [],
+            nextCursor: null,
+          }),
+        );
         return true;
       }
       if (path === "/api/v1/manifest") {
@@ -165,27 +214,34 @@ export async function studioFixture(id: string, previewToken: string) {
             changeset: changeset(path.split("/").at(-2)!),
             risk: state === "open" ? null : "medium",
             needsAttention: state === "failed",
-            requiredApprovals: human ? 1 : 0,
+            canEdit: state === "open" && owner,
+            requiredApprovals: human || identity.enabled ? 1 : 0,
             approvals: decisions.filter((d) => d.valid && d.decision === "approve").length,
             history: decisions,
             objects: [{ id, kind: "page", path: "/store", deleted: false }],
             actions: {
-              submit: state === "open" ? null : "CHANGESET_NOT_OPEN",
+              submit: !owner ? "FORBIDDEN" : state === "open" ? null : "CHANGESET_NOT_OPEN",
               reopen: ["failed", "approved", "in_review", "changes_requested"].includes(state)
-                ? null
+                ? owner
+                  ? null
+                  : "FORBIDDEN"
                 : "CHANGESET_STATE_INVALID",
               approve:
                 state !== "in_review"
                   ? "CHANGESET_STATE_INVALID"
-                  : human
-                    ? null
-                    : "APPROVAL_FORBIDDEN_ACTOR",
+                  : identity.enabled && owner
+                    ? "APPROVAL_SELF_FORBIDDEN"
+                    : human || identity.enabled
+                      ? null
+                      : "APPROVAL_FORBIDDEN_ACTOR",
               "request-changes":
                 state !== "in_review"
                   ? "CHANGESET_STATE_INVALID"
-                  : human
-                    ? null
-                    : "APPROVAL_FORBIDDEN_ACTOR",
+                  : identity.enabled && owner
+                    ? "APPROVAL_SELF_FORBIDDEN"
+                    : human || identity.enabled
+                      ? null
+                      : "APPROVAL_FORBIDDEN_ACTOR",
               publish: state === "approved" ? null : "CHANGESET_STATE_INVALID",
             },
             checks:
@@ -261,7 +317,7 @@ export async function studioFixture(id: string, previewToken: string) {
       if (path === "/api/v1/working-drafts") {
         res.end(
           JSON.stringify({
-            items: state === "open" ? [...draftTitles.keys()].map(changeset) : [],
+            items: state === "open" && owner ? [...draftTitles.keys()].map(changeset) : [],
             nextCursor: null,
           }),
         );
@@ -278,6 +334,23 @@ export async function studioFixture(id: string, previewToken: string) {
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);
+      if (
+        !owner &&
+        ["apply-operations", "undo", "redo", "submit-changeset", "reopen-changeset"].some(
+          (command) => path.endsWith("/" + command),
+        )
+      ) {
+        fail(403, "FORBIDDEN");
+        return true;
+      }
+      if (
+        identity.enabled &&
+        owner &&
+        ["approve-changeset", "request-changes"].some((command) => path.endsWith("/" + command))
+      ) {
+        fail(403, "APPROVAL_SELF_FORBIDDEN");
+        return true;
+      }
       if (
         [
           "submit-changeset",
@@ -305,14 +378,19 @@ export async function studioFixture(id: string, previewToken: string) {
         }
         let result: unknown;
         if (path.endsWith("submit-changeset"))
-          state = fault === "submit-invalid" ? "failed" : human ? "in_review" : "approved";
+          state =
+            fault === "submit-invalid"
+              ? "failed"
+              : human || identity.enabled
+                ? "in_review"
+                : "approved";
         else if (path.endsWith("reopen-changeset")) {
           state = "open";
           decisions.forEach((d) => {
             d.valid = false;
           });
         } else if (path.endsWith("approve-changeset") || path.endsWith("request-changes")) {
-          if (!human) {
+          if (!human && !identity.enabled) {
             fail(403, "APPROVAL_FORBIDDEN_ACTOR");
             return true;
           }
