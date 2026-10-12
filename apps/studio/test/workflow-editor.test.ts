@@ -116,3 +116,28 @@ it("STU-074: generic transport failure remains uncertain even if subsequent stat
   expect(editor.store.getState().status).toBe("ready");
   editor.dispose();
 });
+it("STU-074: retry cannot overlap a pending refresh of an uncertain publication", async () => {
+  const { api, session } = mockApi(),
+    editor = createEditor(api);
+  session.changeset.state = "approved";
+  await editor.open(documentId, changesetId);
+  vi.mocked(api.workflow).mockRejectedValueOnce(new StudioError("NETWORK_UNCERTAIN", true));
+  await editor.workflow("publish");
+  let resolve!: (s: typeof session) => void;
+  vi.mocked(api.open).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const refreshing = editor.refresh();
+  try {
+    expect(editor.store.getState().status).toBe("loading");
+    await editor.retryWorkflow();
+    expect(api.workflow).toHaveBeenCalledTimes(1);
+  } finally {
+    resolve(structuredClone(session));
+    await refreshing;
+    editor.dispose();
+  }
+});

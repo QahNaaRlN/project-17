@@ -203,7 +203,7 @@ export function createEditor(
   }
   async function refresh() {
     const session = store.getState().session;
-    if (!session || store.getState().status === "saving") return;
+    if (!session || ["saving", "loading"].includes(store.getState().status)) return;
     store.setState({ status: "loading", error: null });
     const stamp = epoch;
     try {
@@ -359,7 +359,12 @@ export function createEditor(
   }
   async function sendWorkflow() {
     const attempt = pendingWorkflow;
-    if (!attempt || store.getState().status === "saving") return;
+    if (
+      !attempt ||
+      ["saving", "loading"].includes(store.getState().status) ||
+      lifecycle.signal.aborted
+    )
+      return;
     const stamp = epoch;
     store.setState({
       status: "saving",

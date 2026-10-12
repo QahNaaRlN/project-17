@@ -308,6 +308,7 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
         <p role="alert">
           {t.uncertain}{" "}
           <button
+            disabled={state.status === "saving" || state.status === "loading"}
             onClick={() => {
               void editor.retryWorkflow();
             }}
