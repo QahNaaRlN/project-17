@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import fc from "fast-check";
-import { normalize, validateDocument, type NestedNode } from "@cms/ir";
+import { normalize, validateDocument, type NestedNode, type IrDocument } from "@cms/ir";
 import {
   canRemove,
   childList,
@@ -292,4 +292,79 @@ it("IR-022/STU-063: responsive nodeRef и fallback привязки ссылаю
     fallback: { expr: "$context.target", default: "n_copy_2" },
   });
   expect(doc).toEqual(before);
+});
+it("STU-061 property: допустимые места совпадают с защищёнными путями фактического дерева", () => {
+  function paths(doc: IrDocument) {
+    const out = new Map<string, string>();
+    function walk(id: string, path: string, inherited: boolean) {
+      const n = doc.nodes[id]!,
+        locked = inherited || !!n.locked || !!n.zone?.locked;
+      if (locked) out.set(id, path);
+      n.children?.forEach((child, index) => walk(child, path + "/c/" + index, locked));
+      Object.entries(n.slots ?? {}).forEach(([slot, list]) =>
+        list.forEach((child, index) => walk(child, path + "/s/" + slot + "/" + index, locked)),
+      );
+    }
+    walk(doc.root, doc.root, false);
+    return out;
+  }
+  fc.assert(
+    fc.property(fc.array(fc.boolean(), { minLength: 2, maxLength: 7 }), (locks) => {
+      const s = fixture(),
+        doc = normalize({
+          irVersion: "1.0",
+          kind: "page",
+          root: {
+            id: "n_root",
+            type: "Stack",
+            children: locks.map((locked, i) => ({
+              id: "n_box_" + i,
+              type: "Box",
+              children: [{ id: "n_text_" + i, type: "Text", locked }],
+            })),
+          },
+        });
+      const free = structuredClone(doc);
+      for (const n of Object.values(free.nodes)) delete n.locked;
+      const protectedBefore = paths(doc);
+      const unchanged = (next: IrDocument) => {
+        const after = paths(next);
+        return [...protectedBefore].every(
+          ([id, path]) =>
+            after.get(id) === path &&
+            JSON.stringify(next.nodes[id]) === JSON.stringify(doc.nodes[id]),
+        );
+      };
+      for (const moving of [undefined, "n_box_0", "n_text_0", "n_box_1", "n_text_1"]) {
+        const tree = moving ? subtree(doc, moving) : { id: "n_new_item", type: "Text" };
+        const candidates = destinations(
+          free,
+          s.manifest,
+          moving ? subtree(free, moving) : tree,
+          moving,
+        );
+        const expected = candidates.filter((place) => {
+          const next = structuredClone(doc);
+          structuralApply(
+            next,
+            moving
+              ? { type: "node.move", target: documentId, payload: { ...place, nodeId: moving } }
+              : insertion(documentId, place, tree),
+          );
+          return unchanged(next);
+        });
+        expect(destinations(doc, s.manifest, tree, moving)).toEqual(expected);
+        if (moving) {
+          const next = structuredClone(doc);
+          structuralApply(next, {
+            type: "node.remove",
+            target: documentId,
+            payload: { nodeId: moving },
+          });
+          expect(canRemove(doc, moving, s.manifest)).toBe(unchanged(next));
+        }
+      }
+    }),
+    { seed: 61, numRuns: 25 },
+  );
 });

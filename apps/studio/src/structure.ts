@@ -85,15 +85,23 @@ export function structuralApply(doc: IrDocument, operation: Operation): void {
     }
   }
 }
-function ancestors(doc: IrDocument, id: string): Node[] {
+function parentIndex(doc: IrDocument): Map<string, string> {
+  const parents = new Map<string, string>();
+  for (const node of Object.values(doc.nodes)) {
+    for (const id of [...(node.children ?? []), ...Object.values(node.slots ?? {}).flat()])
+      parents.set(id, node.id);
+  }
+  return parents;
+}
+function ancestors(doc: IrDocument, id: string, parents = parentIndex(doc)): Node[] {
   const out: Node[] = [],
     seen = new Set<string>();
   while (doc.nodes[id] && !seen.has(id)) {
     seen.add(id);
     out.unshift(doc.nodes[id]!);
-    const parent = location(doc, id);
+    const parent = parents.get(id);
     if (!parent) break;
-    id = parent.parentId;
+    id = parent;
   }
   return out;
 }
@@ -122,47 +130,65 @@ function treeAllowed(node: NestedNode, levels: Policy[], manifest: Manifest): bo
     treeAllowed(n, levels, manifest),
   );
 }
-function protectedPaths(doc: IrDocument): Map<string, string> {
-  const paths = new Map<string, string>(),
-    seen = new Set<string>();
-  function walk(id: string, path: string, locked: boolean) {
-    const n = doc.nodes[id];
-    if (!n || seen.has(id)) return;
-    seen.add(id);
-    locked ||= !!n.locked || !!n.zone?.locked;
-    if (locked) paths.set(id, path);
-    n.children?.forEach((child, index) => walk(child, path + "/children/" + index, locked));
-    Object.entries(n.slots ?? {}).forEach(([slot, list]) =>
-      list.forEach((child, index) => walk(child, path + "/slots/" + slot + "/" + index, locked)),
-    );
+function protectedBranches(doc: IrDocument): Set<string> {
+  const branches = new Set<string>();
+  function walk(id: string, inherited: boolean): boolean {
+    const node = doc.nodes[id]!;
+    const locked = inherited || !!node.locked || !!node.zone?.locked;
+    let protectedBelow = locked;
+    for (const child of [...(node.children ?? []), ...Object.values(node.slots ?? {}).flat()]) {
+      protectedBelow = walk(child, locked) || protectedBelow;
+    }
+    if (protectedBelow) branches.add(id);
+    return protectedBelow;
   }
-  walk(doc.root, doc.root, false);
-  return paths;
+  walk(doc.root, false);
+  return branches;
 }
-function preservesLocks(before: IrDocument, after: IrDocument): boolean {
-  const a = protectedPaths(before),
-    b = protectedPaths(after);
-  return [...a].every(
-    ([id, path]) =>
-      b.get(id) === path && JSON.stringify(before.nodes[id]) === JSON.stringify(after.nodes[id]),
-  );
+function listAt(doc: IrDocument, place: Place): string[] {
+  const parent = doc.nodes[place.parentId]!;
+  return place.slot ? (parent.slots?.[place.slot] ?? []) : (parent.children ?? []);
 }
-function sourceAllowed(doc: IrDocument, id: string, manifest: Manifest, target?: Place): boolean {
+// Only source/destination lists can shift protected paths. Check their final indices,
+// including a move within one list, without cloning the entire document per candidate.
+function preservesPositions(
+  doc: IrDocument,
+  branches: Set<string>,
+  from: Place | null,
+  to?: Place,
+): boolean {
+  for (const place of [from, to]) {
+    if (!place) continue;
+    const previous = listAt(doc, place),
+      next = [...previous];
+    const sameList = (other: Place | null | undefined) =>
+      other?.parentId === place.parentId && other.slot === place.slot;
+    if (sameList(from)) next.splice(from!.index, 1);
+    if (sameList(to)) next.splice(to!.index, 0, "");
+    if (previous.some((id, index) => branches.has(id) && next.indexOf(id) !== index)) return false;
+  }
+  return true;
+}
+function sourceAllowed(
+  doc: IrDocument,
+  id: string,
+  manifest: Manifest,
+  target?: Place,
+  parents?: Map<string, string>,
+): boolean {
   const from = location(doc, id);
   if (!from) return false;
-  if (ancestors(doc, id).some((n) => n.locked || n.zone?.locked)) return false;
+  if (ancestors(doc, id, parents).some((n) => n.locked || n.zone?.locked)) return false;
   const tree = subtree(doc, id);
   const flat = normalize({ irVersion: "1.0", kind: doc.kind, root: tree });
   if (Object.values(flat.nodes).some((n) => n.locked || n.zone)) return false;
   if (target?.parentId === from.parentId && target.slot === from.slot) return true;
   const min = contract(doc.nodes[from.parentId]!.type, manifest)?.slots?.[from.slot]?.min ?? 0;
-  return childList(structuredClone(doc), from).length - 1 >= min;
+  return listAt(doc, from).length - 1 >= min;
 }
 export function canRemove(doc: IrDocument, id: string, manifest: Manifest): boolean {
   if (!sourceAllowed(doc, id, manifest)) return false;
-  const next = structuredClone(doc);
-  structuralApply(next, { type: "node.remove", target: "", payload: { nodeId: id } });
-  return preservesLocks(doc, next);
+  return preservesPositions(doc, protectedBranches(doc), location(doc, id));
 }
 export function destinations(
   doc: IrDocument,
@@ -171,7 +197,14 @@ export function destinations(
   moving?: string,
 ): Place[] {
   const result: Place[] = [];
-  const hasLocks = protectedPaths(doc).size > 0;
+  const branches = protectedBranches(doc),
+    from = moving ? location(doc, moving) : null;
+  const parents = parentIndex(doc);
+  if (moving && !sourceAllowed(doc, moving, manifest, from ?? undefined, parents)) return [];
+  const canLeave =
+    !from ||
+    listAt(doc, from).length - 1 >=
+      (contract(doc.nodes[from.parentId]!.type, manifest)?.slots?.[from.slot]?.min ?? 0);
   const excluded = moving
     ? new Set(
         Object.keys(
@@ -181,7 +214,7 @@ export function destinations(
     : new Set<string>();
   for (const parent of Object.values(doc.nodes)) {
     if (excluded.has(parent.id)) continue;
-    const chain = ancestors(doc, parent.id);
+    const chain = ancestors(doc, parent.id, parents);
     if (chain.some((n) => n.locked || n.zone?.locked)) continue;
     const levels: Policy[] = [doc.policy ?? {}, ...chain.flatMap((n) => (n.zone ? [n.zone] : []))];
     if (!treeAllowed(tree, levels, manifest)) continue;
@@ -193,23 +226,11 @@ export function destinations(
       const list = slot ? (parent.slots?.[slot] ?? []) : (parent.children ?? []);
       const count = list.length - (moving && list.includes(moving) ? 1 : 0);
       if (rule?.max !== undefined && count + 1 > rule.max) continue;
+      if (from && !canLeave && (from.parentId !== parent.id || from.slot !== slot)) continue;
       for (let index = 0; index <= count; index++) {
         const place = { parentId: parent.id, slot, index };
-        if (
-          moving &&
-          (!sourceAllowed(doc, moving, manifest, place) ||
-            JSON.stringify(location(doc, moving)) === JSON.stringify(place))
-        )
-          continue;
-        if (hasLocks) {
-          const next = structuredClone(doc);
-          structuralApply(next, {
-            type: moving ? "node.move" : "node.insert",
-            target: "",
-            payload: moving ? { ...place, nodeId: moving } : { ...place, subtree: tree },
-          });
-          if (!preservesLocks(doc, next)) continue;
-        }
+        if (from?.parentId === parent.id && from.slot === slot && from.index === index) continue;
+        if (!preservesPositions(doc, branches, from, place)) continue;
         result.push(place);
       }
     }
