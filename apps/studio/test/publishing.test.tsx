@@ -107,9 +107,18 @@ it("STU-071: checks retain environment/object scope and select only a node of th
       createdAt: "2026-10-12T00:00:00Z",
     },
   ];
+  session.review.checks.push({
+    stage: "policy",
+    status: "failed",
+    blocking: true,
+    details: {
+      violations: [{ actorId: changesetId, operation: "node.setDesign", right: "design.compose" }],
+    },
+  });
   await reread();
   expect(document.body.textContent).toContain("устаревшие проверки");
   expect(document.body.textContent).toContain("designer");
+  expect(document.body.textContent).toContain("Восстановите права");
   expect(document.body.textContent).toContain("Review comment");
   expect(document.body.textContent).toContain("Сброшено");
   expect(

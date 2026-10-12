@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { Editor } from "./editor.js";
-import { diagnosticNode, reviewDiagnostics } from "./review.js";
+import { diagnosticNode, reviewDiagnostics, policyViolations } from "./review.js";
 import type { WorkflowAction } from "./types.js";
 const copy = {
   ru: {
@@ -348,6 +348,24 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
         <p>{t.none}</p>
       )}
       {review.checks.length > 0 && <p className="hint">{t.snapshot}</p>}
+      {review.checks.some((c) => policyViolations(c.details).length > 0) && (
+        <div role="alert">
+          <p>
+            {state.locale === "ru"
+              ? "Автору правок недоступны необходимые действия. Восстановите права и отправьте черновик повторно."
+              : "A change author no longer has the required permissions. Restore access and submit the draft again."}
+          </p>
+          <ul>
+            {review.checks
+              .flatMap((c) => policyViolations(c.details))
+              .map((v, i) => (
+                <li key={i}>
+                  <code>{v.actorId}</code> · {v.operation} · {v.right}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
       {diagnostics.length > 0 && (
         <div aria-label={t.diagnostics}>
           <h3>{t.diagnostics}</h3>

@@ -109,6 +109,25 @@ export function problemDiagnostics(params: unknown): ReviewDiagnostic[] {
     ? p.checks.flatMap((c) => reviewDiagnostics(object(c).details))
     : reviewDiagnostics(p);
 }
+export function policyViolations(
+  details: unknown,
+): { actorId: string; operation: string; right: string }[] {
+  const entries = object(details).violations;
+  return Array.isArray(entries)
+    ? entries.flatMap((entry) => {
+        const v = object(entry),
+          name = /^[a-z][a-zA-Z0-9.]{0,79}$/;
+        return typeof v.actorId === "string" &&
+          uuid.test(v.actorId) &&
+          typeof v.operation === "string" &&
+          name.test(v.operation) &&
+          typeof v.right === "string" &&
+          name.test(v.right)
+          ? [{ actorId: v.actorId, operation: v.operation, right: v.right }]
+          : [];
+      })
+    : [];
+}
 export function safeDiagnostics(value: unknown): ReviewDiagnostic[] {
   return Array.isArray(value)
     ? value.flatMap((entry) => {

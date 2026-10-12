@@ -6,6 +6,7 @@ import {
   problemDiagnostics,
   safeDiagnostics,
   diagnosticNode,
+  policyViolations,
 } from "../src/review.js";
 import { fixture, changesetId, documentId } from "./fixture.js";
 import { StudioError, type Review } from "../src/types.js";
@@ -83,4 +84,19 @@ it("STU-071: diagnostics are narrowed to codes and paths, scoped by environment 
   expect(problemDiagnostics({ checks: [{ details: docs }, null] })).toHaveLength(2);
   expect(safeDiagnostics([...ds, null, {}, { ...ds[0], pointer: "x".repeat(4001) }])).toEqual(ds);
   expect(reviewDiagnostics({ documents: { [documentId]: "bad" } })).toEqual([]);
+  expect(
+    policyViolations({
+      violations: [
+        null,
+        { actorId: "bad" },
+        {
+          actorId: changesetId,
+          operation: "node.setDesign",
+          right: "design.compose",
+          secret: "hidden",
+        },
+      ],
+    }),
+  ).toEqual([{ actorId: changesetId, operation: "node.setDesign", right: "design.compose" }]);
+  expect(policyViolations(null)).toEqual([]);
 });
