@@ -43,7 +43,8 @@ PostgreSQL: несколько групп/объектов, точный тек�
 горячие клавиши, поля ввода, preview, отказы и потерянный ответ.
 
 Палитра/структура подключены в [следующем пакете](studio-structure.md).
-Это частичный M4. Следующие пакеты: review/publish UI, CodeMirror/JSON diff,
+[Review/publish UI](studio-publishing.md) подключён отдельным пакетом.
+Это частичный M4. Следующие пакеты: CodeMirror/JSON diff,
 production identity, SSE/presence, content editor и Agent. Произвольная отмена
 выбранного старого действия и coalesce частого ввода сюда не входят.
 При выборе на холсте в режиме «Дизайн» фокус возвращается выбранному элементу

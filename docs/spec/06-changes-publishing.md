@@ -317,6 +317,13 @@ Draft из архитектуры v0.1 — это рабочие версии в
 
 ### 7.3.1. Реализация (этап M2, вторая итерация)
 
+В [Studio](../studio-publishing.md) подключены подача, проверки, согласование,
+возврат в работу и явная публикация. Studio всегда передаёт `expectedSeq`;
+approve/request-changes/reopen/publish проверяют его под блокировкой CS.
+Поле необязательно для прежних API-клиентов. Review Query возвращает краткие
+объекты и доступность действий текущего актора в согласованном снимке.
+Настройка политики, promote, rollback и вход человека не входят в этот UI-пакет.
+
 - Команды: `submit-changeset {changesetId, expectedSeq, targets?}`, `approve-changeset` и `request-changes {changesetId, comment}`, `reopen-changeset`, `publish {changesetId, environment}`, `rollback {publicationId, resetHead}`, `set-approval-policy {low, medium, high}`. Запросы: `GET /changesets/{id}/review`, `GET /publications?environment=`, `GET /publications/{id}`, `GET /documents/{id}?environment=` (опубликованная версия).
 - Pipeline состоит из двух блокирующих этапов: `ir` (L1/L3 и транзитивные Composed по контракту целевых окружений) и `policy` (права авторов на типы их операций на момент подачи). `targets` сохраняются и возвращаются в CS; без новых целей используются сохранённые либо все standard-окружения, а у связанного схемного CS — его окружение. В `ir.details.environments` сохраняются хэш manifest и диагностики каждого окружения. Проверки и согласования привязаны к хэшу содержимого: SHA-256 пар «ID объекта → хэш рабочей версии» в порядке ID и маршрутов (PUB-004). Для кандидата в согласуемый хэш также входят его хэш, ID окружения и исходного manifest.
 - Риск: `low`, если все операции — контентные (§5.2); у связанного схемного CS — `high`, иначе `medium`. Остальные правила `high` (зоны, удаление опубликованного) появятся вместе с соответствующими функциями.

@@ -1,9 +1,22 @@
 import { createStore } from "zustand/vanilla";
 import { documentHash } from "@cms/runtime";
 import type { IrDocument } from "@cms/ir";
-import { StudioError, type Api, type Operation, type Rect, type Session } from "./types.js";
+import {
+  StudioError,
+  type Api,
+  type Operation,
+  type Rect,
+  type Session,
+  type WorkflowAction,
+  type Publication,
+  type ReviewDiagnostic,
+} from "./types.js";
 import { structuralApply } from "./structure.js";
 export interface EditorState {
+  dirtyFields: Record<string, boolean>;
+  workflowRetry: boolean;
+  workflowDiagnostics: ReviewDiagnostic[];
+  publication: Publication | null;
   canvasPick: number;
   historyRevision: number;
   historyRetry: boolean;
@@ -54,6 +67,10 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    dirtyFields: {},
+    workflowRetry: false,
+    workflowDiagnostics: [],
+    publication: null,
     canvasPick: 0,
     historyRevision: 0,
     historyRetry: false,
@@ -131,6 +148,12 @@ export function createEditor(
     }
   }
   let pendingHistory: { session: Session; action: "undo" | "redo"; key: string } | null = null;
+  let pendingWorkflow: {
+    session: Session;
+    action: WorkflowAction;
+    comment: string;
+    key: string;
+  } | null = null;
   function historyRead() {
     return { historyRevision: store.getState().historyRevision + 1 };
   }
@@ -144,6 +167,10 @@ export function createEditor(
     initialized = false;
     store.setState({
       status: "loading",
+      dirtyFields: {},
+      workflowRetry: false,
+      workflowDiagnostics: [],
+      publication: null,
       canvasPick: 0,
       session: null,
       document: null,
@@ -176,7 +203,7 @@ export function createEditor(
   }
   async function refresh() {
     const session = store.getState().session;
-    if (!session || store.getState().status === "saving") return;
+    if (!session || ["saving", "loading"].includes(store.getState().status)) return;
     store.setState({ status: "loading", error: null });
     const stamp = epoch;
     try {
@@ -187,7 +214,7 @@ export function createEditor(
         ...historyRead(),
         session: current,
         document: structuredClone(current.record.body),
-        status: pendingHistory ? "uncertain" : "ready",
+        status: pendingHistory || pendingWorkflow ? "uncertain" : "ready",
         selected:
           selected && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
@@ -310,6 +337,89 @@ export function createEditor(
       return;
     pendingHistory = { session, action, key: crypto.randomUUID() };
     await sendHistory();
+  }
+  async function workflow(action: WorkflowAction, comment = "") {
+    const state = store.getState(),
+      session = state.session;
+    if (
+      !session ||
+      state.status !== "ready" ||
+      Object.values(state.dirtyFields).some(Boolean) ||
+      session.review.actions[action] !== null ||
+      (action === "request-changes" && (!comment.trim() || [...comment].length > 2000))
+    )
+      return;
+    pendingWorkflow = {
+      session: structuredClone(session),
+      action,
+      comment: comment.trim(),
+      key: crypto.randomUUID(),
+    };
+    await sendWorkflow();
+  }
+  async function sendWorkflow() {
+    const attempt = pendingWorkflow;
+    if (
+      !attempt ||
+      ["saving", "loading"].includes(store.getState().status) ||
+      lifecycle.signal.aborted
+    )
+      return;
+    const stamp = epoch;
+    store.setState({
+      status: "saving",
+      error: null,
+      workflowRetry: false,
+      workflowDiagnostics: [],
+    });
+    try {
+      const publication = await api.workflow(
+        attempt.session,
+        attempt.action,
+        attempt.comment,
+        attempt.key,
+        lifecycle.signal,
+      );
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      pendingWorkflow = null;
+      store.setState({ publication });
+    } catch (cause) {
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      if (cause instanceof StudioError && !cause.uncertain) pendingWorkflow = null;
+      store.setState({
+        error: cause instanceof StudioError ? cause.code : "WORKFLOW_UNCERTAIN",
+        workflowDiagnostics: cause instanceof StudioError ? cause.diagnostics : [],
+      });
+    }
+    try {
+      const current = await api.open(
+        attempt.session.record.id,
+        attempt.session.changeset.id,
+        lifecycle.signal,
+      );
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      const selected = store.getState().selected;
+      store.setState({
+        ...historyRead(),
+        session: current,
+        document: structuredClone(current.record.body),
+        status: pendingWorkflow ? "uncertain" : "ready",
+        workflowRetry: !!pendingWorkflow,
+        selected:
+          selected && Object.hasOwn(current.record.body.nodes, selected)
+            ? selected
+            : current.record.body.root,
+        instance: null,
+      });
+    } catch {
+      if (stamp === epoch && !lifecycle.signal.aborted)
+        store.setState({
+          status: "uncertain",
+          workflowRetry: !!pendingWorkflow,
+          error: store.getState().error ?? "REVIEW_READ_FAILED",
+        });
+    }
+    invalidate();
   }
   async function sendHistory() {
     const attempt = pendingHistory;
@@ -454,6 +564,12 @@ export function createEditor(
     }
   }
   return {
+    formDirty(id: string, dirty: boolean) {
+      const current = store.getState().dirtyFields;
+      if (!!current[id] !== dirty) store.setState({ dirtyFields: { ...current, [id]: dirty } });
+    },
+    workflow,
+    retryWorkflow: sendWorkflow,
     changeHistory,
     retryHistory: sendHistory,
     store,

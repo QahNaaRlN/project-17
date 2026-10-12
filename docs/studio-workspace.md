@@ -40,7 +40,7 @@ head (как у существующего чтения/редактирован
 создание и сохранение после открытия. Пороги покрытия сохраняются.
 
 Пакет не завершает M4. Остались production identity, Structure/CodeMirror,
-content editor, review/publish, SSE/presence и Agent. История и undo/redo теперь
+content editor, SSE/presence и Agent. [Review/publish](studio-publishing.md), история и undo/redo теперь
 реализованы в [следующем пакете](studio-history.md).
 Палитра, DnD/перемещение, удаление и дублирование реализованы
 в [пакете структуры](studio-structure.md).

@@ -20,6 +20,7 @@ export interface DocumentRecord {
   body: IrDocument;
 }
 export interface Session {
+  review: Review;
   history: History;
   config: Config;
   changeset: Changeset;
@@ -40,6 +41,13 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  workflow(
+    session: Session,
+    action: WorkflowAction,
+    comment: string,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<Publication | null>;
   history(session: Session, beforeSeq?: number, signal?: AbortSignal): Promise<History>;
   changeHistory(
     session: Session,
@@ -94,9 +102,51 @@ export class StudioError extends Error {
   constructor(
     public code: string,
     public uncertain = false,
+    public diagnostics: ReviewDiagnostic[] = [],
   ) {
     super(code);
   }
+}
+export const workflowActions = [
+  "submit",
+  "reopen",
+  "approve",
+  "request-changes",
+  "publish",
+] as const;
+export type WorkflowAction = (typeof workflowActions)[number];
+export interface Review {
+  needsAttention: boolean;
+  changeset: Changeset;
+  risk: "low" | "medium" | "high" | null;
+  requiredApprovals: number;
+  approvals: number;
+  requiredRoles?: string[];
+  missingRequiredRoles?: string[];
+  checks: { stage: string; status: string; blocking: boolean; details: unknown }[];
+  history: {
+    approverId: string;
+    decision: string;
+    comment: string | null;
+    valid: boolean;
+    createdAt: string;
+  }[];
+  objects: { id: string; kind: string; path: string | null; deleted: boolean }[];
+  actions: Record<WorkflowAction, string | null>;
+}
+export interface ReviewDiagnostic {
+  objectId: string;
+  environment: string;
+  code: string;
+  severity: "error" | "warning";
+  pointer: string;
+  nodeId?: string;
+}
+export interface Publication {
+  id: string;
+  changesetId: string;
+  environment: string;
+  createdAt: string;
 }
 export interface Rect {
   x: number;

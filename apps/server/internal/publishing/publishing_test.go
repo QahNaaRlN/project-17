@@ -93,6 +93,23 @@ func TestPublishMovesHeadAndPointer(t *testing.T) {
 	}
 }
 
+// STU-073/074: stale explicit publish cannot move any pointers or create a publication.
+func TestStudioPublishExpectedSeq(t *testing.T) {
+	e := setup(t)
+	cs, doc := e.Draft(e.Admin, "v1")
+	approve(e, cs)
+	if err := e.Do(e.Admin, "publish", map[string]any{"changesetId": cs, "environment": "staging", "expectedSeq": 0}, nil); cmstest.Code(err) != "CHANGESET_SEQ_CONFLICT" {
+		t.Fatal(err)
+	}
+	if _, err := published(e, doc, "staging"); cmstest.Code(err) != "NOT_FOUND" {
+		t.Fatal(err)
+	}
+	e.Must(e.Admin, "publish", map[string]any{"changesetId": cs, "environment": "staging", "expectedSeq": 1}, nil)
+	if _, err := published(e, doc, "staging"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPublishErrors(t *testing.T) {
 	e := setup(t)
 	e.Must(e.Admin, "create-environment", map[string]any{"name": "pr-1", "kind": "preview"}, nil)

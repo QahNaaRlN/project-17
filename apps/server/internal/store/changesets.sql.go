@@ -648,6 +648,47 @@ func (q *Queries) LockChangeset(ctx context.Context, arg LockChangesetParams) (C
 	return i, err
 }
 
+const reviewChangesetObjects = `-- name: ReviewChangesetObjects :many
+SELECT o.id, COALESCE(o.doc_kind, o.kind) AS kind, v.path, v.deleted
+FROM changeset_objects co
+JOIN objects o ON o.id = co.object_id
+JOIN object_versions v ON v.id = co.working_version_id
+WHERE co.changeset_id = $1
+ORDER BY o.id
+`
+
+type ReviewChangesetObjectsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Kind    string    `json:"kind"`
+	Path    *string   `json:"path"`
+	Deleted bool      `json:"deleted"`
+}
+
+func (q *Queries) ReviewChangesetObjects(ctx context.Context, changesetID uuid.UUID) ([]ReviewChangesetObjectsRow, error) {
+	rows, err := q.db.Query(ctx, reviewChangesetObjects, changesetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReviewChangesetObjectsRow
+	for rows.Next() {
+		var i ReviewChangesetObjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Path,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const routeTaken = `-- name: RouteTaken :one
 SELECT id FROM objects
 WHERE project_id = $1 AND id <> $2 AND deleted_at IS NULL AND head_path IS NOT NULL

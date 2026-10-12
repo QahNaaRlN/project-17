@@ -10,6 +10,8 @@ import {
   type PageItem,
   type History,
 } from "./types.js";
+import { validateReview, problemDiagnostics, safeDiagnostics } from "./review.js";
+import type { Review, Publication } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function createApi(fetcher: typeof fetch = fetch): Api {
   async function request<T>(
@@ -37,14 +39,16 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
     }
     if (!response.ok) {
       let code = "CMS_REQUEST_FAILED";
+      let diagnostics: StudioError["diagnostics"] = [];
       try {
         const value = await response.json();
         if (typeof value.code === "string" && /^[A-Z0-9_]{1,80}$/.test(value.code))
           code = value.code;
+        diagnostics = [...problemDiagnostics(value.params), ...safeDiagnostics(value.diagnostics)];
       } catch {
         /* no server detail/secrets in UI */
       }
-      throw new StudioError(code, body !== undefined && response.status >= 500);
+      throw new StudioError(code, body !== undefined && response.status >= 500, diagnostics);
     }
     try {
       return (await response.json()) as T;
@@ -53,6 +57,63 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
     }
   }
   const api: Api = {
+    async workflow(session, action, comment, key, signal) {
+      const commands = {
+        submit: "submit-changeset",
+        reopen: "reopen-changeset",
+        approve: "approve-changeset",
+        "request-changes": "request-changes",
+        publish: "publish",
+      };
+      const result = await request<{ result: Partial<Publication> & { changeset?: Changeset } }>(
+        `/api/v1/commands/${commands[action]}`,
+        signal,
+        {
+          payload: {
+            changesetId: session.changeset.id,
+            expectedSeq: session.changeset.seq,
+            ...(action === "publish" ? { environment: session.config.environment } : {}),
+            ...(action === "request-changes" ? { comment } : {}),
+          },
+          reason: `Studio: ${action} Change Set`,
+        },
+        key,
+      );
+      if (action !== "publish") {
+        const cs = result?.result?.changeset;
+        const states = {
+          submit: ["failed", "in_review", "approved"],
+          reopen: ["open"],
+          approve: ["in_review", "approved"],
+          "request-changes": ["changes_requested"],
+        };
+        if (
+          !cs ||
+          cs.id !== session.changeset.id ||
+          cs.seq !== session.changeset.seq ||
+          !states[action].includes(cs.state)
+        )
+          throw new StudioError("RESPONSE_INVALID", true);
+        return null;
+      }
+      const p = result?.result;
+      if (
+        !p ||
+        typeof p.id !== "string" ||
+        !uuid.test(p.id) ||
+        p.changesetId !== session.changeset.id ||
+        p.environment !== session.config.environment ||
+        typeof p.createdAt !== "string" ||
+        !Number.isFinite(Date.parse(p.createdAt))
+      )
+        throw new StudioError("RESPONSE_INVALID", true);
+      return {
+        id: p.id,
+        changesetId: p.changesetId,
+        environment: p.environment,
+        createdAt: p.createdAt,
+      };
+    },
     async history(session, beforeSeq, signal) {
       return readHistory(session.changeset.id, session.changeset.seq, beforeSeq, signal);
     },
@@ -139,7 +200,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       if (!uuid.test(documentId) || !uuid.test(changesetId))
         throw new StudioError("IDENTIFIER_INVALID");
       const config = await api.config(signal);
-      const [changeset, record, active, history] = await Promise.all([
+      const [changeset, record, active, history, rawReview] = await Promise.all([
         request<Changeset>(`/api/v1/changesets/${changesetId}`, signal),
         request<DocumentRecord>(
           `/api/v1/documents/${documentId}?changesetId=${changesetId}`,
@@ -150,6 +211,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
           signal,
         ),
         readHistory(changesetId, undefined, undefined, signal),
+        request<Review>(`/api/v1/changesets/${changesetId}/review`, signal),
       ]);
       if (
         record?.id !== documentId ||
@@ -171,6 +233,9 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
       )
         throw new StudioError("SESSION_INVALID");
       if (history.seq !== changeset.seq) throw new StudioError("CHANGESET_SEQ_CONFLICT");
+      const review = validateReview(rawReview, changesetId);
+      if (review.changeset.seq !== changeset.seq || review.changeset.state !== changeset.state)
+        throw new StudioError("CHANGESET_SEQ_CONFLICT");
       // Query API reads are separate requests; reject a snapshot crossing a write.
       const after = await request<Changeset>(`/api/v1/changesets/${changesetId}`, signal);
       if (
@@ -179,7 +244,7 @@ export function createApi(fetcher: typeof fetch = fetch): Api {
         after.state !== changeset.state
       )
         throw new StudioError("CHANGESET_SEQ_CONFLICT");
-      return { config, changeset, record, history, ...active };
+      return { config, changeset, record, history, review, ...active };
     },
     async apply(session, operations, key, signal) {
       await request(

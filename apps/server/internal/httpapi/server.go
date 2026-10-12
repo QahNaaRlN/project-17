@@ -27,7 +27,6 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
-	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // MaxCommandBody — максимальный размер тела команды.
@@ -146,14 +145,7 @@ func NewRouter(d Deps) http.Handler {
 			items, err := changes.ListOperations(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id, int32(after))
 			respond(w, r, d, map[string]any{"items": items}, err)
 		})
-		r.Get("/changesets/{id}/review", func(w http.ResponseWriter, r *http.Request) {
-			id, ok := uuidParam(w, r, d, "id")
-			if !ok {
-				return
-			}
-			rv, err := workflow.GetReview(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
-			respond(w, r, d, rv, err)
-		})
+		r.Get("/changesets/{id}/review", reviewHandler(d))
 		r.Get("/delivery-keys", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.ProjectAdmin); err != nil {

@@ -56,6 +56,14 @@ JOIN objects o ON o.id = co.object_id
 WHERE co.changeset_id = $1
 ORDER BY co.object_id;
 
+-- name: ReviewChangesetObjects :many
+SELECT o.id, COALESCE(o.doc_kind, o.kind) AS kind, v.path, v.deleted
+FROM changeset_objects co
+JOIN objects o ON o.id = co.object_id
+JOIN object_versions v ON v.id = co.working_version_id
+WHERE co.changeset_id = $1
+ORDER BY o.id;
+
 -- name: InsertOperation :one
 INSERT INTO operations (id, project_id, changeset_id, seq, actor_id, source, target_object_id, type,
                         payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name, batch_id, redo_of)

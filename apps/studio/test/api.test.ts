@@ -75,6 +75,97 @@ it("STU-042/043: создание использует один target, имя �
   });
 });
 const signal = new AbortController().signal;
+it("STU-071/072/073/074: workflow uses frozen seq/key, configured environment and a publication receipt", async () => {
+  const s = fixture(),
+    publication = {
+      id: documentId,
+      changesetId,
+      environment: "staging",
+      createdAt: "2026-10-12T00:00:00Z",
+    };
+  const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const path = String(input);
+      const state = path.endsWith("submit-changeset")
+        ? "in_review"
+        : path.endsWith("reopen-changeset")
+          ? "open"
+          : path.endsWith("approve-changeset")
+            ? "approved"
+            : "changes_requested";
+      return Response.json({
+        result: path.endsWith("/publish") ? publication : { changeset: { ...s.changeset, state } },
+      });
+    }),
+    api = createApi(fetcher);
+  for (const action of ["submit", "reopen", "approve", "request-changes", "publish"] as const) {
+    expect(await api.workflow(s, action, "Revise", "frozen-key", signal)).toEqual(
+      action === "publish" ? publication : null,
+    );
+    const init = fetcher.mock.calls.at(-1)![1]!;
+    expect(init.headers).toMatchObject({ "Idempotency-Key": "frozen-key" });
+    expect(JSON.parse(String(init.body)).payload).toEqual({
+      changesetId,
+      expectedSeq: 1,
+      ...(action === "publish" ? { environment: "staging" } : {}),
+      ...(action === "request-changes" ? { comment: "Revise" } : {}),
+    });
+  }
+  fetcher.mockResolvedValue(
+    Response.json({ result: { ...publication, environment: "production" } }),
+  );
+  await expect(api.workflow(s, "publish", "", "k", signal)).rejects.toMatchObject({
+    code: "RESPONSE_INVALID",
+    uncertain: true,
+  });
+});
+it("STU-074: structured validation error keeps codes and paths without server detail or raw values", async () => {
+  const api = createApi(async () =>
+    Response.json(
+      {
+        code: "VALIDATION_FAILED",
+        detail: "cms_svc_secret",
+        diagnostics: [
+          {
+            objectId: documentId,
+            environment: "staging",
+            code: "PROP_REQUIRED",
+            severity: "error",
+            pointer: "/nodes/n_heading",
+            message: "secret",
+          },
+        ],
+      },
+      { status: 422 },
+    ),
+  );
+  try {
+    await api.workflow(fixture(), "submit", "", "k", signal);
+    throw Error("must reject");
+  } catch (error) {
+    expect(error).toBeInstanceOf(StudioError);
+    expect((error as StudioError).diagnostics).toHaveLength(1);
+    expect(JSON.stringify(error)).not.toContain("secret");
+  }
+});
+it.each([
+  null,
+  1,
+  {},
+  { changeset: { id: documentId, seq: 1, state: "approved" } },
+  { changeset: { id: changesetId, seq: 2, state: "approved" } },
+  { changeset: { id: changesetId, seq: 1, state: "merged" } },
+])("STU-074: an invalid successful submit response remains uncertain", async (result) => {
+  const api = createApi(async () => Response.json({ result }));
+  await expect(api.workflow(fixture(), "submit", "", "k", signal)).rejects.toMatchObject({
+    code: "RESPONSE_INVALID",
+    uncertain: true,
+  });
+});
+it("STU-070/074: a review crossing state or seq changes cannot form an editor session", async () => {
+  const { api, s } = setup();
+  s.review = { ...s.review, changeset: { ...s.changeset, state: "in_review" } };
+  await expect(api.open(documentId, changesetId, signal)).rejects.toThrow("CHANGESET_SEQ_CONFLICT");
+});
 it("STU-050/051/052: история и команды используют публичный API, group, seq и ключ", async () => {
   const { api, fetcher, s } = setup();
   fetcher.mockImplementation(async (input) =>
@@ -126,6 +217,7 @@ it("STU-021: чтение через конкурентную запись не 
     if (
       String(input).includes("/changesets/") &&
       !String(input).endsWith("/history") &&
+      !String(input).endsWith("/review") &&
       ++reads === 2
     )
       return Response.json({ ...s.changeset, seq: s.changeset.seq + 1 });
@@ -144,16 +236,18 @@ function setup() {
           ? { manifest: s.manifest, manifestHash: s.manifestHash }
           : url.endsWith("/history")
             ? s.history
-            : url.includes("/documents/")
-              ? s.record
-              : url.includes("/changesets/")
-                ? s.changeset
-                : {
-                    result: {
-                      token: "jwt",
-                      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+            : url.endsWith("/review")
+              ? s.review
+              : url.includes("/documents/")
+                ? s.record
+                : url.includes("/changesets/")
+                  ? s.changeset
+                  : {
+                      result: {
+                        token: "jwt",
+                        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+                      },
                     },
-                  },
     );
   });
   return { s, fetcher, api: createApi(fetcher) };
