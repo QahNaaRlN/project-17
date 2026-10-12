@@ -103,7 +103,8 @@ test("STU-062/064: Esc отменяет drag, Ctrl+D копирует, поля 
   await expect(page.locator(".drop-places")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.mouse.up();
-  await expect(page.getByText("Перемещение отменено", { exact: true })).toBeVisible();
+  await expect(page.locator('.layers > p[role="status"]')).toHaveText("Перемещение отменено");
+  await expect(page.locator('[id^="DndLiveRegion-"]')).toHaveText("Перемещение отменено");
   await page.getByLabel("Язык", { exact: true }).selectOption("en");
   await expect(page.getByRole("region", { name: "Palette", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add block", exact: true })).toBeVisible();

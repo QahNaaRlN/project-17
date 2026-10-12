@@ -45,6 +45,9 @@ const copy = {
     select: "Выберите элемент",
     drop: "Перетащите в одно из разрешённых мест ниже",
     moving: "Перемещение блока",
+    draggable: "Перемещаемый элемент",
+    keyboard:
+      "Для перемещения выберите место вставки в панели «Структура» и нажмите «Переместить».",
     cancelled: "Перемещение отменено",
     locked: "Элемент заблокирован",
     defaults: "Текст нового блока можно изменить в свойствах.",
@@ -68,6 +71,8 @@ const copy = {
     select: "Select an element",
     drop: "Drag to an allowed destination below",
     moving: "Moving block",
+    draggable: "Movable element",
+    keyboard: "To move a block, choose an insertion destination in Structure and press Move.",
     cancelled: "Move cancelled",
     locked: "Element is locked",
     defaults: "Edit the new block's text in Properties.",
@@ -81,12 +86,14 @@ function LayerButton({
   enabled,
   editor,
   locked,
+  description,
 }: {
   item: Layer;
   selected: string | null;
   enabled: boolean;
   editor: Editor;
   locked: string;
+  description: string;
 }) {
   const drag = useDraggable({ id: item.id, disabled: !enabled });
   return (
@@ -95,6 +102,8 @@ function LayerButton({
       {...drag.attributes}
       {...drag.listeners}
       aria-disabled={undefined}
+      aria-roledescription={enabled ? description : undefined}
+      aria-describedby={enabled ? drag.attributes["aria-describedby"] : undefined}
       role="treeitem"
       aria-level={item.depth}
       aria-selected={selected === item.id}
@@ -266,6 +275,18 @@ export function StructurePanel({ editor }: { editor: Editor }) {
       <h2>{t.layers}</h2>
       <DndContext
         sensors={sensors}
+        accessibility={{
+          screenReaderInstructions: { draggable: t.keyboard },
+          announcements: {
+            onDragStart: () => t.moving,
+            onDragOver: ({ over }) => {
+              const target = dropPlaces.find((p) => placeKey(p) === over?.id);
+              return target ? label(target) : t.none;
+            },
+            onDragEnd: ({ over }) => (over ? t.moving : t.cancelled),
+            onDragCancel: () => t.cancelled,
+          },
+        }}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
         collisionDetection={pointerWithin}
         onDragStart={(event) => {
@@ -314,6 +335,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
               selected={state.selected}
               editor={editor}
               locked={t.locked}
+              description={t.draggable}
               enabled={!!enabled && !!session && !!doc && !!location(doc, n.id) && !n.locked}
             />
           ))}

@@ -128,6 +128,7 @@ it("STU-050: история показывает группы/автора, па
 });
 it("STU-060/062/064: палитра, обязательные свойства, move/duplicate/delete и английский UI", async () => {
   const { session, api } = await setup(true);
+  expect(document.body.textContent).toContain("Для перемещения выберите место вставки");
   const component = () =>
     [...document.querySelectorAll<HTMLSelectElement>("select")].find((s) =>
       s.closest("label")?.textContent?.startsWith("Компонент"),
@@ -189,6 +190,7 @@ it("STU-060/062/064: палитра, обязательные свойства, 
   expect(component().options).toHaveLength(1);
   await change(document.querySelector<HTMLSelectElement>('[aria-label="Язык"]')!, "en");
   expect(document.querySelector('[aria-label="Palette"]')).not.toBeNull();
+  expect(document.body.textContent).toContain("To move a block, choose an insertion destination");
   expect(button("Duplicate").disabled).toBe(false);
 });
 it("STU-062: Delete/Ctrl+D действуют в дереве и сохраняют редактирование полей", async () => {
