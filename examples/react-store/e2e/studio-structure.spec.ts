@@ -42,7 +42,11 @@ test("STU-060/063/064: собрать Stack с Heading/Text, duplicate/delete, u
     );
   await places.selectOption(first!);
   await structure.getByRole("button", { name: "Переместить", exact: true }).click();
-  await expect(page.getByText("Перемещение блока", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "История черновика", exact: true })
+      .getByText("Перемещение блока", { exact: true }),
+  ).toBeVisible();
   await structure.getByRole("button", { name: "Дублировать", exact: true }).click();
   await expect(frame.getByText("Новый абзац", { exact: true })).toHaveCount(2);
   const selected = page.locator('[role="treeitem"][aria-selected="true"]');
@@ -80,7 +84,11 @@ test("STU-020/062: pointer drag показывает разрешённые ме
   await page.mouse.move(drop.x + 50, drop.y + 12, { steps: 12 });
   await page.mouse.up();
   await expect(source).toHaveAttribute("aria-level", "3");
-  await expect(page.getByText("Перемещение блока", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "История черновика", exact: true })
+      .getByText("Перемещение блока", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.frameLocator(".frame-wrap iframe").getByRole("heading", { name: "Заголовок черновика" }),
   ).toBeVisible();
