@@ -23,15 +23,17 @@ import (
 
 // Типы операций над узлами.
 const (
-	NodeInsert       = "node.insert"
-	NodeRemove       = "node.remove"
-	NodeMove         = "node.move"
-	NodeSetProps     = "node.setProps"
-	NodeSetDesign    = "node.setDesign"
-	NodeSetBinding   = "node.setBinding"
-	NodeSetCondition = "node.setCondition"
-	NodeSetBehavior  = "node.setBehavior"
-	NodeRename       = "node.rename"
+	NodeInsert         = "node.insert"
+	NodeRemove         = "node.remove"
+	NodeMove           = "node.move"
+	NodeSetProps       = "node.setProps"
+	NodeSetDesign      = "node.setDesign"
+	NodeSetBinding     = "node.setBinding"
+	NodeSetCondition   = "node.setCondition"
+	NodeSetBehavior    = "node.setBehavior"
+	NodeRename         = "node.rename"
+	LocalContentSet    = "localContent.set"
+	LocalContentRemove = "localContent.remove"
 )
 
 // Op — операция: тип и payload.
@@ -70,15 +72,17 @@ type spec struct {
 }
 
 var registry = map[string]spec{
-	NodeInsert:       {auth.DesignCompose, applyInsert},
-	NodeRemove:       {auth.DesignCompose, applyRemove},
-	NodeMove:         {auth.DesignCompose, applyMove},
-	NodeSetProps:     {auth.DesignCompose, mapSetter("props")},
-	NodeSetDesign:    {auth.DesignCompose, mapSetter("design")},
-	NodeSetBinding:   {auth.DesignCompose, applySetBinding},
-	NodeSetCondition: {auth.DesignCompose, fieldSetter("when")},
-	NodeSetBehavior:  {auth.BehaviorUse, applySetBehavior},
-	NodeRename:       {auth.DesignCompose, fieldSetter("name")},
+	NodeInsert:         {auth.DesignCompose, applyInsert},
+	NodeRemove:         {auth.DesignCompose, applyRemove},
+	NodeMove:           {auth.DesignCompose, applyMove},
+	NodeSetProps:       {auth.DesignCompose, mapSetter("props")},
+	NodeSetDesign:      {auth.DesignCompose, mapSetter("design")},
+	NodeSetBinding:     {auth.DesignCompose, applySetBinding},
+	NodeSetCondition:   {auth.DesignCompose, fieldSetter("when")},
+	NodeSetBehavior:    {auth.BehaviorUse, applySetBehavior},
+	NodeRename:         {auth.DesignCompose, fieldSetter("name")},
+	LocalContentSet:    {auth.ContentWrite, localContentSet},
+	LocalContentRemove: {auth.ContentWrite, localContentRemove},
 }
 
 // Types — поддерживаемые типы операций над документом.

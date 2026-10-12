@@ -59,6 +59,11 @@ Draft из архитектуры v0.1 — это рабочие версии в
 
 ### 2.2. Каталог операций
 
+Первый Studio подключил `localContent.set/remove` для plain text: set с `locale`
+дополняет перевод, без `locale` принимает полную непустую карту переводов для
+точного inverse; remove `{key}` удаляет всю запись. Другие типы — будущий пакет.
+Все записи остаются в CS и требуют `content.write` (см. [контракт](../studio-editor.md)).
+
 | Тип | Payload (кратко) | Право |
 |---|---|---|
 | `entity.create` | `schema`, `data` | `content.write` |

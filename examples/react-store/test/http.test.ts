@@ -23,6 +23,20 @@ function response() {
   return { value: value as unknown as ServerResponse, headers, body: () => body };
 }
 describe("STORE-004/005/007: HTTP и SSR", () => {
+  it("SDK-030: открывает CMS маршрут страницы после preview redirect", async () => {
+    const res = response(),
+      load = vi.fn(async () => model());
+    await storeHandler(
+      load,
+      async () => ({ scripts: [], styles: [] }),
+      undefined,
+      undefined,
+      undefined,
+      "/store",
+    )({ method: "GET", url: "/store" } as IncomingMessage, res.value);
+    expect(res.value.statusCode).toBe(200);
+    expect(load).toHaveBeenCalled();
+  });
   it.each(["GET", "HEAD"])(
     "MF-005: exposes this application's built hash without loading CMS content: %s",
     async (method) => {

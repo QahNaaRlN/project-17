@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./builtins": "./dist/generated/builtins.js",
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"

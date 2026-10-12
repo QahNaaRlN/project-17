@@ -1,5 +1,11 @@
 # 11. CMS Studio
 
+Реализован [первый редактор страницы](../studio-editor.md): локальное приложение
+`apps/studio`, дерево/iframe/выбор/рамки, scalar формы из manifest, локальный текст,
+padding/gap с токенами и breakpoint, сохранение в CS и восстановление после отказа.
+Это частичный M4. Production-вход, DnD, Structure/Agent, content editor,
+approval/history, undo/redo UI и SSE ещё не реализованы.
+
 ## 1. Стек
 
 | Подсистема | Технология |

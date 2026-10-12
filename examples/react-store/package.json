@@ -9,7 +9,7 @@
     "start": "node dist/server/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "pnpm exec turbo run build --filter @cms/studio && playwright test",
     "test:mutation": "stryker run",
     "seed": "pnpm manifest:build && node --import tsx scripts/seed.ts",
     "preview:renew": "node --import tsx scripts/renew-preview.ts",

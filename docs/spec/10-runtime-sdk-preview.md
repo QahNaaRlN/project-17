@@ -10,7 +10,8 @@ signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cm
 Единый native component registry генерирует manifest и runtime-описания;
 CLI/DSL/sourceRef, действия registry и загрузчики до SSR теперь реализованы.
 Сторона приложения preview bridge реализована: cookie entry, postMessage, атрибуты,
-выбор, patch/reload и layout. Studio и его оверлеи остаются M4.
+выбор, patch/reload и layout. [Первый Studio](../studio-editor.md) подключает
+дерево, iframe, рамки выбора и сохранение черновика; полный M4 впереди.
 Streaming/selective hydration и полная
 изоляция native-ошибок ещё не реализованы.
 [Действия и данные](../runtime-actions-data.md) фиксирует текущий срез SDK-014/033.
@@ -26,7 +27,7 @@ Streaming/selective hydration и полная
 | `@cms/core` | `packages/sdk-core` | Клиент Delivery API, парсер и валидатор IR, вычисление привязок и условий, форматтеры | да |
 | `@cms/runtime` | `packages/runtime` | Обход дерева, раскрытие `Repeat`/Composed/Slot, генерация стилей, первые примитивы и Image | да |
 | `@cms/component-registry` | `packages/component-registry` | `defineComponent`/`defineAction`/…, CLI `cms manifest build|push`, индекс кода | да |
-| `@cms/react` | `packages/react` | Адаптер React: примитивы, `CmsPage`, `loadPage`, SSR; мост preview ещё не реализован | да |
+| `@cms/react` | `packages/react` | Адаптер React: примитивы, `CmsPage`, `loadPage`, SSR и application-side preview bridge | да |
 | `@cms/vue`, `@cms/svelte` | `packages/sdk-vue`, `packages/sdk-svelte` | Адаптеры | после MVP |
 | `@cms/mcp` | `packages/mcp` | Описания инструментов MCP, stdio-прокси | да |
 

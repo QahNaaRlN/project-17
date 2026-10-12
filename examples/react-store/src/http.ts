@@ -23,6 +23,7 @@ export function storeHandler(
   transform: (html: string) => Promise<string> = async (html) => html,
   deployedHash?: string,
   preview?: { studioOrigin?: string; policy: string },
+  pagePath = "/",
 ) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -40,7 +41,7 @@ export function storeHandler(
       res.end(req.method === "HEAD" ? undefined : deployedHash + "\n");
       return;
     }
-    if (path !== "/" && path !== "/api/store") {
+    if (path !== "/" && path !== pagePath && path !== "/api/store") {
       res.writeHead(404);
       res.end();
       return;

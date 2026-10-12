@@ -48,7 +48,9 @@ Patch меняет preview без публикации; fallback перечит�
 Истёкший/неподтверждённый token не устанавливает cookie, redirect не выходит за origin.
 Dispose убирает listeners/timers и не допускает позднего commit.
 
-Остаются Studio, выпуск/автообновление токенов со стороны Studio, серверная загрузка
+Первый [Studio editor](studio-editor.md) теперь выпускает/обновляет preview token,
+рисует рамки выбора и сохраняет draft через публичные команды.
+Остаются полный Studio, production identity, серверная загрузка
 code-index, общий route resolver, streaming/selective hydration и измерение NFR-005
 под полным профилем MVP. Preview bridge не изменяет CMS и не публикует контент.
 

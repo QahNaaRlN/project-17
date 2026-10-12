@@ -54,10 +54,12 @@ async function assets(): Promise<Assets> {
 const handler = storeHandler(
   (request) => {
     const preview = getPreviewState(request.headers.cookie);
+    const locale = new URL(request.url ?? "/", appOrigin).searchParams.get("locale") ?? "ru";
+    if (locale !== "ru" && locale !== "en") throw new Error("STORE_LOCALE_INVALID");
     return loadStore(
       cms,
       config.path,
-      preview ? { preview } : options,
+      { ...(preview ? { preview } : options), locale },
       studioOrigin ? { studioOrigin, manifestHash: deployedHash } : undefined,
     );
   },
@@ -65,6 +67,7 @@ const handler = storeHandler(
   async (html) => (vite ? vite.transformIndexHtml("/", html) : html),
   deployedHash,
   { policy, ...(studioOrigin ? { studioOrigin } : {}) },
+  config.path,
 );
 const server = createServer((req, res) => {
   res.setHeader("Content-Security-Policy", `${policy}; frame-ancestors 'none'`);
