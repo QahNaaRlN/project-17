@@ -61,6 +61,7 @@ test("STU-001/003/010/021/026/032/033, SDK-042: Studio сохраняет чер
   await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
   await frame.getByRole("heading", { name: "Draft heading", exact: true }).scrollIntoViewIfNeeded();
   await expect(page.locator(".selection-frame")).toHaveCount(1);
+  await expect(page.locator(".selection-frame")).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("studio.png"), fullPage: true });
 });
 test("STU-021: отказ, конфликт и потерянный ответ восстанавливают фактический черновик", async ({
