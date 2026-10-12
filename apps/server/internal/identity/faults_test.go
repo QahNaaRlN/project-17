@@ -2,6 +2,8 @@ package identity_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 )
@@ -47,6 +50,35 @@ func TestHumanRoleBoundaries(t *testing.T) {
 	f.e.Exec("UPDATE actors SET disabled_at=now() WHERE id=$1", info.User.ID)
 	if err := f.e.Do(f.e.Admin, "bind-human-role", map[string]any{"actorId": info.User.ID, "roleId": role}, nil); cmstest.Code(err) != "VALIDATION_FAILED" {
 		t.Fatal(err)
+	}
+}
+
+// STU-081/084: downgrade must preserve stored login/session/identity state.
+func TestHumanIdentityMigrationGuard(t *testing.T) {
+	for _, signedIn := range []bool{false, true} {
+		t.Run(map[bool]string{false: "login", true: "session"}[signedIn], func(t *testing.T) {
+			f := setup(t)
+			var cookies []*http.Cookie
+			if signedIn {
+				cookies, _ = f.login(t, "alice")
+			} else {
+				f.begin(t)
+			}
+			err := postgres.Migrate(context.Background(), f.e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			if err == nil || !strings.Contains(err.Error(), "human identity/session data prevents downgrade") {
+				t.Fatal(err)
+			}
+			var version int
+			if err := f.e.Pool.QueryRow(context.Background(), `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != 16 {
+				t.Fatal(version, err)
+			}
+			if signedIn {
+				_, data := f.request(t, "GET", "/auth/session", cookies, "", "")
+				if data["authenticated"] != true {
+					t.Fatal("downgrade destroyed session", data)
+				}
+			}
+		})
 	}
 }
 
