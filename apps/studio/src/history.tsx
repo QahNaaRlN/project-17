@@ -17,6 +17,9 @@ const copy = {
     text: "Изменение текста",
     design: "Изменение оформления",
     props: "Изменение свойства",
+    insert: "Добавление блока",
+    remove: "Удаление блока",
+    move: "Перемещение блока",
     undoEvent: "Отмена",
     redoEvent: "Повтор",
     other: "Есть изменения другого объекта",
@@ -39,6 +42,9 @@ const copy = {
     text: "Text change",
     design: "Design change",
     props: "Property change",
+    insert: "Block added",
+    remove: "Block deleted",
+    move: "Block moved",
     undoEvent: "Undo",
     redoEvent: "Redo",
     other: "Includes another object",
@@ -69,6 +75,9 @@ const blockedCopy = {
 function description(action: HistoryAction, t: typeof copy.ru) {
   if (action.kind === "undo") return t.undoEvent;
   if (action.kind === "redo") return t.redoEvent;
+  if (action.operations.some((o) => o.type === "node.insert")) return t.insert;
+  if (action.operations.some((o) => o.type === "node.remove")) return t.remove;
+  if (action.operations.some((o) => o.type === "node.move")) return t.move;
   if (action.operations.some((o) => o.type.startsWith("localContent."))) return t.text;
   if (action.operations.some((o) => o.type === "node.setDesign")) return t.design;
   if (action.operations.some((o) => o.type === "node.setProps")) return t.props;

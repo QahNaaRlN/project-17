@@ -5,6 +5,7 @@ import { createStudioHandler } from "../../../apps/studio/src/handler.js";
 import type { PageResponse } from "@cms/core";
 type IrDocument = PageResponse["document"];
 import type { HistoryAction } from "../../../apps/studio/src/types.js";
+import { structuralApply } from "../../../apps/studio/src/structure.js";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
 export async function studioFixture(id: string, previewToken: string) {
@@ -305,6 +306,8 @@ export async function studioFixture(id: string, previewToken: string) {
             type: "text",
             value: p.locale ? { [p.locale]: p.value } : p.value,
           };
+        else if (["node.insert", "node.remove", "node.move"].includes(op.type))
+          structuralApply(document, op);
         else if (op.type === "node.setBinding")
           (document.nodes[p.nodeId]!.bindings ??= {})[p.prop] = p.binding;
         else

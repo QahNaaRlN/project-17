@@ -171,6 +171,46 @@ header {
 }
 .layers {
   border-right: 1px solid #d8dfe8;
+  min-width: 0;
+}
+.structure-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #d8dfe8;
+  padding-top: 12px;
+  margin-top: 16px;
+  min-width: 0;
+}
+.structure-panel > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.structure-panel input,
+.structure-panel select {
+  width: 100%;
+  min-width: 0;
+}
+.structure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.drop-places {
+  max-height: 350px;
+  overflow: auto;
+}
+.drop-place {
+  padding: 8px;
+  margin: 4px 0;
+  border: 1px dashed #526df6;
+  border-radius: 5px;
+}
+.drop-place.active {
+  background: #e0e6ff;
+  border-style: solid;
+}
+[role="treeitem"] {
+  touch-action: none;
 }
 .properties {
   border-left: 1px solid #d8dfe8;

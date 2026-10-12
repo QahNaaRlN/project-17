@@ -198,6 +198,9 @@ export function createStudioHandler(
                     "node.setDesign",
                     "node.setBinding",
                     "localContent.set",
+                    "node.insert",
+                    "node.remove",
+                    "node.move",
                   ].includes(String(op?.type)),
               ))
           )
