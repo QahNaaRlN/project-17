@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { Config } from "./types.js";
 import { problemDiagnostics } from "./review.js";
+import { identityCookies, proxyIdentity } from "./identity-proxy.js";
 export interface ServerConfig extends Config {
   baseUrl: string;
   studioOrigin: string;
-  credential: string;
+  credential?: string;
+  authMode?: "service" | "oidc";
 }
 export function checkConfig(config: ServerConfig): ServerConfig {
   const local = (url: URL) =>
@@ -15,8 +17,8 @@ export function checkConfig(config: ServerConfig): ServerConfig {
     base = new URL(config.baseUrl),
     app = new URL(config.appOrigin);
   if (
-    !local(studio) ||
-    !local(base) ||
+    !(local(studio) || (config.authMode === "oidc" && studio.protocol === "https:")) ||
+    !(local(base) || (config.authMode === "oidc" && base.protocol === "https:")) ||
     !(local(app) || app.protocol === "https:") ||
     [studio, base, app].some(
       (url) => url.username || url.password || url.pathname !== "/" || url.search || url.hash,
@@ -25,7 +27,10 @@ export function checkConfig(config: ServerConfig): ServerConfig {
     app.origin !== config.appOrigin ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.project) ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.environment) ||
-    !/^cms_svc_[a-zA-Z0-9_-]+$/.test(config.credential)
+    ![undefined, "service", "oidc"].includes(config.authMode) ||
+    (config.authMode === "oidc"
+      ? config.credential !== undefined
+      : !/^cms_svc_[a-zA-Z0-9_-]+$/.test(config.credential ?? ""))
   )
     throw new Error("STUDIO_CONFIG_INVALID");
   return { ...config, baseUrl: base.origin };
@@ -51,14 +56,22 @@ export function createStudioHandler(
       res.end(JSON.stringify({ code, ...(diagnostics.length ? { diagnostics } : {}) }));
     }
     try {
+      const url = new URL(req.url ?? "/", config.studioOrigin);
+      const callback =
+        config.authMode === "oidc" &&
+        req.method === "GET" &&
+        url.pathname === "/api/studio/auth/callback";
       if (
         req.headers.host !== host ||
-        (req.headers.origin !== undefined && req.headers.origin !== config.studioOrigin) ||
+        (!callback &&
+          req.headers.origin !== undefined &&
+          req.headers.origin !== config.studioOrigin) ||
         (req.headers["sec-fetch-site"] !== undefined &&
+          !callback &&
           !["same-origin", "none"].includes(String(req.headers["sec-fetch-site"])))
       )
         return error(403, "STUDIO_ORIGIN_FORBIDDEN");
-      const url = new URL(req.url ?? "/", config.studioOrigin);
+      if (await proxyIdentity(req, res, url, config, fetcher)) return;
       if (url.pathname === "/api/studio/config" && req.method === "GET") {
         res.setHeader("Content-Type", "application/json");
         res.end(
@@ -66,6 +79,7 @@ export function createStudioHandler(
             project: config.project,
             environment: config.environment,
             appOrigin: config.appOrigin,
+            ...(config.authMode === "oidc" ? { authMode: "oidc" } : {}),
           }),
         );
         return;
@@ -76,6 +90,7 @@ export function createStudioHandler(
         const allowedGet =
           path === "/api/v1/pages" ||
           path === "/api/v1/working-drafts" ||
+          path === "/api/v1/work-items" ||
           path === "/api/v1/manifest" ||
           new RegExp(`^/api/v1/changesets/${uuid}/history$`).test(path) ||
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
@@ -97,7 +112,14 @@ export function createStudioHandler(
         const upstream = new URL(path, config.baseUrl);
         let body: string | undefined;
         const headers: Record<string, string> = {
-          Authorization: "Bearer " + config.credential,
+          ...(config.authMode === "oidc"
+            ? {
+                Cookie: identityCookies(req.headers.cookie),
+                Origin: config.studioOrigin,
+                "X-CSRF-Token": String(req.headers["x-csrf-token"] ?? ""),
+                "X-CMS-Actor": String(req.headers["x-cms-actor"] ?? ""),
+              }
+            : { Authorization: "Bearer " + config.credential }),
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
@@ -112,7 +134,9 @@ export function createStudioHandler(
             )
               return error(400, "PARAM_INVALID");
             upstream.search = url.search;
-          } else if (path === "/api/v1/pages" || path === "/api/v1/working-drafts") {
+          } else if (
+            ["/api/v1/pages", "/api/v1/working-drafts", "/api/v1/work-items"].includes(path)
+          ) {
             const allowed = [
               "environment",
               "after",
@@ -271,7 +295,11 @@ export function createStudioHandler(
         res.end(await result.text());
         return;
       }
-      if (req.method !== "GET" || url.search) return error(404, "NOT_FOUND");
+      const loginError =
+        config.authMode === "oidc" &&
+        url.pathname === "/editor" &&
+        url.search === "?authError=OIDC_LOGIN_FAILED";
+      if (req.method !== "GET" || (url.search && !loginError)) return error(404, "NOT_FOUND");
       const relative =
         url.pathname === "/" || url.pathname === "/editor"
           ? "index.html"

@@ -19,6 +19,7 @@ type Actor struct {
 	Email       *string    `json:"email"`
 	DisabledAt  *time.Time `json:"disabledAt"`
 	CreatedAt   time.Time  `json:"createdAt"`
+	OidcIssuer  *string    `json:"oidcIssuer"`
 }
 
 type ApiToken struct {
@@ -160,6 +161,14 @@ type Environment struct {
 	PreviewKey       []byte     `json:"previewKey"`
 }
 
+type HumanSession struct {
+	TokenHash []byte    `json:"tokenHash"`
+	ActorID   uuid.UUID `json:"actorId"`
+	CsrfToken string    `json:"csrfToken"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type IdempotencyKey struct {
 	ActorID     uuid.UUID `json:"actorId"`
 	Key         string    `json:"key"`
@@ -211,6 +220,15 @@ type ObjectVersion struct {
 	CommittedAt     *time.Time `json:"committedAt"`
 	Certified       bool       `json:"certified"`
 	Deleted         bool       `json:"deleted"`
+}
+
+type OidcLogin struct {
+	StateHash   []byte    `json:"stateHash"`
+	BrowserHash []byte    `json:"browserHash"`
+	Verifier    string    `json:"verifier"`
+	Nonce       string    `json:"nonce"`
+	ProjectSlug string    `json:"projectSlug"`
+	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
 type Operation struct {

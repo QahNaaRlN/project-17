@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"log/slog"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 // Config — конфигурация процесса cms.
 type Config struct {
+	Identity        identity.Config
 	HTTPAddr        string        // CMS_HTTP_ADDR, по умолчанию ":8080"
 	DatabaseURL     string        // CMS_DATABASE_URL, обязательно
 	LogLevel        slog.Level    // CMS_LOG_LEVEL: debug | info | warn | error
@@ -41,6 +43,13 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		S3Secure:        getenv("CMS_S3_SECURE") != "false",
 	}
 	var errs []error
+	cfg.Identity = identity.Config{Issuer: getenv("CMS_OIDC_ISSUER"), ClientID: getenv("CMS_OIDC_CLIENT_ID"), ClientSecret: getenv("CMS_OIDC_CLIENT_SECRET"), PublicOrigin: getenv("CMS_STUDIO_PUBLIC_URL"), AllowLoopbackHTTP: getenv("CMS_OIDC_ALLOW_LOOPBACK_HTTP") == "true"}
+	if err := cfg.Identity.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	if raw := getenv("CMS_OIDC_ALLOW_LOOPBACK_HTTP"); raw != "" && raw != "true" && raw != "false" {
+		errs = append(errs, identity.ErrConfig)
+	}
 	cfg.Images = imagedelivery.Config{PublicURL: getenv("CMS_ASSET_PUBLIC_URL"), ProxyURL: getenv("CMS_IMGPROXY_URL"), Bucket: cfg.S3Bucket, Key: getenv("CMS_ASSET_SIGNING_KEY"), ProxyKey: getenv("CMS_IMGPROXY_KEY"), ProxySalt: getenv("CMS_IMGPROXY_SALT")}
 	if cfg.Images.PublicURL != "" || cfg.Images.ProxyURL != "" || cfg.Images.Key != "" || cfg.Images.ProxyKey != "" || cfg.Images.ProxySalt != "" {
 		if _, err := imagedelivery.New(cfg.Images); err != nil {

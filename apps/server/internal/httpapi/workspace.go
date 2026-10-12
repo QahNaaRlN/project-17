@@ -16,7 +16,7 @@ import (
 
 // workspaceRoutes serves the current actor's workspace through the public Query API.
 func workspaceRoutes(r chi.Router, d Deps) {
-	for _, route := range []string{"/pages", "/working-drafts"} {
+	for _, route := range []string{"/pages", "/working-drafts", "/work-items"} {
 		r.Get(route, func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.DesignRead); err != nil {
@@ -59,6 +59,20 @@ func workspaceRoutes(r chi.Router, d Deps) {
 				respond(w, r, d, map[string]any{"items": items, "nextCursor": next}, err)
 				return
 			}
+			if route == "/work-items" {
+				rows, err := q.ListStudioWork(r.Context(), store.ListStudioWorkParams{ProjectID: actor.ProjectID, ActorID: actor.ID, Environment: env.Name, AfterID: after, CanReview: actor.Kind == auth.ActorHuman && actor.Rights.Has(auth.ContentPublish)})
+				if err != nil {
+					respond(w, r, d, nil, err)
+					return
+				}
+				items := make([]workItem, 0, len(rows))
+				for _, row := range rows {
+					items = append(items, workItem{ID: row.ID, Title: row.Title, OwnerID: row.OwnerID, OwnerName: row.OwnerName, State: row.State, DocumentID: row.DocumentID, Path: row.Path, Own: row.OwnerID == actor.ID})
+				}
+				items, next := workspacePageWindow(items, func(i workItem) uuid.UUID { return i.ID })
+				respond(w, r, d, map[string]any{"items": items, "nextCursor": next}, nil)
+				return
+			}
 			documentID, err := uuid.Parse(values.Get("documentId"))
 			if err != nil {
 				writeError(w, r, d.Log, badParam("documentId", "UUID"))
@@ -80,6 +94,16 @@ type workspacePage struct {
 	Path    string    `json:"path"`
 	Title   string    `json:"title"`
 	HasHead bool      `json:"hasHead"`
+}
+type workItem struct {
+	ID         uuid.UUID `json:"id"`
+	Title      string    `json:"title"`
+	OwnerID    uuid.UUID `json:"ownerId"`
+	OwnerName  string    `json:"ownerName"`
+	State      string    `json:"state"`
+	DocumentID uuid.UUID `json:"documentId"`
+	Path       string    `json:"path"`
+	Own        bool      `json:"own"`
 }
 
 func workspacePageWindow[T any](items []T, id func(T) uuid.UUID) ([]T, *uuid.UUID) {

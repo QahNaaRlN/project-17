@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
@@ -34,12 +35,13 @@ const MaxCommandBody = 1 << 20
 
 // Deps — зависимости HTTP-слоя.
 type Deps struct {
-	Pool    *pgxpool.Pool
-	Bus     *commandbus.Bus
-	Log     *slog.Logger
-	Version string
-	Assets  *assets.Service
-	Images  *imagedelivery.Service
+	Identity *identity.Service
+	Pool     *pgxpool.Pool
+	Bus      *commandbus.Bus
+	Log      *slog.Logger
+	Version  string
+	Assets   *assets.Service
+	Images   *imagedelivery.Service
 }
 
 // NewRouter собирает маршруты сервера.
@@ -65,6 +67,9 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Route("/delivery/v1/{project}/{env}", deliveryRoutes(d))
 	r.Get("/assets/v1/{env}/{id}/{hash}", imageHandler(d))
+	if d.Identity != nil {
+		r.Mount("/auth", d.Identity)
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
@@ -319,7 +324,28 @@ func actorFrom(ctx context.Context) auth.Actor {
 func authenticate(d Deps) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			actor, err := auth.Authenticate(r.Context(), store.New(d.Pool), r.Header.Get("Authorization"))
+			var actor auth.Actor
+			var err error
+			if r.Header.Get("Authorization") != "" || d.Identity == nil {
+				actor, err = auth.Authenticate(r.Context(), store.New(d.Pool), r.Header.Get("Authorization"))
+			} else {
+				var info identity.Info
+				info, err = d.Identity.Info(r.Context(), r)
+				if err == nil && !info.HasAccess {
+					err = identity.ErrAccess
+				}
+				if expected := r.Header.Get("X-CMS-Actor"); err == nil && expected != "" && expected != info.Actor.ID.String() {
+					err = identity.ErrChanged
+				}
+				if err == nil && r.Method != "GET" && r.Method != "HEAD" {
+					err = d.Identity.CheckCSRF(r, info)
+				}
+				actor = info.Actor
+			}
+			if errors.Is(err, identity.ErrAccess) || errors.Is(err, identity.ErrCSRF) || errors.Is(err, identity.ErrChanged) {
+				writeError(w, r, d.Log, commandbus.NewError(403, err.Error(), "Доступ не подтверждён", "Проверьте доступ к проекту и сессию"))
+				return
+			}
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="cms"`)
 				writeError(w, r, d.Log, commandbus.NewError(http.StatusUnauthorized, "UNAUTHENTICATED",

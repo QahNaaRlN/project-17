@@ -8,6 +8,6 @@ const config = JSON.parse(await readFile(path, "utf8")) as ServerConfig;
 const url = new URL(config.studioOrigin);
 createServer(
   createStudioHandler(config, fileURLToPath(new URL("../client", import.meta.url))),
-).listen(Number(url.port || 80), "127.0.0.1", () =>
+).listen(Number(url.port || (url.protocol === "https:" ? 18085 : 80)), "127.0.0.1", () =>
   console.log("CMS Studio listening on loopback"),
 );

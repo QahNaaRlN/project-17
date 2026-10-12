@@ -34,3 +34,20 @@ WHERE c.project_id = sqlc.arg(project_id) AND c.owner_id = sqlc.arg(owner_id)
   AND (CASE WHEN w.id IS NOT NULL THEN w.path ELSE h.path END) IS NOT NULL
   AND c.id > sqlc.arg(after_id)::uuid
 ORDER BY c.id LIMIT 51;
+
+-- name: ListStudioWork :many
+SELECT c.id,c.title,c.owner_id,a.display_name AS owner_name,c.state,
+       page.object_id AS document_id,COALESCE(page.path,'')::text AS path
+FROM changesets c JOIN actors a ON a.id=c.owner_id
+JOIN LATERAL (
+ SELECT co.object_id,v.path FROM changeset_objects co
+ JOIN objects o ON o.id=co.object_id AND o.project_id=c.project_id AND o.doc_kind='page'
+ JOIN object_versions v ON v.id=co.working_version_id
+ WHERE co.changeset_id=c.id AND v.path IS NOT NULL AND NOT v.deleted
+ ORDER BY co.object_id LIMIT 1
+) page ON true
+WHERE c.project_id=sqlc.arg(project_id) AND c.kind='standard'
+AND sqlc.arg(environment)::text=ANY(c.targets) AND c.id>sqlc.arg(after_id)
+AND ((c.owner_id=sqlc.arg(actor_id) AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+ OR (c.owner_id<>sqlc.arg(actor_id) AND sqlc.arg(can_review)::boolean AND c.state IN ('in_review','approved')))
+ORDER BY c.id LIMIT 51;

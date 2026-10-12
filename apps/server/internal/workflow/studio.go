@@ -34,6 +34,7 @@ type StudioReview struct {
 	Objects        []ReviewObject     `json:"objects"`
 	Actions        map[string]*string `json:"actions"`
 	NeedsAttention bool               `json:"needsAttention"`
+	CanEdit        bool               `json:"canEdit"`
 }
 
 func GetStudioReview(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID) (StudioReview, error) {
@@ -58,6 +59,7 @@ func GetStudioReview(ctx context.Context, q *store.Queries, actor auth.Actor, id
 		return StudioReview{}, err
 	}
 	cs := detail.Changeset
+	out.CanEdit = cs.OwnerID == actor.ID && cs.State == "open" && (actor.Rights.Has(auth.ContentWrite) || actor.Rights.Has(auth.DesignCompose))
 	set := func(action, reason string) {
 		if reason == "" {
 			out.Actions[action] = nil

@@ -6,7 +6,8 @@ React/Vite, Zustand для документа и выбора, TanStack Query д
 История CS, отмена/повтор целой правки и Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z доступны
 через [пакет истории](../../docs/studio-history.md); в текстовых полях сочетания
 оставлены для отмены ввода. История и отмена относятся ко всему CS.
-SSE, production identity и полный M4 впереди.
+SSE и полный M4 впереди. [Вход пользователей и согласования](../../docs/studio-identity.md)
+добавляет универсальный OIDC, текущего человека, вход/выход и список доступных работ.
 [Проверки, согласование и публикация](../../docs/studio-publishing.md): подайте
 сохранённый черновик, проверьте замечания, при необходимости верните в работу.
 Публикация требует `content.publish` и отдельного подтверждения окружения и всех
@@ -47,10 +48,36 @@ SSE, production identity и полный M4 впереди.
    `/#document=<UUID>&changeset=<UUID>`; IDs не являются секретами.
 
 Сервер привязан к `127.0.0.1`, проверяет Host/Origin/Fetch Metadata и пропускает
-только manifest, CS, document, pages, working-drafts, apply-operations,
-create-changeset, history, undo/redo и create-preview-token. Он не
-предназначен для публичного ingress. Для production нужны пользовательские
-сессии и SSO, а не общий service credential.
+только разрешённые чтения/команды Studio, включая work-items и согласование.
+Service-режим выше остаётся локальной совместимостью. Для пользовательского
+доступа используйте OIDC-конфигурацию ниже и TLS reverse proxy.
+
+## Вход через универсальный OIDC
+
+1. В CMS задайте `CMS_OIDC_ISSUER`, `CMS_OIDC_CLIENT_ID`,
+   `CMS_STUDIO_PUBLIC_URL` (origin Studio без пути), при необходимости
+   `CMS_OIDC_CLIENT_SECRET` через защищённую конфигурацию окружения. Для локального
+   HTTP разрешается только loopback и явное `CMS_OIDC_ALLOW_LOOPBACK_HTTP=true`.
+2. Зарегистрируйте у провайдера точный redirect URI:
+   `<CMS_STUDIO_PUBLIC_URL>/api/studio/auth/callback`, code flow, scope `openid profile`,
+   PKCE S256. Discovery, authorization, token и JWKS должны поддерживать HTTPS
+   (либо явно разрешённый loopback для разработки).
+3. В JSON Studio укажите `authMode: "oidc"`, прежние `baseUrl`, `studioOrigin`,
+   `appOrigin`, `project`, `environment`; поле `credential` исключите.
+   `studioOrigin` должен точно совпадать с `CMS_STUDIO_PUBLIC_URL`.
+   При HTTPS origin без порта процесс слушает `127.0.0.1:18085`; TLS proxy направляет
+   запросы на него, сохраняя публичный Host. CMS остаётся внутренним сервисом.
+4. Новый пользователь увидит имя и свой ID, но не получит доступ автоматически.
+   Администратор назначает роль через публичные команды; примеры и границы
+   приведены в [контракте пакета](../../docs/studio-identity.md).
+5. Автор открывает страницу и свой CS, сохраняет и отправляет на проверку.
+   Другой человек с нужными правами открывает «Мои работы и согласование»,
+   выбирает работу, согласует и отдельно подтверждает публикацию. Чужой CS
+   открыт для чтения; автор не согласовывает собственную работу.
+
+Сессия живёт 8 часов, права проверяются на каждом запросе. Logout отзывает сессию
+CMS; завершение сессии самого провайдера не реализовано. Реальный IdP и публичное
+развёртывание нужно настроить отдельно.
 
 ## Проверка
 
@@ -58,3 +85,7 @@ create-changeset, history, undo/redo и create-preview-token. Он не
 После `pnpm build`: `pnpm --filter @cms/store-example test:e2e` — настоящие
 Studio и приложение в Chromium. CMS подменяется только на HTTP-границе;
 сохранение/права/undo на PostgreSQL проверяет `TestStudioLocalTextPersistence`.
+`internal/identity` проверяет подписанный OIDC code flow с настоящей проверкой
+PKCE/JWKS/nonce и PostgreSQL, включая двух людей и публикацию. Браузерные
+STU-080…084 моделируют IdP/CMS только на HTTP-границе, проверяют UI, logout,
+истечение и смену пользователя; подключение к реальному IdP ими не подтверждается.

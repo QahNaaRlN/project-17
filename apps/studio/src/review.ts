@@ -9,6 +9,7 @@ function object(value: unknown): Record<string, unknown> {
 export function validateReview(value: Review, id: string): Review {
   if (
     !value ||
+    typeof value.canEdit !== "boolean" ||
     typeof value.needsAttention !== "boolean" ||
     value.changeset?.id !== id ||
     !Number.isSafeInteger(value.changeset.seq) ||

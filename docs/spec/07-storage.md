@@ -15,6 +15,13 @@
 
 ## 2. DDL (основные таблицы)
 
+Миграция `00016_human_sessions.sql` добавляет identity `(oidc_issuer, oidc_subject)`,
+серверные `human_sessions` (SHA-256 opaque token, actor, CSRF, expiry) и одноразовые
+`oidc_logins` (хэши state/browser, PKCE verifier, nonce, project, expiry).
+Роли остаются в `role_bindings`, права перечитываются на каждом запросе. Существующие
+люди без issuer автоматически не связываются по subject/email. Downgrade блокируется
+при наличии новых identity/session/login данных; контракт — [STU-080…084](../studio-identity.md).
+
 ```sql
 -- Проекты и окружения ----------------------------------------------------
 CREATE TABLE projects (

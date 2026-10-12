@@ -18,6 +18,18 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("конфигурация по умолчанию: %+v", cfg)
 	}
 }
+func TestOIDCConfiguration(t *testing.T) {
+	cfg, err := FromEnv(env(map[string]string{"CMS_DATABASE_URL": "postgres://x", "CMS_OIDC_ISSUER": "https://issuer.example/realm", "CMS_OIDC_CLIENT_ID": "studio", "CMS_STUDIO_PUBLIC_URL": "https://studio.example"}))
+	if err != nil || cfg.Identity.ClientID != "studio" {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"wrong", "true"} {
+		_, err = FromEnv(env(map[string]string{"CMS_DATABASE_URL": "postgres://x", "CMS_OIDC_ALLOW_LOOPBACK_HTTP": raw}))
+		if err == nil {
+			t.Fatal("partial/invalid oidc config")
+		}
+	}
+}
 
 func TestCustomValues(t *testing.T) {
 	cfg, err := FromEnv(env(map[string]string{

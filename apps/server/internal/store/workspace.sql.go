@@ -145,3 +145,73 @@ func (q *Queries) ListStudioPages(ctx context.Context, arg ListStudioPagesParams
 	}
 	return items, nil
 }
+
+const listStudioWork = `-- name: ListStudioWork :many
+SELECT c.id,c.title,c.owner_id,a.display_name AS owner_name,c.state,
+       page.object_id AS document_id,COALESCE(page.path,'')::text AS path
+FROM changesets c JOIN actors a ON a.id=c.owner_id
+JOIN LATERAL (
+ SELECT co.object_id,v.path FROM changeset_objects co
+ JOIN objects o ON o.id=co.object_id AND o.project_id=c.project_id AND o.doc_kind='page'
+ JOIN object_versions v ON v.id=co.working_version_id
+ WHERE co.changeset_id=c.id AND v.path IS NOT NULL AND NOT v.deleted
+ ORDER BY co.object_id LIMIT 1
+) page ON true
+WHERE c.project_id=$1 AND c.kind='standard'
+AND $2::text=ANY(c.targets) AND c.id>$3
+AND ((c.owner_id=$4 AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+ OR (c.owner_id<>$4 AND $5::boolean AND c.state IN ('in_review','approved')))
+ORDER BY c.id LIMIT 51
+`
+
+type ListStudioWorkParams struct {
+	ProjectID   uuid.UUID `json:"projectId"`
+	Environment string    `json:"environment"`
+	AfterID     uuid.UUID `json:"afterId"`
+	ActorID     uuid.UUID `json:"actorId"`
+	CanReview   bool      `json:"canReview"`
+}
+
+type ListStudioWorkRow struct {
+	ID         uuid.UUID `json:"id"`
+	Title      string    `json:"title"`
+	OwnerID    uuid.UUID `json:"ownerId"`
+	OwnerName  string    `json:"ownerName"`
+	State      string    `json:"state"`
+	DocumentID uuid.UUID `json:"documentId"`
+	Path       string    `json:"path"`
+}
+
+func (q *Queries) ListStudioWork(ctx context.Context, arg ListStudioWorkParams) ([]ListStudioWorkRow, error) {
+	rows, err := q.db.Query(ctx, listStudioWork,
+		arg.ProjectID,
+		arg.Environment,
+		arg.AfterID,
+		arg.ActorID,
+		arg.CanReview,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStudioWorkRow
+	for rows.Next() {
+		var i ListStudioWorkRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.OwnerID,
+			&i.OwnerName,
+			&i.State,
+			&i.DocumentID,
+			&i.Path,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

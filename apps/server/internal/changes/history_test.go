@@ -411,6 +411,26 @@ func TestStudioHistoryRecordFailureAndLinks(t *testing.T) {
 		t.Fatal("ambiguous undo/redo links accepted")
 	}
 }
+
+// Prepare the migration under test rather than assuming it is the latest one.
+func (e *env) historyMigrationBase(ctx context.Context, log *slog.Logger) {
+	e.t.Helper()
+	for {
+		var version int
+		if err := e.pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil {
+			e.t.Fatal(err)
+		}
+		if version == 15 {
+			return
+		}
+		if version < 15 {
+			e.t.Fatal("history migration is not applied", version)
+		}
+		if err := postgres.Migrate(ctx, e.pool, "down", log); err != nil {
+			e.t.Fatal(err)
+		}
+	}
+}
 func TestStudioHistoryMigrationGuard(t *testing.T) {
 	// STU-054: populated history cannot be downgraded into a format losing action/link semantics.
 	e := setup(t)
@@ -418,6 +438,7 @@ func TestStudioHistoryMigrationGuard(t *testing.T) {
 	e.group(cs.ID, 0, createDoc(`{"id":"n_root","type":"Box"}`))
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	e.historyMigrationBase(ctx, log)
 	if err := postgres.Migrate(ctx, e.pool, "down", log); err == nil || !strings.Contains(err.Error(), "operation history prevents downgrade") {
 		t.Fatal(err)
 	}
@@ -488,6 +509,7 @@ func TestStudioHistoryLegacyBarrierMigrationGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	e.historyMigrationBase(ctx, log)
 	if err := postgres.Migrate(ctx, e.pool, "down", log); err == nil || !strings.Contains(err.Error(), "operation history prevents downgrade") {
 		t.Fatal(err)
 	}

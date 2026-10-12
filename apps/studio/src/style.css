@@ -9,6 +9,33 @@
   font-synthesis: none;
   font-size: 14px;
 }
+.person-bar,
+.work-items {
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #d8dfe8;
+}
+.person-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.work-items summary {
+  cursor: pointer;
+}
+.work-items li {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+.identity-gate {
+  max-width: 640px;
+  padding: 32px;
+  margin: 48px auto;
+  min-height: 0;
+  background: #fff;
+  border-radius: 10px;
+  gap: 16px;
+}
 * {
   box-sizing: border-box;
 }

@@ -74,6 +74,7 @@ export function fixture(): Session {
   return {
     ...session,
     review: {
+      canEdit: true,
       needsAttention: false,
       changeset: session.changeset,
       risk: null,
@@ -118,6 +119,9 @@ export function persist(session: Session, operations: Operation[]) {
 }
 export function mockApi(session = fixture()) {
   const api: Api = {
+    account: vi.fn(async () => ({ authenticated: false, rights: [], hasAccess: false })),
+    logout: vi.fn(async () => {}),
+    workItems: vi.fn(async () => ({ items: [], nextCursor: null })),
     workflow: vi.fn<Api["workflow"]>(async (_session, action) => {
       session.changeset.state = {
         submit: "approved",

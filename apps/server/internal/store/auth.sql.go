@@ -103,7 +103,7 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 const createActor = `-- name: CreateActor :one
 INSERT INTO actors (id, kind, project_id, display_name)
 VALUES ($1, $2, $3, $4)
-RETURNING id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at
+RETURNING id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at, oidc_issuer
 `
 
 type CreateActorParams struct {
@@ -130,6 +130,7 @@ func (q *Queries) CreateActor(ctx context.Context, arg CreateActorParams) (Actor
 		&i.Email,
 		&i.DisabledAt,
 		&i.CreatedAt,
+		&i.OidcIssuer,
 	)
 	return i, err
 }

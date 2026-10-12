@@ -4,8 +4,10 @@ go 1.26.0
 
 require (
 	github.com/buckket/go-blurhash v1.1.0
+	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/gen2brain/avif v0.6.0
 	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/minio/minio-go/v7 v7.3.0
@@ -17,6 +19,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	golang.org/x/image v0.47.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.43.0
 	pgregory.net/rapid v1.3.0
 )

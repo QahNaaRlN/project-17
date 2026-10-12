@@ -19,6 +19,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
+	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
@@ -129,6 +130,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	bus := commandbus.New(pool)
 	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
+	identity.Register(bus)
 	changes.Register(bus)
 	workflow.Register(bus)
 	publishing.Register(bus)
@@ -136,8 +138,12 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	manifestregistry.Register(bus)
 	assetService.Register(bus)
 
+	identities, err := identity.New(ctx, pool, cfg.Identity)
+	if err != nil {
+		return err
+	}
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images}),
+		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

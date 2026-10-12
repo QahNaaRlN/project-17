@@ -1,6 +1,7 @@
 import type { IrDocument } from "@cms/ir";
 import type { Manifest } from "@cms/manifest";
 export interface Config {
+  authMode?: "service" | "oidc";
   project: string;
   environment: string;
   appOrigin: string;
@@ -41,6 +42,9 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  account(signal?: AbortSignal): Promise<Account>;
+  logout(signal?: AbortSignal): Promise<void>;
+  workItems(cursor?: string, signal?: AbortSignal): Promise<List<WorkItem>>;
   workflow(
     session: Session,
     action: WorkflowAction,
@@ -94,6 +98,24 @@ export interface PageItem {
   title: string;
   hasHead: boolean;
 }
+export interface Account {
+  authenticated: boolean;
+  user?: { id: string; name: string };
+  csrfToken?: string;
+  rights: string[];
+  hasAccess: boolean;
+  expiresAt?: string;
+}
+export interface WorkItem {
+  id: string;
+  title: string;
+  documentId: string;
+  path: string;
+  ownerId: string;
+  ownerName: string;
+  own: boolean;
+  state: string;
+}
 export interface List<T> {
   items: T[];
   nextCursor: string | null;
@@ -116,6 +138,7 @@ export const workflowActions = [
 ] as const;
 export type WorkflowAction = (typeof workflowActions)[number];
 export interface Review {
+  canEdit: boolean;
   needsAttention: boolean;
   changeset: Changeset;
   risk: "low" | "medium" | "high" | null;
