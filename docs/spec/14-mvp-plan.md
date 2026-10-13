@@ -29,7 +29,9 @@
 Пакет [входа и доступа к согласованию](../studio-identity.md) добавляет
 универсальный OIDC, отзывные серверные сессии, явные роли и очередь работ
 (STU-080…084). Реальный IdP и production-развёртывание ещё не настроены.
-Остались CodeMirror/JSON diff, content editor,
+Пакет [Structure, CodeMirror и JSON diff](../studio-json-diff.md) добавляет JSON
+узла/страницы, диагностики/подсказки и атомарный diff с историей (STU-090…094).
+Остались content editor,
 SSE/presence и Agent.
 
 ## 2. Сквозной сценарий приёмки

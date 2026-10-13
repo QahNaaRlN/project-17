@@ -47,6 +47,7 @@ PKCE exchange и PostgreSQL; два OIDC-входа проверяют авто�
 публикацию и отзыв роли. Chromium проверяет Studio и приложение; IdP/CMS там
 моделируются только на публичной HTTP-границе. Это не проверка реального провайдера.
 
-Следующий UI-пакет: Structure с CodeMirror/JSON diff (STU-010/011), с преобразованием
-правки в операции, сохранением истории и авторитетной проверкой IR/manifest.
-Content editor, SSE/presence и Agent остаются следующими независимыми направлениями.
+Structure с CodeMirror/JSON diff реализован в [пакете JSON](studio-json-diff.md)
+(STU-010/011, STU-090…094): правка преобразуется в операции с историей,
+сервер проверяет IR/manifest. Следующий UI-пакет — content editor;
+SSE/presence и Agent остаются независимыми направлениями.

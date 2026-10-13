@@ -12,7 +12,8 @@ export function WorkItems({ api, editor }: { api: Api; editor: Editor }) {
     getNextPageParam: (p) => p.nextCursor ?? undefined,
     retry: false,
   });
-  const busy = ["loading", "saving", "uncertain"].includes(state.status);
+  const busy =
+    ["loading", "saving", "uncertain"].includes(state.status) || !!state.dirtyFields.json;
   const states: Record<string, string> = ru
     ? {
         open: "В работе",

@@ -44,7 +44,8 @@ PostgreSQL: несколько групп/объектов, точный тек�
 
 Палитра/структура подключены в [следующем пакете](studio-structure.md).
 [Review/publish UI](studio-publishing.md) подключён отдельным пакетом.
-Это частичный M4. Следующие пакеты: CodeMirror/JSON diff,
+CodeMirror/JSON diff подключён в [пакете JSON](studio-json-diff.md).
+Это частичный M4. Следующие пакеты:
 SSE/presence, content editor и Agent. Универсальный OIDC-вход реализован
 в [отдельном пакете](studio-identity.md); реальный IdP/deploy ещё не настроены. Произвольная отмена
 выбранного старого действия и coalesce частого ввода сюда не входят.

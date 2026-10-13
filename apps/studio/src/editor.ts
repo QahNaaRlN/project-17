@@ -11,7 +11,7 @@ import {
   type Publication,
   type ReviewDiagnostic,
 } from "./types.js";
-import { structuralApply } from "./structure.js";
+import { applyOperations } from "./operations.js";
 export interface EditorState {
   dirtyFields: Record<string, boolean>;
   workflowRetry: boolean;
@@ -30,33 +30,10 @@ export interface EditorState {
   previewSrc: string;
   connected: boolean;
   mode: "design" | "interact";
+  viewMode: "visual" | "structure";
   locale: "ru" | "en";
   width: number;
   rects: Record<string, Rect[]>;
-}
-function optimistic(source: IrDocument, operations: Operation[]): IrDocument {
-  const document = structuredClone(source);
-  for (const operation of operations) {
-    const p = operation.payload;
-    if (operation.type === "localContent.set") {
-      (document.localContent ??= {})[String(p.key)] = {
-        type: "text",
-        value: p.locale ? { [String(p.locale)]: p.value } : (p.value as Record<string, unknown>),
-      };
-    } else if (["node.insert", "node.remove", "node.move"].includes(operation.type)) {
-      structuralApply(document, operation);
-    } else {
-      const node = document.nodes[String(p.nodeId)];
-      if (!node) throw new StudioError("NODE_NOT_FOUND");
-      if (operation.type === "node.setBinding")
-        (node.bindings ??= {})[String(p.prop)] = p.binding as string;
-      else {
-        const field = operation.type === "node.setProps" ? "props" : "design";
-        Object.assign((node[field] ??= {}), p.set);
-      }
-    }
-  }
-  return document;
 }
 export function createEditor(
   api: Api,
@@ -84,6 +61,7 @@ export function createEditor(
     previewSrc: "",
     connected: false,
     mode: "design",
+    viewMode: "visual",
     locale: "ru",
     width: 1024,
     rects: {},
@@ -158,6 +136,10 @@ export function createEditor(
     return { historyRevision: store.getState().historyRevision + 1 };
   }
   async function open(documentId: string, changesetId: string) {
+    if (store.getState().dirtyFields.json) {
+      store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
     if (["saving", "uncertain"].includes(store.getState().status)) return;
     lifecycle.abort();
     lifecycle = new AbortController();
@@ -230,7 +212,11 @@ export function createEditor(
         });
     }
   }
-  async function apply(operations: Operation[], selection?: string) {
+  async function apply(operations: Operation[], selection?: string, source?: "json") {
+    if (store.getState().dirtyFields.json && source !== "json") {
+      store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
     const state = store.getState(),
       session = state.session;
     if (
@@ -248,7 +234,7 @@ export function createEditor(
       );
     let next: IrDocument;
     try {
-      next = optimistic(before, operations);
+      next = applyOperations(before, operations);
     } catch (error) {
       store.setState({ error: error instanceof StudioError ? error.code : "FIELD_INVALID" });
       return;
@@ -266,7 +252,13 @@ export function createEditor(
       // Local values need authenticated reload in the application; design/props can use fast patch.
       if (
         !operations.some((operation) =>
-          ["localContent.set", "node.insert", "node.remove", "node.move"].includes(operation.type),
+          [
+            "localContent.set",
+            "localContent.remove",
+            "node.insert",
+            "node.remove",
+            "node.move",
+          ].includes(operation.type),
         )
       ) {
         const ids = [...new Set(operations.map((op) => String(op.payload.nodeId)))];
@@ -327,6 +319,10 @@ export function createEditor(
     }
   }
   async function changeHistory(action: "undo" | "redo") {
+    if (store.getState().dirtyFields.json) {
+      store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
     const state = store.getState(),
       session = state.session;
     if (
@@ -467,7 +463,15 @@ export function createEditor(
     }
     invalidate();
   }
-  function select(nodeId: string, instance: string | null = null) {
+  function select(nodeId: string, instance: string | null = null, source?: "json") {
+    if (
+      store.getState().dirtyFields.json &&
+      source !== "json" &&
+      nodeId !== store.getState().selected
+    ) {
+      store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
     if (!store.getState().document || !Object.hasOwn(store.getState().document!.nodes, nodeId))
       return;
     store.setState({ selected: nodeId, instance });
@@ -589,6 +593,13 @@ export function createEditor(
     mode(mode: EditorState["mode"]) {
       store.setState({ mode });
       send("mode", { mode });
+    },
+    viewMode(viewMode: EditorState["viewMode"]) {
+      if (store.getState().dirtyFields.json) {
+        store.setState({ error: "JSON_DRAFT_PENDING" });
+        return;
+      }
+      store.setState({ viewMode });
     },
     locale(locale: EditorState["locale"]) {
       store.setState({ locale });

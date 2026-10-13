@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import type { Api, Operation, Session } from "../src/types.js";
-import { structuralApply } from "../src/structure.js";
+import { applyOperations } from "../src/operations.js";
 export const documentId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
   changesetId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c22";
 export function fixture(): Session {
@@ -94,26 +94,7 @@ export function fixture(): Session {
   };
 }
 export function persist(session: Session, operations: Operation[]) {
-  for (const operation of operations) {
-    const p = operation.payload;
-    if (operation.type === "localContent.set")
-      (session.record.body.localContent ??= {})[String(p.key)] = {
-        type: "text",
-        value: p.locale ? { [String(p.locale)]: p.value } : (p.value as Record<string, unknown>),
-      };
-    else if (["node.insert", "node.remove", "node.move"].includes(operation.type))
-      structuralApply(session.record.body, operation);
-    else if (operation.type === "node.setBinding")
-      (session.record.body.nodes[String(p.nodeId)]!.bindings ??= {})[String(p.prop)] =
-        p.binding as string;
-    else
-      Object.assign(
-        (session.record.body.nodes[String(p.nodeId)]![
-          operation.type === "node.setDesign" ? "design" : "props"
-        ] ??= {}),
-        p.set,
-      );
-  }
+  session.record.body = applyOperations(session.record.body, operations);
   session.changeset.seq += operations.length;
   session.history.seq = session.changeset.seq;
 }
