@@ -14,6 +14,78 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-100/101/103: контент и upload проходят только через разрешённые маршруты/окружение", async () => {
+  const { origin, post } = await setup();
+  const base =
+    "/api/studio/api/v1/content-catalog?environment=staging&changesetId=" +
+    changesetId +
+    "&kind=entity";
+  expect((await fetch(origin + base)).status).toBe(200);
+  for (const tail of ["&changesetId=" + changesetId, "&unknown=x", "&after=bad"])
+    expect((await fetch(origin + base + tail)).status).toBe(400);
+  expect(
+    (await fetch(origin + base.replace("environment=staging", "environment=production"))).status,
+  ).toBe(403);
+  expect(
+    (
+      await fetch(
+        origin +
+          `/api/studio/api/v1/content/${documentId}?environment=staging&changesetId=${changesetId}`,
+      )
+    ).status,
+  ).toBe(200);
+  expect((await fetch(origin + `/api/studio/api/v1/asset-uploads/${documentId}`)).status).toBe(200);
+  for (const command of ["create-asset-upload", "complete-asset-upload"]) {
+    expect(
+      (
+        await post("/api/studio/api/v1/commands/" + command, {
+          payload: command.startsWith("create")
+            ? { filename: "test.png", mimeType: "image/png", size: 1, sha256: "a".repeat(64) }
+            : { assetId: documentId },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await post("/api/studio/api/v1/commands/" + command, { payload: { other: true } })).status,
+    ).toBe(400);
+  }
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/apply-operations", {
+        payload: {
+          operations: [{ type: "entity.create", payload: { environment: "production" } }],
+        },
+      })
+    ).status,
+  ).toBe(403);
+  for (const type of [
+    "entity.create",
+    "entity.setFields",
+    "entity.delete",
+    "entity.restore",
+    "asset.create",
+    "asset.updateMeta",
+    "asset.replaceFile",
+  ])
+    expect(
+      (
+        await post("/api/studio/api/v1/commands/apply-operations", {
+          payload: { operations: [{ type, payload: { environment: "staging" } }] },
+        })
+      ).status,
+    ).toBe(200);
+  expect(
+    checkConfig({ ...config, assetUploadOrigin: "https://bucket.test" }).assetUploadOrigin,
+  ).toBe("https://bucket.test");
+  for (const assetUploadOrigin of [
+    "http://bucket.test",
+    "https://bucket.test/path",
+    "https://user:pass@bucket.test",
+    "file:///tmp",
+  ]) {
+    expect(() => checkConfig({ ...config, assetUploadOrigin })).toThrow();
+  }
+});
 it("STU-070/071/072/073/074: review and workflow stay within the configured adapter contract", async () => {
   const { origin, post, fetcher } = await setup();
   const review = `/api/studio/api/v1/changesets/${changesetId}/review`;

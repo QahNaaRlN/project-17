@@ -16,6 +16,7 @@ export function checkConfig(config: ServerConfig): ServerConfig {
   const studio = new URL(config.studioOrigin),
     base = new URL(config.baseUrl),
     app = new URL(config.appOrigin);
+  const upload = config.assetUploadOrigin ? new URL(config.assetUploadOrigin) : undefined;
   if (
     !(local(studio) || (config.authMode === "oidc" && studio.protocol === "https:")) ||
     !(local(base) || (config.authMode === "oidc" && base.protocol === "https:")) ||
@@ -25,6 +26,11 @@ export function checkConfig(config: ServerConfig): ServerConfig {
     ) ||
     studio.origin !== config.studioOrigin ||
     app.origin !== config.appOrigin ||
+    (upload &&
+      (!(local(upload) || upload.protocol === "https:") ||
+        upload.origin !== config.assetUploadOrigin ||
+        upload.username ||
+        upload.password)) ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.project) ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.environment) ||
     ![undefined, "service", "oidc"].includes(config.authMode) ||
@@ -49,7 +55,7 @@ export function createStudioHandler(
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(
       "Content-Security-Policy",
-      `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src ${config.appOrigin}; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`,
+      `default-src 'self'; connect-src 'self'${config.assetUploadOrigin ? " " + config.assetUploadOrigin : ""}; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src ${config.appOrigin}; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`,
     );
     function error(status: number, code: string, diagnostics = problemDiagnostics(undefined)) {
       res.writeHead(status, { "Content-Type": "application/problem+json" });
@@ -79,6 +85,7 @@ export function createStudioHandler(
             project: config.project,
             environment: config.environment,
             appOrigin: config.appOrigin,
+            ...(config.assetUploadOrigin ? { assetUploadOrigin: config.assetUploadOrigin } : {}),
             ...(config.authMode === "oidc" ? { authMode: "oidc" } : {}),
           }),
         );
@@ -88,6 +95,8 @@ export function createStudioHandler(
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const allowedGet =
+          path === "/api/v1/content-catalog" ||
+          new RegExp(`^/api/v1/(content|asset-uploads)/${uuid}$`).test(path) ||
           path === "/api/v1/pages" ||
           path === "/api/v1/working-drafts" ||
           path === "/api/v1/work-items" ||
@@ -96,6 +105,8 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          "/api/v1/commands/create-asset-upload",
+          "/api/v1/commands/complete-asset-upload",
           "/api/v1/commands/apply-operations",
           "/api/v1/commands/create-preview-token",
           "/api/v1/commands/create-changeset",
@@ -123,7 +134,25 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (path.endsWith("/history")) {
+          if (path === "/api/v1/content-catalog" || path.startsWith("/api/v1/content/")) {
+            const allowed = [
+              "environment",
+              "changesetId",
+              ...(path.endsWith("content-catalog") ? ["kind", "schema", "after"] : []),
+            ];
+            if (
+              [...url.searchParams.keys()].some(
+                (key) => !allowed.includes(key) || url.searchParams.getAll(key).length !== 1,
+              ) ||
+              !new RegExp(`^${uuid}$`).test(url.searchParams.get("changesetId") ?? "") ||
+              (url.searchParams.has("after") &&
+                !new RegExp(`^${uuid}$`).test(url.searchParams.get("after")!))
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (path.endsWith("/history")) {
             if (
               [...url.searchParams.keys()].some(
                 (key) => key !== "beforeSeq" || url.searchParams.getAll(key).length !== 1,
@@ -189,6 +218,13 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (path.endsWith("create-asset-upload") || path.endsWith("complete-asset-upload")) {
+            const allowed = path.endsWith("create-asset-upload")
+              ? ["filename", "mimeType", "size", "sha256"]
+              : ["assetId"];
+            if (Object.keys(envelope.payload).some((key) => !allowed.includes(key)))
+              return error(400, "PAYLOAD_INVALID");
+          }
           if (
             [
               "submit-changeset",
@@ -267,10 +303,25 @@ export function createStudioHandler(
                     "node.insert",
                     "node.remove",
                     "node.move",
+                    "entity.create",
+                    "entity.setFields",
+                    "entity.delete",
+                    "entity.restore",
+                    "asset.create",
+                    "asset.updateMeta",
+                    "asset.replaceFile",
                   ].includes(String(op?.type)),
               ))
           )
             return error(400, "STUDIO_OPERATION_UNAVAILABLE");
+          if (
+            path.endsWith("apply-operations") &&
+            envelope.payload.operations.some(
+              (op: { type: string; payload?: { environment?: string } }) =>
+                op.type === "entity.create" && op.payload?.environment !== config.environment,
+            )
+          )
+            return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
           body = JSON.stringify(envelope);
           headers["Content-Type"] = "application/json";
           headers["Idempotency-Key"] = String(req.headers["idempotency-key"]);

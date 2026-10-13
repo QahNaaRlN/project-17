@@ -174,6 +174,8 @@ export function StructurePanel({ editor }: { editor: Editor }) {
   const enabled =
     state.status === "ready" &&
     !state.dirtyFields.json &&
+    !state.dirtyFields.content &&
+    !state.dirtyFields.contentUpload &&
     session?.changeset.state === "open" &&
     session.review.canEdit;
   const removable =

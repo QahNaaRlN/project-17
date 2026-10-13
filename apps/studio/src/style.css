@@ -513,3 +513,69 @@ footer button {
   color: #9c2929;
   text-align: start;
 }
+.content-toggle {
+  padding: 8px 24px;
+  border-bottom: 1px solid #dce2ed;
+}
+.content-panel {
+  padding: 20px;
+  border-bottom: 1px solid #dce2ed;
+  background: #fafbfe;
+}
+.content-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.content-catalog {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0;
+  list-style: none;
+}
+.content-panel form {
+  max-width: 900px;
+}
+.content-panel fieldset {
+  min-width: 0;
+  border: 1px solid #dce2ed;
+  border-radius: 6px;
+  padding: 12px;
+}
+.content-field {
+  margin-block: 10px;
+  display: grid;
+  gap: 6px;
+}
+.content-panel textarea {
+  width: 100%;
+  max-width: 850px;
+  min-height: 80px;
+  font: inherit;
+}
+.content-panel select,
+.content-panel input {
+  max-width: 100%;
+}
+.rich-node ol {
+  padding-inline-start: 20px;
+}
+.rich-node {
+  margin-block: 10px;
+}
+.rich-node input[type="checkbox"] {
+  margin-inline: 8px;
+}
+.content-panel button {
+  margin: 4px;
+}
+.asset-upload {
+  margin-block-start: 20px;
+}
+.content-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}

@@ -2,6 +2,7 @@ import { evaluateBinding, evaluatePredicate, readPath, type BindingScope } from 
 import type { IrDocument } from "@cms/ir";
 import { atom, designDeclarations, responsive, type DesignOptions } from "./design.js";
 import { planEvents, type PlannedEvents, type RuntimeAction } from "./actions.js";
+import { fieldValue, jsonValue } from "./values.js";
 
 export interface PlanNode {
   id: string;
@@ -44,6 +45,7 @@ const primitiveProps: Record<string, string[]> = {
   Grid: [],
   Heading: ["level", "text"],
   Text: ["as", "text"],
+  RichText: ["value"],
   Label: ["text"],
   Divider: ["orientation"],
   Link: ["to", "newTab", "label"],
@@ -407,6 +409,8 @@ function baseProp(value: unknown): unknown {
   return (value as { base: unknown }).base;
 }
 function validatePrimitive(type: string, props: Record<string, unknown>): void {
+  if (type === "RichText")
+    props.value = fieldValue({ type: "richText", required: true }, jsonValue(props.value));
   const fail = () => {
     throw new Error("CMS_PROP_INVALID");
   };

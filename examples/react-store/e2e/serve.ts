@@ -121,7 +121,7 @@ const fixture = createServer(async (req, res) => {
       page: { objectId: id, versionId: id, path: "/store", params: {} },
       document,
       components: {},
-      data: {},
+      data: editor.contentData,
       dataSources: {},
     }),
   );

@@ -87,6 +87,9 @@ importers:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.2.2)(react@19.2.5)
     devDependencies:
+      '@cms/component-registry':
+        specifier: workspace:*
+        version: link:../../packages/component-registry
       '@types/jsdom':
         specifier: 21.1.7
         version: 21.1.7

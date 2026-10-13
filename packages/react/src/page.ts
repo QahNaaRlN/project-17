@@ -1,4 +1,5 @@
 import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
+import { RichText, type RichTextResources } from "./rich-text.js";
 import {
   executeActions,
   linkHref,
@@ -19,6 +20,7 @@ export interface NativeProps<V = Record<string, unknown>> {
 }
 export type NativeRegistry = Record<string, ComponentType<NativeProps>>;
 export interface CmsPageProps {
+  richText?: RichTextResources;
   plan: RenderPlan;
   registry?: NativeRegistry;
   actions?: readonly RuntimeAction[];
@@ -31,6 +33,7 @@ export interface CmsPageProps {
 
 /** Render only plans prepared on a trusted server. Native code is application-owned. */
 export function CmsPage({
+  richText,
   plan,
   registry = {},
   actions = [],
@@ -101,6 +104,16 @@ export function CmsPage({
         return createElement(`h${props.level ?? 2}`, common, String(props.text));
       case "Text":
         return createElement(String(props.as ?? "p"), common, String(props.text));
+      case "RichText":
+        return createElement(
+          "div",
+          common,
+          createElement(RichText, {
+            ...richText,
+            value: props.value,
+            anchorPrefix: node.key.slice(0, -node.id.length),
+          }),
+        );
       case "Label":
         return createElement("span", common, String(props.text));
       case "Divider":

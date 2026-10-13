@@ -27,5 +27,6 @@ Studio не выдаёт доступность вставки за разреш
 [Review/publish UI](studio-publishing.md) реализован следующим пакетом.
 Универсальный OIDC-вход реализован в [отдельном пакете](studio-identity.md),
 реальный IdP/deploy ещё не настроены. CodeMirror/JSON diff реализован в
-[пакете JSON](studio-json-diff.md). Далее: content editor, SSE/presence и Agent.
+[пакете JSON](studio-json-diff.md). Content editor реализован в [пакете контента](studio-content.md).
+Далее: SSE/presence и Agent.
 Междокументный буфер, wrap и component.extract остаются отдельными задачами.

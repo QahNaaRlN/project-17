@@ -79,6 +79,14 @@ X-CMS-Project: store
 
 ### 3.2. Каталог команд
 
+Операции изменения существующего entity/asset могут передать top-level
+`expectedVersionId` (UUID). Он сравнивается с исходной working/head версией под
+той же транзакционной блокировкой, что и публикация. Несовпадение даёт
+`CONTENT_VERSION_CONFLICT` (409), вся группа откатывается. Studio всегда передаёт
+его при изменении полей/метаданных, delete/restore и replaceFile. Создание объектов
+не принимает этот параметр. Он не входит в журнал или inverse; повторы команды
+используют исходные ключ, CS/seq, версию и тело (STU-104).
+
 | Команда | Payload | Право |
 |---|---|---|
 | `create-changeset` | `title`, `description?`, `targets?` | любое право записи |
@@ -121,6 +129,8 @@ X-CMS-Project: store
 | `GET /api/v1/changesets?state=&owner=` | Список CS |
 | `GET /api/v1/pages?environment=&after=` | Каталог страниц: head и свои рабочие страницы; `design.read`, 50 записей и `nextCursor` (STU-040/044) |
 | `GET /api/v1/working-drafts?environment=&documentId=&after=` | Свои open/standard CS выбранной страницы и окружения; `design.read`, 50 записей и `nextCursor` (STU-041/044) |
+| `GET /api/v1/content-catalog?environment=&changesetId=&kind=&schema=&after=` | Сущности/ассеты из working текущего CS или head, фильтрация до LIMIT 50, tombstones CS, nextCursor и locales/defaultLocale проекта; content.read (STU-100/101) |
+| `GET /api/v1/content/{id}?environment=&changesetId=` | Тот же working/head, контракт выбранного standard target CS; `{id,kind,schema?,schemaVersion?,versionId,deleted,data}`. Версия схемы проверяется без upcast; content.read (STU-100/101) |
 | `GET /api/v1/changesets/{id}` | CS с объектами, проверками, согласованиями, `needsAttention` и `manifestDiagnostics` по окружениям (CHG-034); для CS схем — кандидат и исходный manifest (MF-025) |
 | `GET /api/v1/changesets/{id}/operations?afterSeq=` | Операции |
 | `GET /api/v1/changesets/{id}/history?beforeSeq=` | Метаданные 20 целых действий CS и canUndo/canRedo в одном снимке; design.read (STU-050) |

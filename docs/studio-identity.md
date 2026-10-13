@@ -49,5 +49,5 @@ PKCE exchange и PostgreSQL; два OIDC-входа проверяют авто�
 
 Structure с CodeMirror/JSON diff реализован в [пакете JSON](studio-json-diff.md)
 (STU-010/011, STU-090…094): правка преобразуется в операции с историей,
-сервер проверяет IR/manifest. Следующий UI-пакет — content editor;
-SSE/presence и Agent остаются независимыми направлениями.
+сервер проверяет IR/manifest. Content editor реализован в [пакете контента](studio-content.md).
+Следующий UI-пакет — SSE/presence; Agent остаётся независимым направлением.

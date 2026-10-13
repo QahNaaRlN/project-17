@@ -100,6 +100,22 @@ export function persist(session: Session, operations: Operation[]) {
 }
 export function mockApi(session = fixture()) {
   const api: Api = {
+    contentCatalog: vi.fn(async () => ({
+      items: [],
+      nextCursor: null,
+      locales: ["ru", "en"],
+      defaultLocale: "ru",
+    })),
+    content: vi.fn(async () => {
+      throw new Error("no fixture");
+    }),
+    applyContent: vi.fn(async () => []),
+    uploadCommand: vi.fn(async () => {
+      throw new Error("no fixture");
+    }),
+    uploadStatus: vi.fn(async () => {
+      throw new Error("no fixture");
+    }),
     account: vi.fn(async () => ({ authenticated: false, rights: [], hasAccess: false })),
     logout: vi.fn(async () => {}),
     workItems: vi.fn(async () => ({ items: [], nextCursor: null })),

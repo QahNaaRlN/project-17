@@ -4,6 +4,35 @@ import { cms, id, page, image, now } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
 afterEach(() => vi.restoreAllMocks());
 describe("STORE-001/005/006/007: чтение CMS", () => {
+  it("STU-102/104: данные контента страницы доступны RichText и preview reload", async () => {
+    const c = cms(),
+      data = page(catalog);
+    data.document.nodes.n_store!.children!.push("n_rich");
+    data.document.nodes.n_rich = {
+      id: "n_rich",
+      type: "RichText",
+      bindings: { value: "$data.article.body" },
+    };
+    data.data = {
+      article: {
+        body: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "CMS article" }] }],
+        },
+      },
+    };
+    vi.mocked(c.getPage).mockResolvedValue(data);
+    const result = await loadStore(
+      c,
+      "/store",
+      { preview: { token: "test", changesetId: id } },
+      { studioOrigin: "https://studio.test", manifestHash: "sha256:" + "a".repeat(64) },
+    );
+    expect(result.status).toBe("ready");
+    expect(JSON.stringify(result.plan)).toContain("CMS article");
+    expect(result.bridge!.data).toMatchObject(data.data);
+    expect(result.bridge!.data).toHaveProperty("featured");
+  });
   it("SDK-032/STU-033: рендерит локальный перевод в запрошенной локали", async () => {
     const c = cms(),
       data = page(catalog);

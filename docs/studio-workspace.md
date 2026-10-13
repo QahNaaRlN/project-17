@@ -40,8 +40,8 @@ head (как у существующего чтения/редактирован
 создание и сохранение после открытия. Пороги покрытия сохраняются.
 
 Пакет не завершает M4. CodeMirror/JSON diff подключён в
-[пакете JSON](studio-json-diff.md). Остались
-content editor, SSE/presence и Agent. [Review/publish](studio-publishing.md), история и undo/redo теперь
+[пакете JSON](studio-json-diff.md). Content editor подключён в [пакете контента](studio-content.md).
+Остались SSE/presence и Agent. [Review/publish](studio-publishing.md), история и undo/redo теперь
 реализованы в [следующем пакете](studio-history.md).
 Палитра, DnD/перемещение, удаление и дублирование реализованы
 в [пакете структуры](studio-structure.md).

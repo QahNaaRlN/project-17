@@ -13,7 +13,10 @@ export function WorkItems({ api, editor }: { api: Api; editor: Editor }) {
     retry: false,
   });
   const busy =
-    ["loading", "saving", "uncertain"].includes(state.status) || !!state.dirtyFields.json;
+    ["loading", "saving", "uncertain"].includes(state.status) ||
+    !!state.dirtyFields.json ||
+    !!state.dirtyFields.content ||
+    !!state.dirtyFields.contentUpload;
   const states: Record<string, string> = ru
     ? {
         open: "В работе",

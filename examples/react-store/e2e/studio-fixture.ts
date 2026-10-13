@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import { createStudioHandler } from "../../../apps/studio/src/handler.js";
 import type { PageResponse } from "@cms/core";
 type IrDocument = PageResponse["document"];
-import type { HistoryAction } from "../../../apps/studio/src/types.js";
+import type {
+  HistoryAction,
+  ContentRecord,
+  ContentOperation,
+} from "../../../apps/studio/src/types.js";
+import { createHash } from "node:crypto";
 import { applyOperations } from "../../../apps/studio/src/operations.js";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
@@ -15,6 +20,36 @@ export async function studioFixture(id: string, previewToken: string) {
   const manifest = JSON.parse(
     await readFile(new URL("../.cms/manifest.json", import.meta.url), "utf8"),
   );
+  manifest.schemas = {
+    ...manifest.schemas,
+    Article: {
+      version: 1,
+      title: "Статья",
+      fields: {
+        title: { type: "text", localized: true, required: true },
+        body: { type: "richText" },
+        cover: { type: "asset", assetKind: "image" },
+      },
+    },
+  };
+  const entityId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c55",
+    assetId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c66",
+    newEntityId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c77",
+    uploadId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c88";
+  let content: Record<string, ContentRecord> = {};
+  const contentKeys = new Map<string, { body: string; result: unknown }>(),
+    uploadKeys = new Map<string, { body: string; result: unknown }>();
+  let upload:
+    | {
+        assetId: string;
+        status: string;
+        expiresAt: string;
+        fileHash?: string;
+        errorCode?: string;
+        uploadUrl?: string;
+      }
+    | undefined;
+  let uploadExpected: { sha256: string; size: number } | undefined, uploaded: Buffer | undefined;
   const studio = createStudioHandler(
     {
       baseUrl: "http://127.0.0.1:18084",
@@ -23,6 +58,7 @@ export async function studioFixture(id: string, previewToken: string) {
       project: "local-demo",
       environment: "staging",
       credential,
+      assetUploadOrigin: "http://127.0.0.1:18084",
     },
     fileURLToPath(new URL("../../../apps/studio/dist/client", import.meta.url)),
   );
@@ -52,10 +88,17 @@ export async function studioFixture(id: string, previewToken: string) {
       project: "local-demo",
       environment: "staging",
       authMode: "oidc",
+      assetUploadOrigin: "http://127.0.0.1:18084",
     },
     fileURLToPath(new URL("../../../apps/studio/dist/client", import.meta.url)),
   );
-  type Edit = { before: IrDocument; after: IrDocument; operations: HistoryAction["operations"] };
+  type Edit = {
+    before: IrDocument;
+    after: IrDocument;
+    operations: HistoryAction["operations"];
+    contentBefore?: Record<string, ContentRecord>;
+    contentAfter?: Record<string, ContentRecord>;
+  };
   const undoStack: Edit[] = [],
     redoStack: Edit[] = [],
     actions: HistoryAction[] = [];
@@ -89,6 +132,41 @@ export async function studioFixture(id: string, previewToken: string) {
     redoStack.length = 0;
     actions.length = 0;
     historyKeys.clear();
+    contentKeys.clear();
+    uploadKeys.clear();
+    upload = undefined;
+    uploaded = undefined;
+    uploadExpected = undefined;
+    content = {
+      [entityId]: {
+        id: entityId,
+        versionId: entityId,
+        kind: "entity",
+        schema: "Article",
+        schemaVersion: 1,
+        deleted: false,
+        data: {
+          title: { ru: "Статья", en: "Keep" },
+          body: {
+            type: "doc",
+            content: [{ type: "paragraph", content: [{ type: "text", text: "Rich before" }] }],
+          },
+        },
+      },
+      [assetId]: {
+        id: assetId,
+        versionId: assetId,
+        kind: "asset",
+        deleted: false,
+        data: {
+          title: "Picture",
+          alt: { ru: "До", en: "Keep" },
+          assetKind: "image",
+          mimeType: "image/png",
+          fileHash: "a".repeat(64),
+        },
+      },
+    };
     historyId = 0;
     draftTitles.clear();
     createKeys.clear();
@@ -110,6 +188,12 @@ export async function studioFixture(id: string, previewToken: string) {
     document.localContent = {
       t_title: { type: "text", value: { ru: "Заголовок черновика", en: "Draft heading" } },
     };
+    document.nodes.n_store!.children!.push("n_rich");
+    document.nodes.n_rich = {
+      id: "n_rich",
+      type: "RichText",
+      bindings: { value: "$data.article.body" },
+    };
   }
   reset(false);
   const changeset = (draftId = id) => ({
@@ -129,8 +213,28 @@ export async function studioFixture(id: string, previewToken: string) {
     get document() {
       return active ? document : null;
     },
+    get contentData() {
+      return active && !content[entityId]!.deleted ? { article: content[entityId]!.data } : {};
+    },
     async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
       const path = new URL(req.url ?? "/", "http://127.0.0.1:18084").pathname;
+      if (path === `/upload/${uploadId}` && req.method === "PUT") {
+        if (
+          !upload ||
+          new URL(req.url!, "http://127.0.0.1").searchParams.get("sig") !== "test-presigned" ||
+          req.headers.authorization ||
+          req.headers.cookie
+        ) {
+          res.writeHead(403);
+          res.end();
+          return true;
+        }
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(Buffer.from(chunk));
+        uploaded = Buffer.concat(chunks);
+        res.end();
+        return true;
+      }
       if (
         path === "/editor" ||
         path.startsWith("/api/studio/") ||
@@ -181,6 +285,54 @@ export async function studioFixture(id: string, previewToken: string) {
         return true;
       }
       const owner = !identity.enabled || who?.id === id;
+      if (path === "/api/v1/content-catalog") {
+        const query = new URL(req.url!, "http://127.0.0.1").searchParams;
+        res.end(
+          JSON.stringify({
+            items: Object.values(content)
+              .filter(
+                (r) =>
+                  r.kind === query.get("kind") &&
+                  (!query.get("schema") || r.schema === query.get("schema")),
+              )
+              .map((r) => ({
+                id: r.id,
+                kind: r.kind,
+                schema: r.schema,
+                title:
+                  r.kind === "entity"
+                    ? String(
+                        (r.data.title as Record<string, unknown> | undefined)?.ru ?? "Новая статья",
+                      )
+                    : String(r.data.title ?? "Файл"),
+                deleted: r.deleted,
+                assetKind: r.data.assetKind,
+                mimeType: r.data.mimeType,
+              })),
+            nextCursor: null,
+            locales: ["ru", "en"],
+            defaultLocale: "ru",
+          }),
+        );
+        return true;
+      }
+      if (path.startsWith("/api/v1/content/")) {
+        const record = content[path.split("/").at(-1)!];
+        if (!record) {
+          fail(404, "NOT_FOUND");
+          return true;
+        }
+        res.end(JSON.stringify(record));
+        return true;
+      }
+      if (path === `/api/v1/asset-uploads/${uploadId}`) {
+        if (!upload) {
+          fail(404, "NOT_FOUND");
+          return true;
+        }
+        res.end(JSON.stringify(upload));
+        return true;
+      }
       if (path === "/api/v1/work-items") {
         res.end(
           JSON.stringify({
@@ -282,7 +434,10 @@ export async function studioFixture(id: string, previewToken: string) {
           new URL(req.url!, "http://127.0.0.1").searchParams.get("beforeSeq") ?? 2147483647,
         );
         const items = actions.filter((item) => item.lastSeq < before);
-        const canUndo = state === "open" && undoStack.length > 0,
+        const unsupportedUndo = undoStack
+          .at(-1)
+          ?.operations.some((op) => ["entity.create", "asset.create"].includes(op.type));
+        const canUndo = state === "open" && undoStack.length > 0 && !unsupportedUndo,
           canRedo = state === "open" && redoStack.length > 0;
         res.end(
           JSON.stringify({
@@ -295,7 +450,9 @@ export async function studioFixture(id: string, previewToken: string) {
               ? null
               : state !== "open"
                 ? "CHANGESET_STATE_INVALID"
-                : "NOTHING_TO_UNDO",
+                : unsupportedUndo
+                  ? "UNDO_NOT_SUPPORTED"
+                  : "NOTHING_TO_UNDO",
             redoReason: canRedo
               ? null
               : state !== "open"
@@ -461,6 +618,8 @@ export async function studioFixture(id: string, previewToken: string) {
           return true;
         }
         document = structuredClone(undo ? edit.before : edit.after);
+        const snapshot = undo ? edit.contentBefore : edit.contentAfter;
+        if (snapshot) content = structuredClone(snapshot);
         (undo ? redoStack : undoStack).push(edit);
         logHistory(undo ? "undo" : "redo", edit.operations);
         historyKeys.set(key, { body, seq });
@@ -505,8 +664,151 @@ export async function studioFixture(id: string, previewToken: string) {
         );
         return true;
       }
+      if (path.endsWith("create-asset-upload") || path.endsWith("complete-asset-upload")) {
+        const key = String(req.headers["idempotency-key"]),
+          prior = uploadKeys.get(key);
+        if (prior) {
+          if (prior.body !== body) {
+            fail(409, "IDEMPOTENCY_KEY_CONFLICT");
+            return true;
+          }
+          res.end(JSON.stringify({ result: prior.result }));
+          return true;
+        }
+        if (path.endsWith("create-asset-upload")) {
+          uploadExpected = envelope.payload;
+          upload = {
+            assetId: uploadId,
+            status: "pending",
+            expiresAt: new Date(Date.now() + 900000).toISOString(),
+            uploadUrl: `http://127.0.0.1:18084/upload/${uploadId}?sig=test-presigned`,
+          };
+        } else {
+          const valid =
+            uploaded &&
+            uploaded.length === uploadExpected?.size &&
+            createHash("sha256").update(uploaded).digest("hex") === uploadExpected?.sha256;
+          upload = {
+            ...upload!,
+            status: valid ? "ready" : "rejected",
+            ...(valid
+              ? { fileHash: createHash("sha256").update(uploaded!).digest("hex") }
+              : { errorCode: "ASSET_HASH_MISMATCH" }),
+          };
+        }
+        uploadKeys.set(key, { body, result: structuredClone(upload) });
+        if (fault === "upload-lost") {
+          fault = "";
+          fail(503, "STUDIO_RESPONSE_LOST");
+          return true;
+        }
+        res.end(JSON.stringify({ result: upload }));
+        return true;
+      }
       if (path !== "/api/v1/commands/apply-operations") {
         fail(404, "NOT_FOUND");
+        return true;
+      }
+      const contentOps = envelope.payload.operations as ContentOperation[];
+      if (contentOps.some((op) => op.type.startsWith("entity.") || op.type.startsWith("asset."))) {
+        const key = String(req.headers["idempotency-key"]),
+          prior = contentKeys.get(key);
+        if (prior) {
+          if (prior.body !== body) {
+            fail(409, "IDEMPOTENCY_KEY_CONFLICT");
+            return true;
+          }
+          res.end(JSON.stringify({ result: prior.result }));
+          return true;
+        }
+        if (fault === "reject") {
+          fail(403, "FORBIDDEN");
+          return true;
+        }
+        if (fault === "conflict") {
+          seq++;
+          fail(409, "CHANGESET_SEQ_CONFLICT");
+          return true;
+        }
+        if (!owner || state !== "open" || envelope.payload.expectedSeq !== seq) {
+          fail(
+            409,
+            !owner
+              ? "CHANGESET_NOT_OWNER"
+              : state !== "open"
+                ? "CHANGESET_STATE_INVALID"
+                : "CHANGESET_SEQ_CONFLICT",
+          );
+          return true;
+        }
+        const contentBefore = structuredClone(content),
+          before = structuredClone(document);
+        if (
+          contentOps.some(
+            (op) => op.expectedVersionId && content[op.target!]?.versionId !== op.expectedVersionId,
+          )
+        ) {
+          fail(409, "CONTENT_VERSION_CONFLICT");
+          return true;
+        }
+        const operations = contentOps.map((op) => {
+          const target = op.target ?? (op.type === "entity.create" ? newEntityId : uploadId);
+          if (op.type === "entity.create")
+            content[target] = {
+              id: target,
+              versionId: target,
+              kind: "entity",
+              schema: String(op.payload.schema),
+              schemaVersion: 1,
+              deleted: false,
+              data: structuredClone(op.payload.data as Record<string, unknown>),
+            };
+          else if (op.type === "asset.create")
+            content[target] = {
+              id: target,
+              versionId: target,
+              kind: "asset",
+              deleted: false,
+              data: { fileHash: upload!.fileHash, mimeType: "image/png", assetKind: "image" },
+            };
+          else if (op.type === "entity.delete" || op.type === "entity.restore")
+            content[target]!.deleted = op.type === "entity.delete";
+          else {
+            const data = content[target]!.data;
+            for (const [path, v] of Object.entries((op.payload.set as object) ?? {})) {
+              const [name, locale] = path.split(".");
+              if (locale) (data[name!] ??= {}) as object;
+              if (locale) (data[name!] as Record<string, unknown>)[locale] = v;
+              else data[name!] = v;
+            }
+            for (const path of (op.payload.unset as string[]) ?? []) {
+              const [name, locale] = path.split(".");
+              if (locale) delete (data[name!] as Record<string, unknown>)[locale];
+              else delete data[name!];
+            }
+          }
+          return { type: op.type, target, status: "applied" };
+        });
+        undoStack.push({
+          before,
+          after: structuredClone(document),
+          operations,
+          contentBefore,
+          contentAfter: structuredClone(content),
+        });
+        redoStack.length = 0;
+        logHistory("edit", operations);
+        const result = {
+          changeset: changeset(),
+          operations: operations.map(({ type, target }) => ({ type, target })),
+        };
+        contentKeys.set(key, { body, result });
+        if (fault === "lost") {
+          fault = "";
+          fail(503, "STUDIO_RESPONSE_LOST");
+          return true;
+        }
+        res.end(JSON.stringify({ result }));
         return true;
       }
       if (fault === "reject") {
