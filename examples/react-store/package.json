@@ -26,6 +26,7 @@
     "@cms/component-registry": "workspace:*"
   },
   "devDependencies": {
+    "@cms/ir": "workspace:*",
     "@cms/manifest": "workspace:*",
     "@playwright/test": "1.56.1",
     "@tailwindcss/vite": "4.3.0",

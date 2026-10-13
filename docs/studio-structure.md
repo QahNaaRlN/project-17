@@ -26,5 +26,6 @@ Studio не выдаёт доступность вставки за разреш
 Это частичный M4, STU-003/020 и часть STU-023/032/033.
 [Review/publish UI](studio-publishing.md) реализован следующим пакетом.
 Универсальный OIDC-вход реализован в [отдельном пакете](studio-identity.md),
-реальный IdP/deploy ещё не настроены. Далее: SSE/presence, content editor и Agent. CodeMirror/JSON diff,
-междокументный буфер, wrap и component.extract остаются отдельными задачами.
+реальный IdP/deploy ещё не настроены. CodeMirror/JSON diff реализован в
+[пакете JSON](studio-json-diff.md). Далее: content editor, SSE/presence и Agent.
+Междокументный буфер, wrap и component.extract остаются отдельными задачами.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { useStore } from "zustand";
 import { useQuery } from "@tanstack/react-query";
 import type { Node } from "@cms/ir";
@@ -10,6 +10,7 @@ import { HistoryPanel } from "./history.js";
 import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
+const JsonPanel = lazy(() => import("./json-panel.js"));
 const copy = {
   ru: {
     page: "Страница",
@@ -91,6 +92,7 @@ const copy = {
 type Copy = typeof copy.ru;
 const errorText: Record<"ru" | "en", Record<string, string>> = {
   ru: {
+    JSON_DRAFT_PENDING: "Сохраните JSON или сбросьте ввод перед переходом к другой правке.",
     FORBIDDEN: "У вашей учётной записи нет права на эту правку.",
     CHANGESET_NOT_OWNER: "Этот черновик принадлежит другому пользователю.",
     CHANGESET_SEQ_CONFLICT: "Черновик изменился. Проверьте актуальную версию и повторите правку.",
@@ -103,6 +105,7 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
     PREVIEW_DOCUMENT_MISMATCH: "Приложение открыло другую страницу. Проверьте её маршрут.",
   },
   en: {
+    JSON_DRAFT_PENDING: "Save JSON or discard the input before starting another change.",
     FORBIDDEN: "Your account cannot make this change.",
     CHANGESET_NOT_OWNER: "This Change Set belongs to another user.",
     CHANGESET_SEQ_CONFLICT: "The draft changed. Check its current version and try again.",
@@ -329,8 +332,10 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
   const tree = doc ? layers(doc) : [],
     selected = doc && state.selected ? doc.nodes[state.selected] : undefined;
   const busy = ["saving", "loading", "uncertain"].includes(state.status);
+  const jsonDirty = !!state.dirtyFields.json;
   const disabled =
     busy ||
+    jsonDirty ||
     !session?.review.canEdit ||
     session?.changeset.state !== "open" ||
     tree.find((item) => item.id === state.selected)?.locked === true;
@@ -364,13 +369,32 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
           </select>
         </label>
       </header>
-      <Workspace {...{ api, editor, busy }} locale={state.locale} />
+      <Workspace {...{ api, editor }} busy={busy || jsonDirty} locale={state.locale} />
       <WorkItems api={api} editor={editor} />
       {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
       <div className="workspace">
         <StructurePanel editor={editor} />
         <section className="canvas" aria-label={t.preview}>
           <div className="canvas-tools">
+            <div
+              role="group"
+              aria-label={state.locale === "ru" ? "Представление редактора" : "Editor view"}
+            >
+              <button
+                aria-pressed={state.viewMode === "visual"}
+                disabled={jsonDirty}
+                onClick={() => editor.viewMode("visual")}
+              >
+                {state.locale === "ru" ? "Визуальный" : "Visual"}
+              </button>
+              <button
+                aria-pressed={state.viewMode === "structure"}
+                disabled={jsonDirty}
+                onClick={() => editor.viewMode("structure")}
+              >
+                Structure
+              </button>
+            </div>
             <div role="group" aria-label={t.mode}>
               <button aria-pressed={state.mode === "design"} onClick={() => editor.mode("design")}>
                 {t.design}
@@ -395,6 +419,11 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
               </select>
             </label>
           </div>
+          {state.viewMode === "structure" && session && doc && (
+            <Suspense fallback={<p role="status">{t.loading}</p>}>
+              <JsonPanel key={session.changeset.id + ":" + session.record.id} editor={editor} />
+            </Suspense>
+          )}
           {state.previewError && (
             <div role="alert" className="preview-error">
               {errorText[state.locale][state.previewError] ?? state.previewError}

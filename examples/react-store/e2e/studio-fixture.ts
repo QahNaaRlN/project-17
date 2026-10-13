@@ -5,7 +5,7 @@ import { createStudioHandler } from "../../../apps/studio/src/handler.js";
 import type { PageResponse } from "@cms/core";
 type IrDocument = PageResponse["document"];
 import type { HistoryAction } from "../../../apps/studio/src/types.js";
-import { structuralApply } from "../../../apps/studio/src/structure.js";
+import { applyOperations } from "../../../apps/studio/src/operations.js";
 import { catalog } from "../scripts/catalog.js";
 import { storeDocument } from "../src/composition.js";
 import { identityBoundary } from "./identity-boundary.js";
@@ -134,7 +134,7 @@ export async function studioFixture(id: string, previewToken: string) {
       if (
         path === "/editor" ||
         path.startsWith("/api/studio/") ||
-        path.startsWith("/assets/index-")
+        (path.startsWith("/assets/") && /\.(js|css)$/.test(path))
       ) {
         await (identity.enabled ? userStudio : studio)(req, res);
         return true;
@@ -527,23 +527,7 @@ export async function studioFixture(id: string, previewToken: string) {
         return true;
       }
       const before = structuredClone(document);
-      for (const op of envelope.payload.operations) {
-        const p = op.payload;
-        if (op.type === "localContent.set")
-          (document.localContent ??= {})[p.key] = {
-            type: "text",
-            value: p.locale ? { [p.locale]: p.value } : p.value,
-          };
-        else if (["node.insert", "node.remove", "node.move"].includes(op.type))
-          structuralApply(document, op);
-        else if (op.type === "node.setBinding")
-          (document.nodes[p.nodeId]!.bindings ??= {})[p.prop] = p.binding;
-        else
-          Object.assign(
-            (document.nodes[p.nodeId]![op.type === "node.setDesign" ? "design" : "props"] ??= {}),
-            p.set,
-          );
-      }
+      document = applyOperations(document, envelope.payload.operations);
       const operations = envelope.payload.operations.map(
         (op: { type: string; target: string }) => ({
           type: op.type,

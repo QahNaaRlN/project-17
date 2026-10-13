@@ -1,0 +1,215 @@
+{
+  "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+  "before": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_group", "n_tail"]
+      },
+      "n_group": {
+        "id": "n_group",
+        "type": "Stack",
+        "children": ["n_heading"]
+      },
+      "n_heading": {
+        "id": "n_heading",
+        "type": "Heading",
+        "props": {
+          "level": 2,
+          "text": "Original"
+        }
+      },
+      "n_tail": {
+        "id": "n_tail",
+        "type": "Box"
+      }
+    }
+  },
+  "after": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": ["n_tail", "n_new"]
+      },
+      "n_heading": {
+        "id": "n_heading",
+        "type": "Heading",
+        "name": "JSON title",
+        "props": {
+          "level": 3
+        },
+        "bindings": {
+          "text": "$local.t_title"
+        },
+        "when": {
+          "op": "exists",
+          "arg": "$local.t_title"
+        },
+        "on": {
+          "click": {
+            "action": "scrollTo",
+            "args": {
+              "target": {
+                "lit": "n_tail"
+              }
+            }
+          }
+        }
+      },
+      "n_tail": {
+        "id": "n_tail",
+        "type": "Box",
+        "design": {
+          "padding": "sm"
+        }
+      },
+      "n_new": {
+        "id": "n_new",
+        "type": "Stack",
+        "children": ["n_heading", "n_new_child"]
+      },
+      "n_new_child": {
+        "id": "n_new_child",
+        "type": "Text",
+        "props": {
+          "text": "New"
+        }
+      }
+    },
+    "localContent": {
+      "t_title": {
+        "type": "text",
+        "value": {
+          "ru": "Из JSON",
+          "en": "From JSON"
+        }
+      }
+    }
+  },
+  "operations": [
+    {
+      "type": "node.insert",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "parentId": "n_root",
+        "slot": "",
+        "index": 2,
+        "subtree": {
+          "id": "n_new",
+          "type": "Stack",
+          "children": [
+            {
+              "id": "n_new_child",
+              "type": "Text",
+              "props": {
+                "text": "New"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "node.move",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "parentId": "n_new",
+        "slot": "",
+        "index": 0
+      }
+    },
+    {
+      "type": "node.remove",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_group"
+      }
+    },
+    {
+      "type": "node.setProps",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "set": {
+          "level": 3
+        },
+        "unset": ["text"]
+      }
+    },
+    {
+      "type": "node.setBinding",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "prop": "text",
+        "binding": "$local.t_title"
+      }
+    },
+    {
+      "type": "node.setBehavior",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "event": "click",
+        "handlers": {
+          "action": "scrollTo",
+          "args": {
+            "target": {
+              "lit": "n_tail"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "node.rename",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "name": "JSON title"
+      }
+    },
+    {
+      "type": "node.setCondition",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_heading",
+        "when": {
+          "op": "exists",
+          "arg": "$local.t_title"
+        }
+      }
+    },
+    {
+      "type": "node.setDesign",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "nodeId": "n_tail",
+        "set": {
+          "padding": "sm"
+        }
+      }
+    },
+    {
+      "type": "localContent.set",
+      "target": "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+      "payload": {
+        "key": "t_title",
+        "type": "text",
+        "value": {
+          "ru": "Из JSON",
+          "en": "From JSON"
+        }
+      }
+    }
+  ]
+}

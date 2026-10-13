@@ -34,7 +34,11 @@ export interface Operation {
     | "node.setProps"
     | "node.setDesign"
     | "node.setBinding"
+    | "node.rename"
+    | "node.setCondition"
+    | "node.setBehavior"
     | "localContent.set"
+    | "localContent.remove"
     | "node.insert"
     | "node.remove"
     | "node.move";
