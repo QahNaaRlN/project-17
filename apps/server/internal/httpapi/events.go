@@ -79,7 +79,21 @@ func eventsHandler(d Deps) http.HandlerFunc {
 		defer poll.Stop()
 		first := true
 		ticks := 0
+		agentCursor := ""
 		for {
+			if d.Agents != nil {
+				var signal string
+				err := d.Pool.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'state',state,'stepSeq',step_seq) ORDER BY created_at DESC),'[]')::text FROM (SELECT id,state,step_seq,created_at FROM agent_runs WHERE project_id=$1 AND owner_id=$2 AND document_id=$3 AND changeset_id=$4 AND environment=$5 ORDER BY created_at DESC LIMIT 10) r`, actor.ProjectID, actor.ID, scope.DocumentID, scope.ChangesetID, scope.Environment).Scan(&signal)
+				if err != nil {
+					return
+				}
+				if signal != agentCursor {
+					if err = emit("agent", "", map[string]any{"items": json.RawMessage(signal)}); err != nil {
+						return
+					}
+					agentCursor = signal
+				}
+			}
 			var revision string
 			err := d.Pool.QueryRow(ctx, `SELECT COALESCE((SELECT revision FROM project_revisions WHERE project_id=$1),0)::text`, actor.ProjectID).Scan(&revision)
 			if err != nil {

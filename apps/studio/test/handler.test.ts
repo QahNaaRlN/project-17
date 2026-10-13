@@ -14,6 +14,42 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-124/125: Agent proxy scopes reads and writes and excludes provider/session secrets", async () => {
+  const { origin, post, fetcher } = await setup();
+  const path = `/api/studio/api/v1/agent-runs?environment=staging&documentId=${documentId}&changesetId=${changesetId}`;
+  expect((await fetch(origin + path)).status).toBe(200);
+  expect((await fetch(origin + path + "&after=1")).status).toBe(400);
+  expect(
+    (await fetch(origin + path.replace("environment=staging", "environment=production"))).status,
+  ).toBe(403);
+  expect((await fetch(origin + "/api/studio/api/v1/agent-config")).status).toBe(200);
+  const payload = {
+    documentId,
+    changesetId,
+    environment: "staging",
+    expectedSeq: 1,
+    prompt: "Compose page",
+  };
+  const command = "/api/studio/api/v1/commands/start-agent-run";
+  expect((await post(command, { payload })).status).toBe(200);
+  expect((await post(command, { payload: { ...payload, model: "external" } })).status).toBe(400);
+  expect((await post(command, { payload: { ...payload, environment: "production" } })).status).toBe(
+    403,
+  );
+  expect((await post(command, { payload: { ...payload, expectedSeq: -1 } })).status).toBe(400);
+  expect(
+    (await post("/api/studio/api/v1/commands/cancel-agent-run", { payload: { runId: documentId } }))
+      .status,
+  ).toBe(200);
+  expect(
+    (await post("/api/studio/api/v1/commands/cancel-agent-run", { payload: { runId: "bad" } }))
+      .status,
+  ).toBe(400);
+  expect(
+    (await post("/api/studio/api/v1/commands/start-agent-session", { payload: {} })).status,
+  ).toBe(404);
+  expect(fetcher.mock.calls.some(([input]) => String(input).includes("openrouter"))).toBe(false);
+});
 it("STU-110/113: SSE streams immediately; adapter validates scope and cancels on disconnect", async () => {
   const { origin, fetcher, post } = await setup();
   const path = `/api/studio/api/v1/events?environment=staging&documentId=${documentId}&changesetId=${changesetId}`;

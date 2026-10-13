@@ -95,6 +95,8 @@ export function createStudioHandler(
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const allowedGet =
+          path === "/api/v1/agent-config" ||
+          path === "/api/v1/agent-runs" ||
           path === "/api/v1/events" ||
           path === "/api/v1/content-catalog" ||
           new RegExp(`^/api/v1/(content|asset-uploads)/${uuid}$`).test(path) ||
@@ -106,6 +108,8 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          "/api/v1/commands/start-agent-run",
+          "/api/v1/commands/cancel-agent-run",
           "/api/v1/commands/presence-heartbeat",
           "/api/v1/commands/presence-leave",
           "/api/v1/commands/create-asset-upload",
@@ -137,12 +141,16 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (path === "/api/v1/events") {
+          if (path === "/api/v1/events" || path === "/api/v1/agent-runs") {
             if (
               [...url.searchParams.keys()].some(
                 (key) =>
-                  !["environment", "documentId", "changesetId", "after"].includes(key) ||
-                  url.searchParams.getAll(key).length !== 1,
+                  ![
+                    "environment",
+                    "documentId",
+                    "changesetId",
+                    ...(path.endsWith("/events") ? ["after"] : []),
+                  ].includes(key) || url.searchParams.getAll(key).length !== 1,
               ) ||
               !new RegExp(`^${uuid}$`).test(url.searchParams.get("documentId") ?? "") ||
               !new RegExp(`^${uuid}$`).test(url.searchParams.get("changesetId") ?? "") ||
@@ -263,6 +271,33 @@ export function createStudioHandler(
             if (Object.keys(envelope.payload).some((key) => !allowed.includes(key)))
               return error(400, "PAYLOAD_INVALID");
           }
+          if (path.endsWith("/start-agent-run")) {
+            const p = envelope.payload;
+            if (
+              Object.keys(p).some(
+                (k) =>
+                  !["documentId", "changesetId", "environment", "expectedSeq", "prompt"].includes(
+                    k,
+                  ),
+              ) ||
+              !new RegExp(`^${uuid}$`).test(String(p.documentId)) ||
+              !new RegExp(`^${uuid}$`).test(String(p.changesetId)) ||
+              !Number.isSafeInteger(p.expectedSeq) ||
+              p.expectedSeq < 0 ||
+              typeof p.prompt !== "string" ||
+              !p.prompt.trim() ||
+              p.prompt.length > 16000
+            )
+              return error(400, "PAYLOAD_INVALID");
+            if (p.environment !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          }
+          if (
+            path.endsWith("/cancel-agent-run") &&
+            (Object.keys(envelope.payload).some((k) => k !== "runId") ||
+              !new RegExp(`^${uuid}$`).test(String(envelope.payload.runId)))
+          )
+            return error(400, "PAYLOAD_INVALID");
           if (
             [
               "submit-changeset",

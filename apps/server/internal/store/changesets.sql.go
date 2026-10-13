@@ -361,9 +361,9 @@ func (q *Queries) GetWorkingDocument(ctx context.Context, arg GetWorkingDocument
 
 const insertOperation = `-- name: InsertOperation :one
 INSERT INTO operations (id, project_id, changeset_id, seq, actor_id, source, target_object_id, type,
-                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name, batch_id, redo_of)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of
+                        payload, before, after, inverse, reason, client_op_id, undo_of, target_schema_name, batch_id, redo_of, on_behalf_of, agent_session_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+RETURNING id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of, agent_session_id
 `
 
 type InsertOperationParams struct {
@@ -385,6 +385,8 @@ type InsertOperationParams struct {
 	TargetSchemaName *string    `json:"targetSchemaName"`
 	BatchID          *uuid.UUID `json:"batchId"`
 	RedoOf           *uuid.UUID `json:"redoOf"`
+	OnBehalfOf       *uuid.UUID `json:"onBehalfOf"`
+	AgentSessionID   *uuid.UUID `json:"agentSessionId"`
 }
 
 func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams) (Operation, error) {
@@ -407,6 +409,8 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		arg.TargetSchemaName,
 		arg.BatchID,
 		arg.RedoOf,
+		arg.OnBehalfOf,
+		arg.AgentSessionID,
 	)
 	var i Operation
 	err := row.Scan(
@@ -431,12 +435,13 @@ func (q *Queries) InsertOperation(ctx context.Context, arg InsertOperationParams
 		&i.TargetSchemaName,
 		&i.BatchID,
 		&i.RedoOf,
+		&i.AgentSessionID,
 	)
 	return i, err
 }
 
 const lastUndoableOperation = `-- name: LastUndoableOperation :one
-SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at, o.target_schema_name, o.batch_id, o.redo_of FROM operations o
+SELECT o.id, o.project_id, o.changeset_id, o.seq, o.actor_id, o.on_behalf_of, o.source, o.target_object_id, o.type, o.payload, o.before, o.after, o.inverse, o.reason, o.client_op_id, o.undo_of, o.status, o.created_at, o.target_schema_name, o.batch_id, o.redo_of, o.agent_session_id FROM operations o
 WHERE o.changeset_id = $1 AND o.undo_of IS NULL AND o.status = 'applied'
   AND NOT EXISTS (SELECT 1 FROM operations u WHERE u.undo_of = o.id)
 ORDER BY o.seq DESC
@@ -469,6 +474,7 @@ func (q *Queries) LastUndoableOperation(ctx context.Context, changesetID uuid.UU
 		&i.TargetSchemaName,
 		&i.BatchID,
 		&i.RedoOf,
+		&i.AgentSessionID,
 	)
 	return i, err
 }
@@ -564,7 +570,7 @@ func (q *Queries) ListChangesets(ctx context.Context, arg ListChangesetsParams) 
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of, agent_session_id FROM operations WHERE changeset_id = $1 AND seq > $2 ORDER BY seq LIMIT 500
 `
 
 type ListOperationsParams struct {
@@ -603,6 +609,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 			&i.TargetSchemaName,
 			&i.BatchID,
 			&i.RedoOf,
+			&i.AgentSessionID,
 		); err != nil {
 			return nil, err
 		}

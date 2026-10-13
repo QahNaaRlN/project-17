@@ -25,6 +25,18 @@ func zoneRequired(required int, roles []string) int {
 	}
 	return required
 }
+func agentRequired(ctx context.Context, q *store.Queries, cs uuid.UUID, required int) (int, error) {
+	actors, err := q.ChangesetOperationActors(ctx, cs)
+	if err != nil {
+		return 0, err
+	}
+	for _, a := range actors {
+		if a.Source == "agent" {
+			return max(1, required), nil
+		}
+	}
+	return required, nil
+}
 func coverage(ctx context.Context, q *store.Queries, project, cs uuid.UUID, hash []byte, roles []string) (approvalCoverage, error) {
 	out := approvalCoverage{}
 	if len(roles) == 0 {
@@ -83,8 +95,25 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 	if err != nil {
 		return err
 	}
-	if len(requirements.Roles) == 0 && !requirements.Strict {
+	agentMinimum, err := agentRequired(ctx, q, cs.ID, 0)
+	if err != nil {
+		return err
+	}
+	if len(requirements.Roles) == 0 && !requirements.Strict && agentMinimum == 0 {
 		return nil
+	}
+	if agentMinimum > 0 {
+		actors, err := q.ChangesetOperationActors(ctx, cs.ID)
+		if err != nil {
+			return err
+		}
+		policy, err := policyCheck(ctx, q, cs.ProjectID, actors)
+		if err != nil {
+			return err
+		}
+		if policy.Status != "passed" {
+			return commandbus.NewError(403, "POLICY_DENIED", "Права авторов изменились", "Повторно подайте CS с действующими правами")
+		}
 	}
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
 	if err != nil {
@@ -106,6 +135,7 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 		risk = RiskHigh
 	}
 	required := zoneRequired(policy.Required(risk), requirements.Roles)
+	required = max(required, agentMinimum)
 	if len(status.missing) > 0 || status.count < required {
 		return commandbus.NewError(http.StatusConflict, "APPROVAL_ROLES_MISSING", "Требуется согласование защищённых зон", "Проверьте действующие роли согласующих").WithParams(map[string]any{"requiredRoles": requirements.Roles, "missingRequiredRoles": status.missing, "approvals": status.count, "requiredApprovals": required})
 	}

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/agents"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
@@ -113,11 +114,11 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	if cfg.CDNPurgeURL != "" {
 		purger = jobs.HTTPPurger{URL: cfg.CDNPurgeURL, Token: cfg.CDNPurgeToken}
 	}
-	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) })
+	bus := commandbus.New(pool)
+	agentService := &agents.Service{Pool: pool, Provider: agents.OpenRouter{Key: cfg.OpenRouterKey}, DefaultModel: cfg.OpenRouterModel}
+	agentService.Register(bus)
+	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) })
 	if err != nil {
-		return err
-	}
-	if err := queue.Start(ctx); err != nil {
 		return err
 	}
 	defer func() {
@@ -128,7 +129,6 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		}
 	}()
 
-	bus := commandbus.New(pool)
 	realtime.Register(bus)
 	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
@@ -139,13 +139,32 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	delivery.Register(bus)
 	manifestregistry.Register(bus)
 	assetService.Register(bus)
+	if err := queue.Start(ctx); err != nil {
+		return err
+	}
+	recoveryCtx, recoveryCancel := context.WithCancel(ctx)
+	defer recoveryCancel()
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			if err := agentService.Recover(recoveryCtx); err != nil && recoveryCtx.Err() == nil {
+				log.Warn("agent recovery failed")
+			}
+			select {
+			case <-recoveryCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 
 	identities, err := identity.New(ctx, pool, cfg.Identity)
 	if err != nil {
 		return err
 	}
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities}),
+		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

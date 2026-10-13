@@ -47,6 +47,13 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  agentConfig?(signal?: AbortSignal): Promise<AgentConfig>;
+  agentRuns?(session: Session, signal?: AbortSignal): Promise<AgentRun[]>;
+  agentCommand?(
+    name: "start-agent-run" | "cancel-agent-run",
+    payload: Record<string, unknown>,
+    key: string,
+  ): Promise<void>;
   events?(session: Session, after: string | undefined, signal: AbortSignal): Promise<Response>;
   presence?(session: Session, leaseId: string, leave: boolean, signal: AbortSignal): Promise<void>;
   contentCatalog(
@@ -99,6 +106,33 @@ export interface Api {
     signal: AbortSignal,
   ): Promise<void>;
   preview(session: Session, signal: AbortSignal): Promise<{ token: string; expiresAt: string }>;
+}
+export interface AgentConfig {
+  provider: "openrouter";
+  model: string;
+  configured: boolean;
+  canDelegate: boolean;
+  monthlyTokens: number;
+  userMonthlyTokens: number;
+}
+export interface AgentRun {
+  id: string;
+  changesetId: string;
+  documentId: string;
+  environment: string;
+  model: string;
+  prompt: string;
+  state: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  stepSeq: number;
+  errorCode?: string;
+  steps: {
+    seq: number;
+    kind: string;
+    data: { name?: string; text?: string; isError?: boolean; code?: string };
+  }[];
+  tokens: number;
+  reserved: number;
+  usageKnown: boolean;
 }
 export interface HistoryAction {
   id: string;

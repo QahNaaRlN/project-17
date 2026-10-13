@@ -13,7 +13,7 @@ import (
 )
 
 const actionOperations = `-- name: ActionOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of FROM operations
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of, agent_session_id FROM operations
 WHERE changeset_id = $1 AND COALESCE(batch_id, id) = $2::uuid
 ORDER BY seq DESC
 `
@@ -54,6 +54,7 @@ func (q *Queries) ActionOperations(ctx context.Context, arg ActionOperationsPara
 			&i.TargetSchemaName,
 			&i.BatchID,
 			&i.RedoOf,
+			&i.AgentSessionID,
 		); err != nil {
 			return nil, err
 		}
@@ -131,7 +132,7 @@ func (q *Queries) HistoryHeads(ctx context.Context, arg HistoryHeadsParams) ([]H
 }
 
 const lastRedoableOperation = `-- name: LastRedoableOperation :one
-SELECT u.id, u.project_id, u.changeset_id, u.seq, u.actor_id, u.on_behalf_of, u.source, u.target_object_id, u.type, u.payload, u.before, u.after, u.inverse, u.reason, u.client_op_id, u.undo_of, u.status, u.created_at, u.target_schema_name, u.batch_id, u.redo_of FROM operations u
+SELECT u.id, u.project_id, u.changeset_id, u.seq, u.actor_id, u.on_behalf_of, u.source, u.target_object_id, u.type, u.payload, u.before, u.after, u.inverse, u.reason, u.client_op_id, u.undo_of, u.status, u.created_at, u.target_schema_name, u.batch_id, u.redo_of, u.agent_session_id FROM operations u
 JOIN changesets c ON c.id = u.changeset_id
 WHERE u.changeset_id = $1 AND u.undo_of IS NOT NULL AND u.status = 'applied'
   AND u.seq > c.redo_barrier_seq
@@ -166,6 +167,7 @@ func (q *Queries) LastRedoableOperation(ctx context.Context, changesetID uuid.UU
 		&i.TargetSchemaName,
 		&i.BatchID,
 		&i.RedoOf,
+		&i.AgentSessionID,
 	)
 	return i, err
 }

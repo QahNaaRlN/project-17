@@ -11,6 +11,7 @@ import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
 import { PresencePanel } from "./presence.js";
+import { AgentPanel } from "./agent-panel.js";
 const JsonPanel = lazy(() => import("./json-panel.js"));
 const ContentPanel = lazy(() => import("./content-panel.js"));
 const copy = {
@@ -419,6 +420,13 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
               >
                 Structure
               </button>
+              <button
+                aria-pressed={state.viewMode === "agent"}
+                disabled={jsonDirty}
+                onClick={() => editor.viewMode("agent")}
+              >
+                Agent
+              </button>
             </div>
             <div role="group" aria-label={t.mode}>
               <button aria-pressed={state.mode === "design"} onClick={() => editor.mode("design")}>
@@ -444,6 +452,9 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
               </select>
             </label>
           </div>
+          {state.viewMode === "agent" && session && (
+            <AgentPanel key={session.changeset.id + ":" + session.record.id} {...{ api, editor }} />
+          )}
           {state.viewMode === "structure" && session && doc && (
             <Suspense fallback={<p role="status">{t.loading}</p>}>
               <JsonPanel key={session.changeset.id + ":" + session.record.id} editor={editor} />

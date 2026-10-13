@@ -7,7 +7,7 @@ export interface Presence {
   changesetTitle: string;
 }
 export interface LiveEvent {
-  type: "invalidate" | "sync" | "presence";
+  type: "invalidate" | "sync" | "presence" | "agent";
   revision?: string;
   items?: Presence[];
 }
@@ -25,12 +25,30 @@ export function parseEvent(block: string): LiveEvent | null {
     if (name === "id") id = value;
     if (name === "data") data.push(value);
   }
-  if (!["invalidate", "sync", "presence"].includes(kind)) return null;
+  if (!["invalidate", "sync", "presence", "agent"].includes(kind)) return null;
   let value;
   try {
     value = JSON.parse(data.join("\n"));
   } catch {
     throw new StudioError("RESPONSE_INVALID");
+  }
+  if (kind === "agent") {
+    if (
+      !Array.isArray(value?.items) ||
+      value.items.length > 10 ||
+      value.items.some(
+        (r: { id: string; state: string; stepSeq: number }) =>
+          !r ||
+          !uuid.test(r.id) ||
+          !["queued", "running", "completed", "failed", "cancelled", "interrupted"].includes(
+            r.state,
+          ) ||
+          !Number.isSafeInteger(r.stepSeq) ||
+          r.stepSeq < 0,
+      )
+    )
+      throw new StudioError("RESPONSE_INVALID");
+    return { type: "agent" };
   }
   if (kind === "presence") {
     if (
@@ -96,6 +114,7 @@ export function startRealtime(
     invalidate(): void;
     presence(items: Presence[]): void;
     status(value: "connecting" | "live" | "offline"): void;
+    agent?(): void;
   },
 ) {
   if (!api.events || !api.presence) return () => {};
@@ -132,6 +151,7 @@ export function startRealtime(
       await readEvents(response, signal, (event) => {
         delay = 1000;
         if (event.type === "presence") callbacks.presence(event.items!);
+        else if (event.type === "agent") callbacks.agent?.();
         else {
           cursor = event.revision;
           if (event.type === "invalidate") callbacks.invalidate();

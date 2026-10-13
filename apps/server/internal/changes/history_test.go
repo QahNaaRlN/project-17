@@ -446,6 +446,11 @@ func TestStudioHistoryMigrationGuard(t *testing.T) {
 	if err := e.pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version != 15 {
 		t.Fatal(version, err)
 	}
+	// The current query code targets the current schema. First verify the old
+	// migration's guard, then upgrade before exercising the current read API.
+	if err := postgres.Migrate(ctx, e.pool, "up", log); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := changes.ListOperations(ctx, e.q, e.actor.ProjectID, cs.ID, 0)
 	if err != nil || len(rows) != 1 || rows[0].BatchID == nil {
 		t.Fatal(rows, err)
@@ -511,6 +516,9 @@ func TestStudioHistoryLegacyBarrierMigrationGuard(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.historyMigrationBase(ctx, log)
 	if err := postgres.Migrate(ctx, e.pool, "down", log); err == nil || !strings.Contains(err.Error(), "operation history prevents downgrade") {
+		t.Fatal(err)
+	}
+	if err := postgres.Migrate(ctx, e.pool, "up", log); err != nil {
 		t.Fatal(err)
 	}
 	h, err := changes.GetHistory(ctx, e.q, e.actor, cs.ID, math.MaxInt32)

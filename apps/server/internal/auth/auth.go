@@ -27,12 +27,16 @@ const (
 
 // Actor — аутентифицированный субъект запроса в контексте проекта.
 type Actor struct {
-	ID          uuid.UUID
-	Kind        ActorKind
-	DisplayName string
-	ProjectID   uuid.UUID
-	ProjectSlug string
-	Rights      RightSet
+	AgentSessionID    *uuid.UUID
+	OnBehalfOf        *uuid.UUID
+	DelegatorID       *uuid.UUID
+	AllowedChangesets []uuid.UUID
+	ID                uuid.UUID
+	Kind              ActorKind
+	DisplayName       string
+	ProjectID         uuid.UUID
+	ProjectSlug       string
+	Rights            RightSet
 }
 
 // ServiceTokenPrefix — префикс сервисных токенов (08-api.md §2).
@@ -66,12 +70,25 @@ func Authenticate(ctx context.Context, q *store.Queries, authorization string) (
 	if !ok || secret == "" {
 		return Actor{}, ErrUnauthenticated
 	}
+	if strings.HasPrefix(secret, AgentTokenPrefix) {
+		s, err := q.AgentByToken(ctx, HashToken(secret))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Actor{}, ErrUnauthenticated
+		}
+		if err != nil {
+			return Actor{}, err
+		}
+		return SessionActor(ctx, q, s, false)
+	}
 	p, err := q.GetTokenPrincipal(ctx, HashToken(secret))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Actor{}, ErrUnauthenticated
 	}
 	if err != nil {
 		return Actor{}, fmt.Errorf("auth: %w", err)
+	}
+	if p.ActorKind == string(ActorAgent) {
+		return Actor{}, ErrUnauthenticated
 	}
 	caps, err := q.ActorCapabilities(ctx, store.ActorCapabilitiesParams{ProjectID: p.ProjectID, ActorID: p.ActorID})
 	if err != nil {

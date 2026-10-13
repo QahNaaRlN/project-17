@@ -116,7 +116,7 @@ func (q *Queries) RecordSchemaClaim(ctx context.Context, arg RecordSchemaClaimPa
 }
 
 const schemaOperations = `-- name: SchemaOperations :many
-SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of FROM operations WHERE changeset_id=$1 AND type='schema.apply' AND status='applied' ORDER BY seq
+SELECT id, project_id, changeset_id, seq, actor_id, on_behalf_of, source, target_object_id, type, payload, before, after, inverse, reason, client_op_id, undo_of, status, created_at, target_schema_name, batch_id, redo_of, agent_session_id FROM operations WHERE changeset_id=$1 AND type='schema.apply' AND status='applied' ORDER BY seq
 `
 
 func (q *Queries) SchemaOperations(ctx context.Context, changesetID uuid.UUID) ([]Operation, error) {
@@ -150,6 +150,7 @@ func (q *Queries) SchemaOperations(ctx context.Context, changesetID uuid.UUID) (
 			&i.TargetSchemaName,
 			&i.BatchID,
 			&i.RedoOf,
+			&i.AgentSessionID,
 		); err != nil {
 			return nil, err
 		}

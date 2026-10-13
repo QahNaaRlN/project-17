@@ -13,6 +13,8 @@ import (
 
 // Config — конфигурация процесса cms.
 type Config struct {
+	OpenRouterKey   string
+	OpenRouterModel string
 	Identity        identity.Config
 	HTTPAddr        string        // CMS_HTTP_ADDR, по умолчанию ":8080"
 	DatabaseURL     string        // CMS_DATABASE_URL, обязательно
@@ -31,6 +33,8 @@ type Config struct {
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
 func FromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
+		OpenRouterKey:   getenv("CMS_OPENROUTER_API_KEY"),
+		OpenRouterModel: getenv("CMS_OPENROUTER_MODEL"),
 		HTTPAddr:        valueOr(getenv("CMS_HTTP_ADDR"), ":8080"),
 		DatabaseURL:     getenv("CMS_DATABASE_URL"),
 		ShutdownTimeout: 15 * time.Second,
