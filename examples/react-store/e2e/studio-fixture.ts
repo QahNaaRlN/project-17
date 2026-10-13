@@ -6,6 +6,7 @@ import type { PageResponse } from "@cms/core";
 type IrDocument = PageResponse["document"];
 import type {
   HistoryAction,
+  AgentRun,
   ContentRecord,
   ContentOperation,
 } from "../../../apps/studio/src/types.js";
@@ -103,6 +104,8 @@ export async function studioFixture(id: string, previewToken: string) {
     redoStack: Edit[] = [],
     actions: HistoryAction[] = [];
   const historyKeys = new Map<string, { body: string; seq: number }>();
+  let agentRuns: AgentRun[] = [];
+  const agentKeys = new Map<string, string>();
   let historyId = 0;
   const leases = new Map<
     string,
@@ -133,6 +136,8 @@ export async function studioFixture(id: string, previewToken: string) {
   }
   function reset(enabled: boolean) {
     leases.clear();
+    agentRuns = [];
+    agentKeys.clear();
     active = enabled;
     seq = 1;
     fault = "";
@@ -303,6 +308,23 @@ export async function studioFixture(id: string, previewToken: string) {
         return true;
       }
       const owner = !identity.enabled || who?.id === id;
+      if (path === "/api/v1/agent-config") {
+        res.end(
+          JSON.stringify({
+            provider: "openrouter",
+            model: "fixture/model",
+            configured: fault !== "agent-unconfigured",
+            canDelegate: identity.enabled && owner,
+            monthlyTokens: 1000000,
+            userMonthlyTokens: 100000,
+          }),
+        );
+        return true;
+      }
+      if (path === "/api/v1/agent-runs") {
+        res.end(JSON.stringify({ items: owner ? agentRuns : [] }));
+        return true;
+      }
       if (path === "/api/v1/events") {
         const query = new URL(req.url!, "http://127.0.0.1").searchParams;
         let cursor = query.get("after") ?? "";
@@ -335,6 +357,11 @@ export async function studioFixture(id: string, previewToken: string) {
             items.set(lease.actorId + lease.changesetId, item);
           }
           emit("presence", { items: [...items.values()] });
+          emit("agent", {
+            items: owner
+              ? agentRuns.map((r) => ({ id: r.id, state: r.state, stepSeq: r.stepSeq }))
+              : [],
+          });
         };
         snapshot();
         // Only the HTTP boundary is modelled here; Go tests verify storage/TTL.
@@ -552,6 +579,68 @@ export async function studioFixture(id: string, previewToken: string) {
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);
+      if (path === "/api/v1/commands/start-agent-run") {
+        if (!identity.enabled || !owner) {
+          fail(403, "POLICY_DENIED");
+          return true;
+        }
+        const p = envelope.payload,
+          key = String(req.headers["idempotency-key"]);
+        if (!agentKeys.has(key)) {
+          if (p.expectedSeq !== seq || p.documentId !== id || p.changesetId !== id) {
+            fail(409, "AGENT_SCOPE_CHANGED");
+            return true;
+          }
+          const runId = "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4caa";
+          agentKeys.set(key, runId);
+          const task: AgentRun = {
+            id: runId,
+            documentId: id,
+            changesetId: id,
+            environment: "staging",
+            model: "fixture/model",
+            prompt: p.prompt,
+            state: fault === "agent-running" ? "running" : "completed",
+            stepSeq: 3,
+            steps: [
+              { seq: 1, kind: "tool", data: { name: "set_local_content" } },
+              { seq: 2, kind: "message", data: { text: "<script>Готово</script>" } },
+              { seq: 3, kind: "finished", data: {} },
+            ],
+            tokens: 120,
+            reserved: 0,
+            usageKnown: true,
+          };
+          agentRuns = [task];
+          if (task.state === "completed") {
+            const before = structuredClone(document);
+            document.localContent!.t_title!.value = { ru: "Текст агента", en: "Draft heading" };
+            const operations = [{ type: "localContent.set", target: id, status: "applied" }];
+            undoStack.push({ before, after: structuredClone(document), operations });
+            redoStack.length = 0;
+            logHistory("edit", operations);
+            actions[0]!.actorName = "Studio Agent";
+          }
+          if (fault === "agent-lost") {
+            fault = "";
+            fail(503, "STUDIO_RESPONSE_LOST");
+            return true;
+          }
+        }
+        res.end(JSON.stringify({ result: { id: agentKeys.get(key) } }));
+        return true;
+      }
+      if (path === "/api/v1/commands/cancel-agent-run") {
+        if (!identity.enabled || !owner) {
+          fail(403, "POLICY_DENIED");
+          return true;
+        }
+        for (const run of agentRuns)
+          if (run.id === envelope.payload.runId && ["queued", "running"].includes(run.state))
+            run.state = "cancelled";
+        res.end(JSON.stringify({ result: { id: envelope.payload.runId } }));
+        return true;
+      }
       if (path.includes("/commands/presence-")) {
         const p = envelope.payload,
           actorId = who?.id ?? id;

@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -160,8 +162,10 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 	if err != nil {
 		return Response{}, NewError(http.StatusBadRequest, "PAYLOAD_INVALID", "Некорректный payload", err.Error())
 	}
-	if err := h.auth(actor, payload); err != nil {
-		return Response{}, err
+	if actor.Kind != auth.ActorAgent {
+		if err := h.auth(actor, payload); err != nil {
+			return Response{}, err
+		}
 	}
 	if err := h.valid(payload); err != nil {
 		return Response{}, err
@@ -175,6 +179,28 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 	var resp Response
 	err = postgres.InTx(ctx, b.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
+		var session store.AgentSession
+		var charge int32
+		if actor.Kind == auth.ActorAgent {
+			var gate error
+			actor, session, charge, gate = auth.GuardAgent(ctx, q, actor, req.Name, req.Reason, req.Payload)
+			if gate != nil {
+				if errors.Is(gate, auth.ErrUnauthenticated) {
+					return NewError(401, "UNAUTHENTICATED", "Сессия агента недействительна", "Создайте новую сессию")
+				}
+				if errors.Is(gate, auth.ErrAgentPolicy) {
+					return NewError(403, "POLICY_DENIED", "Действие агента запрещено", "Проверьте право, reason и разрешённые CS")
+				}
+				return gate
+			}
+			if err := h.auth(actor, payload); err != nil {
+				return err
+			}
+			// The same agent can have distinct delegations. A key replay must never
+			// return another session's response or bypass its operation quota.
+			keyHash := sha256.Sum256([]byte(req.IdempotencyKey))
+			req.IdempotencyKey = fmt.Sprintf("%s:%x", session.ID, keyHash)
+		}
 		if err := q.LockIdempotencyKey(ctx, store.LockIdempotencyKeyParams{ActorID: actor.ID.String(), Key: req.IdempotencyKey}); err != nil {
 			return err
 		}
@@ -190,10 +216,18 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 		case !errors.Is(err, pgx.ErrNoRows):
 			return err
 		}
+		if actor.Kind == auth.ActorAgent && session.OpsUsed+charge > session.OpsQuota {
+			return NewError(429, "AGENT_QUOTA_EXCEEDED", "Квота операций исчерпана", "Создайте новую сессию с допустимой квотой")
+		}
 
 		result, err := h.handle(ctx, tx, actor, payload)
 		if err != nil {
 			return err
+		}
+		if actor.Kind == auth.ActorAgent && charge > 0 {
+			if err := q.ChargeAgentOperations(ctx, store.ChargeAgentOperationsParams{ID: session.ID, OpsUsed: charge}); err != nil {
+				return err
+			}
 		}
 		body, err := json.Marshal(map[string]any{"result": result})
 		if err != nil {
@@ -207,7 +241,7 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 			return err
 		}
 		// Ephemeral leases and preview credentials do not invalidate saved content.
-		if req.Name == "presence-heartbeat" || req.Name == "presence-leave" || req.Name == "create-preview-token" {
+		if req.Name == "presence-heartbeat" || req.Name == "presence-leave" || req.Name == "create-preview-token" || strings.HasPrefix(req.Name, "agent-internal-") {
 			return nil
 		}
 		// UPSERT holds the project row until commit: concurrent commands cannot
@@ -217,6 +251,11 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 		return err
 	})
 	if err != nil {
+		var ce *Error
+		if actor.Kind == auth.ActorAgent && errors.As(err, &ce) && (ce.Status == 403 || ce.Status == 429) {
+			_, _ = b.pool.Exec(context.WithoutCancel(ctx), `INSERT INTO security_events(id,project_id,actor_id,type,data) VALUES($1,$2,$3,'access.denied',$4)`, uuid.New(), actor.ProjectID, actor.ID,
+				[]byte(fmt.Sprintf(`{"code":%q,"command":%q}`, ce.Code, req.Name)))
+		}
 		return Response{}, err
 	}
 	return resp, nil

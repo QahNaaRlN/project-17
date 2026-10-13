@@ -309,6 +309,15 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		types[i] = a.Type
 	}
 	risk := Risk(types)
+	agentAuthored := false
+	for _, op := range opActors {
+		if op.Source == "agent" {
+			agentAuthored = true
+			if risk == RiskLow {
+				risk = RiskMedium
+			}
+		}
+	}
 	if len(binding) > 0 || requirements.Strict {
 		risk = RiskHigh
 	}
@@ -316,7 +325,11 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	if err != nil {
 		return evaluation{}, err
 	}
-	return evaluation{checks: checks, hash: hash, risk: risk, required: zoneRequired(approvalPolicy.Required(risk), requirements.Roles), targets: targets, roles: requirements.Roles}, nil
+	required := zoneRequired(approvalPolicy.Required(risk), requirements.Roles)
+	if agentAuthored {
+		required = max(required, 1)
+	}
+	return evaluation{checks: checks, hash: hash, risk: risk, required: required, targets: targets, roles: requirements.Roles}, nil
 }
 
 func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
@@ -423,14 +436,34 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 	var violations []map[string]string
 	rights := map[uuid.UUID]auth.RightSet{}
 	for _, oa := range opActors {
-		set, ok := rights[oa.ActorID]
+		key := oa.ActorID
+		if oa.AgentSessionID != nil {
+			key = *oa.AgentSessionID
+		}
+		set, ok := rights[key]
 		if !ok {
 			caps, err := q.ActorCapabilities(ctx, store.ActorCapabilitiesParams{ProjectID: projectID, ActorID: oa.ActorID})
 			if err != nil {
 				return Check{}, err
 			}
 			set = auth.EffectiveRights(caps, []string{auth.ScopeAll})
-			rights[oa.ActorID] = set
+			if oa.Source == "agent" {
+				set = auth.RightSet{}
+				if oa.AgentSessionID != nil {
+					s, err := q.GetAgentSession(ctx, store.GetAgentSessionParams{ID: *oa.AgentSessionID, ProjectID: projectID})
+					if err != nil {
+						return Check{}, err
+					}
+					a, err := auth.SessionActor(ctx, q, s, true)
+					if err != nil && !errors.Is(err, auth.ErrUnauthenticated) {
+						return Check{}, err
+					}
+					if err == nil && a.ID == oa.ActorID {
+						set = a.Rights
+					}
+				}
+			}
+			rights[key] = set
 		}
 		right, _ := changes.OperationRight(oa.Type)
 		if oa.Type == schemaflow.Apply && oa.Source == "import" {
@@ -524,6 +557,10 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 		return Review{}, err
 	}
 	required := zoneRequired(policy.Required(deref(cs.Risk)), roles)
+	required, err = agentRequired(ctx, q, cs.ID, required)
+	if err != nil {
+		return Review{}, err
+	}
 	status, err := coverage(ctx, q, actor.ProjectID, cs.ID, cs.ContentHash, roles)
 	if err != nil {
 		return Review{}, err
@@ -693,6 +730,10 @@ func GetReview(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (
 		return ReviewDetail{}, err
 	}
 	required = zoneRequired(required, req.Roles)
+	required, err = agentRequired(ctx, q, cs.ID, required)
+	if err != nil {
+		return ReviewDetail{}, err
+	}
 	return ReviewDetail{
 		Review:  Review{Changeset: changes.ToChangeset(cs), Risk: cs.Risk, RequiredApprovals: required, Approvals: status.count, Checks: checks, RequiredRoles: req.Roles, MissingRequiredRoles: status.missing},
 		History: history,

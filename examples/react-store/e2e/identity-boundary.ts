@@ -75,6 +75,7 @@ export function identityBoundary(aliceId: string, bobId: string) {
                           "content.write",
                           "design.compose",
                           "content.publish",
+                          "agent.delegate",
                         ]
                       : ["design.read", "content.read", "content.publish"],
                   hasAccess: true,

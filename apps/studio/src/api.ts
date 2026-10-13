@@ -17,6 +17,8 @@ import {
   type ContentItem,
   type ContentCatalog,
   type Upload,
+  type AgentConfig,
+  type AgentRun,
 } from "./types.js";
 import { validateReview, problemDiagnostics, safeDiagnostics } from "./review.js";
 import type { Review, Publication } from "./types.js";
@@ -110,6 +112,74 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async agentConfig(signal) {
+      const value = await request<AgentConfig>("/api/v1/agent-config", signal);
+      if (
+        !value ||
+        value.provider !== "openrouter" ||
+        typeof value.model !== "string" ||
+        typeof value.configured !== "boolean" ||
+        typeof value.canDelegate !== "boolean" ||
+        !Number.isSafeInteger(value.monthlyTokens) ||
+        !Number.isSafeInteger(value.userMonthlyTokens)
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
+    async agentRuns(session, signal) {
+      const query = new URLSearchParams({
+        documentId: session.record.id,
+        changesetId: session.changeset.id,
+        environment: session.config.environment,
+      });
+      const value = await request<{ items: AgentRun[] }>("/api/v1/agent-runs?" + query, signal);
+      if (
+        !Array.isArray(value?.items) ||
+        value.items.length > 10 ||
+        value.items.some(
+          (r) =>
+            !r ||
+            !uuid.test(r.id) ||
+            r.documentId !== session.record.id ||
+            r.changesetId !== session.changeset.id ||
+            r.environment !== session.config.environment ||
+            !["queued", "running", "completed", "failed", "cancelled", "interrupted"].includes(
+              r.state,
+            ) ||
+            typeof r.prompt !== "string" ||
+            r.prompt.length > 16000 ||
+            typeof r.model !== "string" ||
+            !Number.isSafeInteger(r.tokens) ||
+            r.tokens < 0 ||
+            !Number.isSafeInteger(r.reserved) ||
+            r.reserved < 0 ||
+            typeof r.usageKnown !== "boolean" ||
+            !Number.isSafeInteger(r.stepSeq) ||
+            !Array.isArray(r.steps) ||
+            r.steps.length > 32 ||
+            r.steps.some(
+              (step) =>
+                !step ||
+                !Number.isSafeInteger(step.seq) ||
+                typeof step.kind !== "string" ||
+                typeof step.data !== "object" ||
+                !step.data ||
+                (step.data.text !== undefined && typeof step.data.text !== "string") ||
+                (step.data.name !== undefined && typeof step.data.name !== "string"),
+            ),
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value.items;
+    },
+    async agentCommand(name, payload, key) {
+      await request(
+        "/api/v1/commands/" + name,
+        undefined,
+        { payload, reason: "Studio: explicit Agent task" },
+        key,
+      );
+    },
     async events(session, after, signal) {
       if (human) {
         const account = await api.account(signal);

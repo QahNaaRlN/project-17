@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/agents"
 	"github.com/qahnaarln/project-17/apps/server/internal/assets"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
@@ -35,6 +36,7 @@ const MaxCommandBody = 1 << 20
 
 // Deps — зависимости HTTP-слоя.
 type Deps struct {
+	Agents   *agents.Service
 	Identity *identity.Service
 	Pool     *pgxpool.Pool
 	Bus      *commandbus.Bus
@@ -73,6 +75,7 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
+		agentRoutes(r, d)
 		r.Get("/events", eventsHandler(d))
 		workspaceRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
@@ -238,6 +241,7 @@ func NewRouter(d Deps) http.Handler {
 		})
 	})
 
+	r.With(authenticate(d)).Post("/mcp", mcpHandler(d))
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, d.Log, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Не найдено", "Ресурс не существует"))
 	})

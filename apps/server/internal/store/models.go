@@ -22,6 +22,71 @@ type Actor struct {
 	OidcIssuer  *string    `json:"oidcIssuer"`
 }
 
+type AgentDefinition struct {
+	ActorID     uuid.UUID `json:"actorId"`
+	ProjectID   uuid.UUID `json:"projectId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+}
+
+type AgentRun struct {
+	ID          uuid.UUID `json:"id"`
+	ProjectID   uuid.UUID `json:"projectId"`
+	OwnerID     uuid.UUID `json:"ownerId"`
+	SessionID   uuid.UUID `json:"sessionId"`
+	ChangesetID uuid.UUID `json:"changesetId"`
+	DocumentID  uuid.UUID `json:"documentId"`
+	Environment string    `json:"environment"`
+	Model       string    `json:"model"`
+	Prompt      string    `json:"prompt"`
+	State       string    `json:"state"`
+	StepSeq     int32     `json:"stepSeq"`
+	ErrorCode   *string   `json:"errorCode"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Deadline    time.Time `json:"deadline"`
+}
+
+type AgentSession struct {
+	ID           uuid.UUID  `json:"id"`
+	ProjectID    uuid.UUID  `json:"projectId"`
+	AgentID      uuid.UUID  `json:"agentId"`
+	StartedBy    uuid.UUID  `json:"startedBy"`
+	OnBehalfOf   *uuid.UUID `json:"onBehalfOf"`
+	TokenHash    []byte     `json:"tokenHash"`
+	Capabilities []string   `json:"capabilities"`
+	OpsQuota     int32      `json:"opsQuota"`
+	OpsUsed      int32      `json:"opsUsed"`
+	ExpiresAt    time.Time  `json:"expiresAt"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	RevokedAt    *time.Time `json:"revokedAt"`
+}
+
+type AgentSessionChangeset struct {
+	SessionID   uuid.UUID `json:"sessionId"`
+	ChangesetID uuid.UUID `json:"changesetId"`
+}
+
+type AgentStep struct {
+	RunID     uuid.UUID `json:"runId"`
+	Seq       int32     `json:"seq"`
+	Kind      string    `json:"kind"`
+	Data      []byte    `json:"data"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type AgentUsage struct {
+	ID               uuid.UUID `json:"id"`
+	ProjectID        uuid.UUID `json:"projectId"`
+	OwnerID          uuid.UUID `json:"ownerId"`
+	RunID            uuid.UUID `json:"runId"`
+	Reserved         int32     `json:"reserved"`
+	PromptTokens     *int32    `json:"promptTokens"`
+	CompletionTokens *int32    `json:"completionTokens"`
+	State            string    `json:"state"`
+	CreatedAt        time.Time `json:"createdAt"`
+}
+
 type ApiToken struct {
 	ID           uuid.UUID  `json:"id"`
 	ProjectID    uuid.UUID  `json:"projectId"`
@@ -253,6 +318,7 @@ type Operation struct {
 	TargetSchemaName *string    `json:"targetSchemaName"`
 	BatchID          *uuid.UUID `json:"batchId"`
 	RedoOf           *uuid.UUID `json:"redoOf"`
+	AgentSessionID   *uuid.UUID `json:"agentSessionId"`
 }
 
 type PresenceLease struct {
@@ -348,4 +414,13 @@ type SchemaVersion struct {
 	Body       []byte    `json:"body"`
 	ManifestID uuid.UUID `json:"manifestId"`
 	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type SecurityEvent struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"projectId"`
+	ActorID   uuid.UUID `json:"actorId"`
+	Type      string    `json:"type"`
+	Data      []byte    `json:"data"`
+	CreatedAt time.Time `json:"createdAt"`
 }

@@ -33,7 +33,7 @@ export interface EditorState {
   previewSrc: string;
   connected: boolean;
   mode: "design" | "interact";
-  viewMode: "visual" | "structure";
+  viewMode: "visual" | "structure" | "agent";
   locale: "ru" | "en";
   width: number;
   rects: Record<string, Rect[]>;

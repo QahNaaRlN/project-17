@@ -19,6 +19,9 @@ export function PresencePanel({ api, editor }: { api: Api; editor: Editor }) {
     return startRealtime(api, session, {
       presence: setItems,
       status: setStatus,
+      agent() {
+        void client.invalidateQueries({ queryKey: ["agent-runs"] });
+      },
       invalidate() {
         void client.invalidateQueries({
           predicate: (query) =>

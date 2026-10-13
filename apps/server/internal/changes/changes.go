@@ -122,8 +122,12 @@ func validateCreate(p createPayload) error {
 }
 
 func handleCreate(ctx context.Context, tx pgx.Tx, actor auth.Actor, p createPayload) (Changeset, error) {
+	owner := actor.ID
+	if actor.Kind == auth.ActorAgent && actor.OnBehalfOf != nil {
+		owner = *actor.OnBehalfOf
+	}
 	cs, err := store.New(tx).CreateChangeset(ctx, store.CreateChangesetParams{
-		ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, Title: p.Title, Description: p.Description, OwnerID: actor.ID,
+		ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, Title: p.Title, Description: p.Description, OwnerID: owner,
 	})
 	if err != nil {
 		return Changeset{}, err
@@ -143,6 +147,11 @@ func handleCreate(ctx context.Context, tx pgx.Tx, actor auth.Actor, p createPayl
 			return Changeset{}, err
 		}
 		cs.Targets = p.Targets
+	}
+	if actor.Kind == auth.ActorAgent && actor.AgentSessionID != nil {
+		if err := store.New(tx).AddAgentChangeset(ctx, store.AddAgentChangesetParams{SessionID: *actor.AgentSessionID, ChangesetID: cs.ID}); err != nil {
+			return Changeset{}, err
+		}
 	}
 	return toChangeset(cs), nil
 }
@@ -165,6 +174,10 @@ func Lock(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (store
 
 // RequireOwner — изменять Change Set может только его владелец.
 func RequireOwner(cs store.Changeset, actor auth.Actor) error {
+	if actor.Kind == auth.ActorAgent && actor.AgentSessionID != nil && auth.AgentAllowsCS(actor, cs.ID) &&
+		(cs.OwnerID == actor.ID || (actor.DelegatorID != nil && cs.OwnerID == *actor.DelegatorID)) {
+		return nil
+	}
 	if cs.OwnerID != actor.ID {
 		return commandbus.NewError(http.StatusForbidden, "CHANGESET_NOT_OWNER", "Чужой Change Set",
 			"Изменять Change Set может только его владелец")
@@ -439,9 +452,13 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 	if in.schemaName == nil {
 		target = &in.target
 	}
+	source := "api"
+	if s.actor.Kind == auth.ActorAgent {
+		source = "agent"
+	}
 	row, err := s.q.InsertOperation(s.ctx, store.InsertOperationParams{
 		ID: uuid.Must(uuid.NewV7()), ProjectID: s.actor.ProjectID, ChangesetID: s.cs.ID, Seq: s.cs.Seq,
-		ActorID: s.actor.ID, Source: "api", TargetObjectID: target, TargetSchemaName: in.schemaName, Type: in.opType, Payload: in.payload,
+		ActorID: s.actor.ID, Source: source, OnBehalfOf: s.actor.OnBehalfOf, AgentSessionID: s.actor.AgentSessionID, TargetObjectID: target, TargetSchemaName: in.schemaName, Type: in.opType, Payload: in.payload,
 		Before: nullableJSON(in.before), After: nullableJSON(in.after), Inverse: inverse,
 		Reason: reasonPtr, ClientOpID: in.clientOpID, UndoOf: in.undoOf, RedoOf: in.redoOf, BatchID: s.batchID,
 	})
