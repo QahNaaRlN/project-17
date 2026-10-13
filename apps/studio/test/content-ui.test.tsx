@@ -393,3 +393,30 @@ it("STU-103: metadata сохраняется отдельно от файла, u
   await wait(() => expect(records[assetId]!.data.fileHash).toBe("b".repeat(64)));
   expect(records[assetId]!.data.alt).toEqual({ ru: "Новое", en: "keep" });
 });
+it("STU-103/114: выбор файла переживает завершение сохранения metadata", async () => {
+  const { session } = await setup();
+  session.config.assetUploadOrigin = "https://bucket.test";
+  await change("Тип контента", "asset");
+  await click("Picture · " + assetId.slice(-8));
+  await wait(() => expect(control("Content alt ru")).not.toBeNull());
+  await change("Content alt ru", "Новое");
+  const file = new File(["test"], "keep.png", { type: "image/png" });
+  let selected = false;
+  const unsubscribe = editor.store.subscribe((state, previous) => {
+    if (!selected && state.status === "ready" && previous.status === "saving") {
+      selected = true;
+      const input = control("Файл ассета");
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  try {
+    await click("Сохранить контент");
+    expect(selected).toBe(true);
+    await wait(() => expect(button("Загрузить / повторить")).toBeDefined());
+    expect(document.body.textContent).toContain("keep.png");
+    expect(editor.store.getState().dirtyFields.contentUpload).toBe(true);
+  } finally {
+    unsubscribe();
+  }
+});
