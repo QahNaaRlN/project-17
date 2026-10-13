@@ -5,7 +5,8 @@ import type { Editor } from "./editor.js";
 const copy = {
   ru: {
     title: "История черновика",
-    scope: "Отмена действует на весь черновик, включая другие страницы.",
+    scope: "Отмена действует на весь черновик, включая страницы и контент.",
+    content: "Изменение контента",
     undo: "Отменить",
     redo: "Повторить",
     retry: "Проверить отмену или повтор",
@@ -30,7 +31,8 @@ const copy = {
   },
   en: {
     title: "Draft history",
-    scope: "Undo affects the entire draft, including other pages.",
+    scope: "Undo affects the entire draft, including pages and content.",
+    content: "Content change",
     undo: "Undo",
     redo: "Redo",
     retry: "Check undo or redo",
@@ -75,6 +77,8 @@ const blockedCopy = {
 function description(action: HistoryAction, t: typeof copy.ru) {
   if (action.kind === "undo") return t.undoEvent;
   if (action.kind === "redo") return t.redoEvent;
+  if (action.operations.some((op) => op.type.startsWith("entity.") || op.type.startsWith("asset.")))
+    return t.content;
   if (action.operations.some((o) => o.type === "node.insert")) return t.insert;
   if (action.operations.some((o) => o.type === "node.remove")) return t.remove;
   if (action.operations.some((o) => o.type === "node.move")) return t.move;

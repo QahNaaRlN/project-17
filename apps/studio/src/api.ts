@@ -1,4 +1,6 @@
 import { validateDocument } from "@cms/ir";
+import { jsonValue } from "@cms/runtime";
+import { canonicalJson } from "@cms/manifest";
 import {
   StudioError,
   type Api,
@@ -11,10 +13,28 @@ import {
   type History,
   type Account,
   type WorkItem,
+  type ContentRecord,
+  type ContentItem,
+  type ContentCatalog,
+  type Upload,
 } from "./types.js";
 import { validateReview, problemDiagnostics, safeDiagnostics } from "./review.js";
 import type { Review, Publication } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function checkUpload(value: Upload, uncertain = false): Upload {
+  if (
+    !value ||
+    !uuid.test(value.assetId) ||
+    !["pending", "processing", "ready", "rejected"].includes(value.status) ||
+    !Number.isFinite(Date.parse(value.expiresAt)) ||
+    (value.fileHash !== undefined && !/^[a-f0-9]{64}$/.test(value.fileHash)) ||
+    (value.status === "ready" && !value.fileHash) ||
+    (value.errorCode !== undefined && !/^[A-Z0-9_]{1,80}$/.test(value.errorCode)) ||
+    (value.uploadUrl !== undefined && typeof value.uploadUrl !== "string")
+  )
+    throw new StudioError("RESPONSE_INVALID", uncertain);
+  return value;
+}
 export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => void): Api {
   let csrf: string | undefined,
     actor: string | undefined,
@@ -90,6 +110,119 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async contentCatalog(session, kind, schema, cursor, signal) {
+      const value = (await listing<ContentItem>(
+        "/api/v1/content-catalog",
+        {
+          environment: session.config.environment,
+          changesetId: session.changeset.id,
+          kind,
+          ...(schema ? { schema } : {}),
+        },
+        cursor,
+        signal,
+      )) as ContentCatalog;
+      if (
+        value.items.some(
+          (i) =>
+            !i ||
+            !uuid.test(i.id) ||
+            i.kind !== kind ||
+            typeof i.title !== "string" ||
+            typeof i.deleted !== "boolean" ||
+            (schema && i.schema !== schema),
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      if (
+        !Array.isArray(value.locales) ||
+        value.locales.some(
+          (locale) => typeof locale !== "string" || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(locale),
+        ) ||
+        typeof value.defaultLocale !== "string" ||
+        !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(value.defaultLocale) ||
+        (value.locales.length && !value.locales.includes(value.defaultLocale))
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
+    async content(session, id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const params = new URLSearchParams({
+        environment: session.config.environment,
+        changesetId: session.changeset.id,
+      });
+      const value = await request<ContentRecord>(`/api/v1/content/${id}?${params}`, signal);
+      if (
+        !value ||
+        value.id !== id ||
+        !uuid.test(value.versionId) ||
+        !["entity", "asset"].includes(value.kind) ||
+        typeof value.deleted !== "boolean" ||
+        !value.data ||
+        typeof value.data !== "object" ||
+        Array.isArray(value.data) ||
+        (value.kind === "entity" &&
+          (typeof value.schema !== "string" || !Number.isSafeInteger(value.schemaVersion)))
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      try {
+        jsonValue(value.data);
+        canonicalJson(value.data);
+      } catch {
+        throw new StudioError("RESPONSE_INVALID");
+      }
+      return value;
+    },
+    async applyContent(session, operations, key, signal) {
+      if (session.changeset.targets[0] !== session.config.environment)
+        throw new StudioError("CONTENT_TARGET_MISMATCH");
+      const value = await request<{
+        result: { changeset: Changeset; operations: { type: string; target: string }[] };
+      }>(
+        "/api/v1/commands/apply-operations",
+        signal,
+        {
+          payload: {
+            changesetId: session.changeset.id,
+            expectedSeq: session.changeset.seq,
+            operations,
+            group: true,
+          },
+          reason: "Studio: edit content draft",
+        },
+        key,
+      );
+      if (
+        value?.result?.changeset?.id !== session.changeset.id ||
+        value.result.changeset.seq !== session.changeset.seq + operations.length ||
+        !Array.isArray(value.result.operations) ||
+        value.result.operations.length !== operations.length ||
+        value.result.operations.some(
+          (op, i) =>
+            !uuid.test(op.target) ||
+            op.type !== operations[i]?.type ||
+            (operations[i]?.target && operations[i]!.target !== op.target),
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID", true);
+      return value.result.operations.map((op) => op.target);
+    },
+    async uploadCommand(command, payload, key, signal) {
+      const value = await request<{ result: Upload }>(
+        `/api/v1/commands/${command}`,
+        signal,
+        { payload, reason: "Studio: upload asset" },
+        key,
+      );
+      return checkUpload(value?.result, true);
+    },
+    async uploadStatus(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const value = checkUpload(await request<Upload>(`/api/v1/asset-uploads/${id}`, signal));
+      if (value.assetId !== id) throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
     async account(signal) {
       const value = await request<Account>("/auth/session", signal);
       if (

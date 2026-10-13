@@ -231,11 +231,12 @@ func checkSeq(cs store.Changeset, expected int32) error {
 
 // OperationInput — операция в команде apply-operations.
 type OperationInput struct {
-	ClientOpID   *string            `json:"clientOpId"`
-	Type         string             `json:"type"`
-	Target       *uuid.UUID         `json:"-"`
-	SchemaTarget *schemaflow.Target `json:"-"` // документ; для document.create не задаётся
-	Payload      json.RawMessage    `json:"payload"`
+	ExpectedVersionID *uuid.UUID         `json:"expectedVersionId,omitempty"`
+	ClientOpID        *string            `json:"clientOpId"`
+	Type              string             `json:"type"`
+	Target            *uuid.UUID         `json:"-"`
+	SchemaTarget      *schemaflow.Target `json:"-"` // документ; для document.create не задаётся
+	Payload           json.RawMessage    `json:"payload"`
 }
 
 type applyPayload struct {
@@ -282,6 +283,9 @@ func validateApply(p applyPayload) error {
 	}
 	for i, op := range p.Operations {
 		field := fmt.Sprintf("operations[%d]", i)
+		if op.ExpectedVersionID != nil && (!isContentOperation(op.Type) || op.Type == EntityCreate || op.Type == AssetCreate || *op.ExpectedVersionID == uuid.Nil) {
+			return commandbus.Validation(map[string]string{field + ".expectedVersionId": "допустим только для изменения существующего контента"})
+		}
 		if _, ok := OperationRight(op.Type); !ok {
 			return commandbus.Validation(map[string]string{field + ".type": "неизвестный тип операции " + op.Type})
 		}
@@ -310,13 +314,14 @@ type session struct {
 }
 
 type workingDoc struct {
-	kind          string
-	schemaVersion *int32
-	deleted       bool
-	certified     bool
-	versionID     uuid.UUID
-	path          *string // маршрут страницы
-	body          map[string]any
+	sourceVersionID uuid.UUID // version read before this command allocates or changes a working copy
+	kind            string
+	schemaVersion   *int32
+	deleted         bool
+	certified       bool
+	versionID       uuid.UUID
+	path            *string // маршрут страницы
+	body            map[string]any
 }
 
 // load возвращает рабочую версию документа в Change Set, при первом обращении копируя head.
@@ -326,7 +331,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 	}
 	co, err := s.q.GetChangesetObject(s.ctx, store.GetChangesetObjectParams{ChangesetID: s.cs.ID, ObjectID: objectID})
 	if err == nil {
-		d := &workingDoc{versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody), certified: co.WorkingCertified}
+		d := &workingDoc{sourceVersionID: co.WorkingVersionID, versionID: co.WorkingVersionID, path: co.WorkingPath, body: decodeBody(co.WorkingBody), certified: co.WorkingCertified}
 		v, err := s.q.GetVersion(s.ctx, d.versionID)
 		if err != nil {
 			return nil, err
@@ -363,6 +368,7 @@ func (s *session) load(objectID uuid.UUID) (*workingDoc, error) {
 		return nil, err
 	}
 	d.certified = head.Certified
+	d.sourceVersionID = head.ID
 	d.kind = obj.Kind
 	d.schemaVersion = head.SchemaVersion
 	d.deleted = head.Deleted
@@ -482,7 +488,16 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 		} else if in.Type == AssetCreate {
 			rec, err = s.createAsset(in)
 		} else if isContentOperation(in.Type) {
-			rec, err = s.applyContent(*in.Target, ops.Op{Type: in.Type, Payload: in.Payload})
+			if in.ExpectedVersionID != nil {
+				var doc *workingDoc
+				doc, err = s.load(*in.Target)
+				if err == nil && doc.sourceVersionID != *in.ExpectedVersionID {
+					err = commandbus.NewError(http.StatusConflict, "CONTENT_VERSION_CONFLICT", "Версия контента изменилась", "Перечитайте объект перед сохранением")
+				}
+			}
+			if err == nil {
+				rec, err = s.applyContent(*in.Target, ops.Op{Type: in.Type, Payload: in.Payload})
+			}
 		} else if in.Type == DocumentCreate {
 			rec, err = s.createDocument(in)
 		} else {

@@ -17,12 +17,15 @@ export async function loadStore(
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {}, locale };
-    const scope = { context: { locale, store: catalog } };
+    const scope = { context: { locale, store: catalog }, data: page.data };
     const composition = storeComposition(page.document, catalog);
-    const data = await loadSources(composition.dataSources ?? {}, registry.dataSources, scope, {
-      app: { catalog },
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+    const data = {
+      ...page.data,
+      ...(await loadSources(composition.dataSources ?? {}, registry.dataSources, scope, {
+        app: { catalog },
+        ...(options.signal ? { signal: options.signal } : {}),
+      })),
+    };
     model.plan = preparePage(composition, {
       natives: definitionsFor(catalog),
       scope: { ...scope, data },

@@ -31,8 +31,11 @@
 (STU-080…084). Реальный IdP и production-развёртывание ещё не настроены.
 Пакет [Structure, CodeMirror и JSON diff](../studio-json-diff.md) добавляет JSON
 узла/страницы, диагностики/подсказки и атомарный diff с историей (STU-090…094).
-Остались content editor,
-SSE/presence и Agent.
+Пакет [сущностей, RichText и ассетов](../studio-content.md) добавляет каталог
+контента, схемные формы, локали проекта, ссылки, RichText v1, metadata и upload
+с явным добавлением/заменой файла в CS (STU-100…104).
+Следующий UI-пакет — SSE/presence. Agent, конструкторы данных/поведения,
+advanced bindings, component.extract, буфер/wrap и NFR-приёмка остаются отдельными задачами.
 
 ## 2. Сквозной сценарий приёмки
 

@@ -53,6 +53,19 @@ func TestValueContract(t *testing.T) {
 }
 
 // CNT RichText v1: nested blocks, inline content, marks and optional subsets.
+func TestRichTextListSubset(t *testing.T) {
+	// STU-102: listItem is implicit structure of an allowed list, never a standalone block.
+	d, m := fixture(t)
+	c := checker{doc: d, app: m}
+	item := object{"type": "listItem", "content": []any{object{"type": "paragraph", "content": []any{object{"type": "text", "text": "item"}}}}}
+	schema := object{"type": "richText", "blocks": []any{"paragraph", "bulletList"}}
+	if !c.value(schema, object{"type": "doc", "content": []any{object{"type": "bulletList", "content": []any{item}}}}, 0) {
+		t.Fatal("allowed list requires no separate listItem grant")
+	}
+	if c.value(object{"type": "richText"}, object{"type": "doc", "content": []any{item}}, 0) {
+		t.Fatal("standalone listItem accepted")
+	}
+}
 func TestRichTextContract(t *testing.T) {
 	d, m := fixture(t)
 	c := checker{doc: d, app: m}

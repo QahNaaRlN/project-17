@@ -16,7 +16,7 @@
 
 Зоны и политика, ref/type существующего узла и декларации документа не имеют
 редактора в этом пакете. Локальный контент редактируется только как text;
-rich text/entities/assets — следующий content-пакет. Promote/rollback,
+rich text/entities/assets реализованы в [пакете контента](studio-content.md). Promote/rollback,
 междокументный буфер, SSE/presence и Agent остаются отдельными направлениями.
 Права и manifest/environment validation проверяет сервер при сохранении и публикации.
 
@@ -34,5 +34,5 @@ idempotent replay, история, undo/redo и откат всего пакет
 Браузерные сценарии моделируют CMS/IdP на HTTP-границе; реальное хранение проверяет
 Go-контракт. Подключение реального OIDC-провайдера и deploy остаются отдельными шагами.
 
-Следующий UI-пакет — content editor для сущностей, rich text и assets. Он зависит
-от существующих content/asset API и renderer-контрактов; не входит в этот JSON-пакет.
+Редактор сущностей, rich text и assets реализован отдельным [пакетом контента](studio-content.md).
+Следующий UI-пакет — SSE/presence.

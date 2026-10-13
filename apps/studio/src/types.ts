@@ -1,6 +1,7 @@
 import type { IrDocument } from "@cms/ir";
 import type { Manifest } from "@cms/manifest";
 export interface Config {
+  assetUploadOrigin?: string;
   authMode?: "service" | "oidc";
   project: string;
   environment: string;
@@ -46,6 +47,27 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  contentCatalog(
+    session: Session,
+    kind: ContentRecord["kind"],
+    schema?: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<ContentCatalog>;
+  content(session: Session, id: string, signal?: AbortSignal): Promise<ContentRecord>;
+  applyContent(
+    session: Session,
+    operations: ContentOperation[],
+    key: string,
+    signal: AbortSignal,
+  ): Promise<string[]>;
+  uploadCommand(
+    command: "create-asset-upload" | "complete-asset-upload",
+    payload: Record<string, unknown>,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<Upload>;
+  uploadStatus(id: string, signal: AbortSignal): Promise<Upload>;
   account(signal?: AbortSignal): Promise<Account>;
   logout(signal?: AbortSignal): Promise<void>;
   workItems(cursor?: string, signal?: AbortSignal): Promise<List<WorkItem>>;
@@ -123,6 +145,49 @@ export interface WorkItem {
 export interface List<T> {
   items: T[];
   nextCursor: string | null;
+}
+export interface ContentItem {
+  id: string;
+  kind: "entity" | "asset";
+  schema?: string;
+  title: string;
+  deleted: boolean;
+  assetKind?: string;
+  mimeType?: string;
+}
+export interface ContentCatalog extends List<ContentItem> {
+  locales: string[];
+  defaultLocale: string;
+}
+export interface ContentRecord {
+  id: string;
+  kind: ContentItem["kind"];
+  schema?: string;
+  schemaVersion?: number;
+  versionId: string;
+  deleted: boolean;
+  data: Record<string, unknown>;
+}
+export interface ContentOperation {
+  expectedVersionId?: string;
+  type:
+    | "entity.create"
+    | "entity.setFields"
+    | "entity.delete"
+    | "entity.restore"
+    | "asset.create"
+    | "asset.updateMeta"
+    | "asset.replaceFile";
+  target?: string;
+  payload: Record<string, unknown>;
+}
+export interface Upload {
+  assetId: string;
+  status: "pending" | "processing" | "ready" | "rejected";
+  expiresAt: string;
+  fileHash?: string;
+  errorCode?: string;
+  uploadUrl?: string;
 }
 export class StudioError extends Error {
   constructor(

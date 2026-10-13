@@ -74,6 +74,8 @@ export const article = defineSchema({
 ## 3. Rich text
 
 **[Решение]** Rich text хранится как структурированный JSON (подмножество модели ProseMirror) — «RichText v1». HTML не хранится и не принимается.
+`listItem` допустим только внутри разрешённого bulletList/orderedList; он не
+требует отдельного разрешения в ограничении `blocks`.
 
 ```json
 { "type": "doc", "content": [
@@ -179,6 +181,10 @@ Gateway, подписанные image models, cache/purge и адаптивны�
 unique/singleton, L2-ссылки, метаданные ассетов, HTTP и Delivery чтение подключены
 ([граница и API](../entities-assets.md)). Upload pipeline CNT-041/042 и приватное
 S3/MinIO подключены ([обработка и ограничения](../asset-upload-processing.md)).
+Studio [редактор контента](../studio-content.md) подключает каталог, формы по
+схемам/локалям, RichText v1, metadata и upload. Runtime/React рендерят RichText;
+page resolver и подписанные image models предоставляет приложение. Автоматическое
+разрешение/локализация entity refs для страницы остаётся отдельной зависимостью.
 Gateway/imgproxy CNT-050–051 и первый runtime Image CNT-052 подключены
 ([контракт и конфигурация](../asset-delivery-images.md)); внешний CDN требует
 операторской настройки. Превью SVG при загрузке, метаданные/превью видео,

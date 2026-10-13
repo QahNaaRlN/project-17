@@ -12,7 +12,9 @@ import {
   type ReviewDiagnostic,
 } from "./types.js";
 import { applyOperations } from "./operations.js";
+import type { ContentOperation } from "./types.js";
 export interface EditorState {
+  contentRetry: boolean;
   dirtyFields: Record<string, boolean>;
   workflowRetry: boolean;
   workflowDiagnostics: ReviewDiagnostic[];
@@ -44,6 +46,7 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    contentRetry: false,
     dirtyFields: {},
     workflowRetry: false,
     workflowDiagnostics: [],
@@ -126,6 +129,14 @@ export function createEditor(
     }
   }
   let pendingHistory: { session: Session; action: "undo" | "redo"; key: string } | null = null;
+  let pendingContent: {
+    session: Session;
+    operations: ContentOperation[];
+    key: string;
+    result?: string[];
+  } | null = null;
+  const contentDirty = () =>
+    !!(store.getState().dirtyFields.content || store.getState().dirtyFields.contentUpload);
   let pendingWorkflow: {
     session: Session;
     action: WorkflowAction;
@@ -136,6 +147,10 @@ export function createEditor(
     return { historyRevision: store.getState().historyRevision + 1 };
   }
   async function open(documentId: string, changesetId: string) {
+    if (contentDirty()) {
+      store.setState({ error: "CONTENT_DRAFT_PENDING" });
+      return;
+    }
     if (store.getState().dirtyFields.json) {
       store.setState({ error: "JSON_DRAFT_PENDING" });
       return;
@@ -147,10 +162,12 @@ export function createEditor(
     if (timer !== undefined) clearTimer(timer);
     if (handshakeTimer !== undefined) clearTimer(handshakeTimer);
     initialized = false;
+    pendingContent = null;
     store.setState({
       status: "loading",
       dirtyFields: {},
       workflowRetry: false,
+      contentRetry: false,
       workflowDiagnostics: [],
       publication: null,
       canvasPick: 0,
@@ -196,7 +213,7 @@ export function createEditor(
         ...historyRead(),
         session: current,
         document: structuredClone(current.record.body),
-        status: pendingHistory || pendingWorkflow ? "uncertain" : "ready",
+        status: pendingHistory || pendingWorkflow || pendingContent ? "uncertain" : "ready",
         selected:
           selected && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
@@ -213,6 +230,10 @@ export function createEditor(
     }
   }
   async function apply(operations: Operation[], selection?: string, source?: "json") {
+    if (contentDirty()) {
+      store.setState({ error: "CONTENT_DRAFT_PENDING" });
+      return;
+    }
     if (store.getState().dirtyFields.json && source !== "json") {
       store.setState({ error: "JSON_DRAFT_PENDING" });
       return;
@@ -319,6 +340,10 @@ export function createEditor(
     }
   }
   async function changeHistory(action: "undo" | "redo") {
+    if (contentDirty()) {
+      store.setState({ error: "CONTENT_DRAFT_PENDING" });
+      return;
+    }
     if (store.getState().dirtyFields.json) {
       store.setState({ error: "JSON_DRAFT_PENDING" });
       return;
@@ -400,7 +425,7 @@ export function createEditor(
         ...historyRead(),
         session: current,
         document: structuredClone(current.record.body),
-        status: pendingWorkflow ? "uncertain" : "ready",
+        status: pendingWorkflow || pendingContent ? "uncertain" : "ready",
         workflowRetry: !!pendingWorkflow,
         selected:
           selected && Object.hasOwn(current.record.body.nodes, selected)
@@ -417,6 +442,82 @@ export function createEditor(
         });
     }
     invalidate();
+  }
+  async function applyContent(operations: ContentOperation[], expectedSeq: number) {
+    const state = store.getState(),
+      session = state.session;
+    if (
+      !session ||
+      state.status !== "ready" ||
+      !session.review.canEdit ||
+      session.changeset.state !== "open" ||
+      Object.entries(state.dirtyFields).some(([key, value]) => key !== "content" && value)
+    )
+      return null;
+    if (expectedSeq !== session.changeset.seq) {
+      store.setState({ error: "CHANGESET_SEQ_CONFLICT" });
+      return null;
+    }
+    if (session.changeset.targets[0] !== session.config.environment) {
+      store.setState({ error: "CONTENT_TARGET_MISMATCH" });
+      return null;
+    }
+    if (!operations.length || operations.length > 200) return null;
+    pendingContent = {
+      session: structuredClone(session),
+      operations: structuredClone(operations),
+      key: crypto.randomUUID(),
+    };
+    return sendContent();
+  }
+  async function sendContent(): Promise<string[] | null> {
+    const attempt = pendingContent;
+    if (!attempt || store.getState().status === "saving") return null;
+    const stamp = epoch;
+    store.setState({ status: "saving", error: null, contentRetry: false });
+    let result = attempt.result,
+      uncertain = false;
+    try {
+      result ??= await api.applyContent(
+        attempt.session,
+        attempt.operations,
+        attempt.key,
+        lifecycle.signal,
+      );
+      if (stamp !== epoch || lifecycle.signal.aborted) return null;
+      attempt.result = result;
+    } catch (cause) {
+      if (stamp !== epoch || lifecycle.signal.aborted) return null;
+      uncertain = !(cause instanceof StudioError) || cause.uncertain;
+      if (!uncertain) pendingContent = null;
+      store.setState({ error: cause instanceof StudioError ? cause.code : "SAVE_UNCERTAIN" });
+    }
+    try {
+      const current = await api.open(
+        attempt.session.record.id,
+        attempt.session.changeset.id,
+        lifecycle.signal,
+      );
+      if (stamp !== epoch || lifecycle.signal.aborted) return null;
+      if (result) pendingContent = null;
+      store.setState({
+        ...historyRead(),
+        session: current,
+        document: structuredClone(current.record.body),
+        status: uncertain ? "uncertain" : "ready",
+        contentRetry: uncertain,
+      });
+    } catch {
+      if (stamp !== epoch || lifecycle.signal.aborted) return null;
+      store.setState({
+        status: "uncertain",
+        contentRetry: !!pendingContent,
+        error: store.getState().error ?? "CONTENT_READ_FAILED",
+      });
+      return null;
+    }
+    invalidate();
+    return result ?? null;
   }
   async function sendHistory() {
     const attempt = pendingHistory;
@@ -580,6 +681,8 @@ export function createEditor(
     store,
     open,
     apply,
+    applyContent,
+    retryContent: sendContent,
     refresh,
     select,
     receive,
@@ -595,6 +698,10 @@ export function createEditor(
       send("mode", { mode });
     },
     viewMode(viewMode: EditorState["viewMode"]) {
+      if (contentDirty()) {
+        store.setState({ error: "CONTENT_DRAFT_PENDING" });
+        return;
+      }
       if (store.getState().dirtyFields.json) {
         store.setState({ error: "JSON_DRAFT_PENDING" });
         return;

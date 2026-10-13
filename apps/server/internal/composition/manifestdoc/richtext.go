@@ -13,7 +13,7 @@ func (c *checker) richText(n, t object, depth int) bool {
 	if kind != "doc" && !slices.Contains(blocks, kind) && !slices.Contains(inline, kind) {
 		return false
 	}
-	if kind != "doc" && slices.Contains(blocks, kind) && t["blocks"] != nil && !slices.Contains(array(t["blocks"]), any(kind)) {
+	if kind != "doc" && kind != "listItem" && slices.Contains(blocks, kind) && t["blocks"] != nil && !slices.Contains(array(t["blocks"]), any(kind)) {
 		return false
 	}
 	attrs := asObject(n["attrs"])
@@ -77,7 +77,7 @@ func (c *checker) richText(n, t object, depth int) bool {
 				return false
 			}
 		default:
-			if !slices.Contains(blocks, childKind) {
+			if childKind == "listItem" || !slices.Contains(blocks, childKind) {
 				return false
 			}
 		}

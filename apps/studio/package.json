@@ -28,6 +28,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@cms/component-registry": "workspace:*",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/jsdom": "21.1.7",

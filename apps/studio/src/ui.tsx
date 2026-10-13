@@ -11,6 +11,7 @@ import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
 const JsonPanel = lazy(() => import("./json-panel.js"));
+const ContentPanel = lazy(() => import("./content-panel.js"));
 const copy = {
   ru: {
     page: "Страница",
@@ -31,7 +32,7 @@ const copy = {
     refresh: "Перечитать черновик",
     retry: "Повторить предпросмотр",
     readOnly: "Этот черновик доступен только для чтения",
-    binding: "Связь с данными — редактирование появится в следующем пакете",
+    binding: "Связь с данными — её можно изменить в Structure",
     unsupported: "Это поле пока доступно только для чтения",
     mode: "Режим",
     interact: "Взаимодействие",
@@ -69,7 +70,7 @@ const copy = {
     refresh: "Reload draft",
     retry: "Retry preview",
     readOnly: "This Change Set is read-only",
-    binding: "Data binding — editing will be available in a later package",
+    binding: "Data binding — edit it in Structure",
     unsupported: "This field is currently read-only",
     mode: "Mode",
     interact: "Interact",
@@ -92,6 +93,8 @@ const copy = {
 type Copy = typeof copy.ru;
 const errorText: Record<"ru" | "en", Record<string, string>> = {
   ru: {
+    CONTENT_DRAFT_PENDING: "Сохраните контент или сбросьте ввод перед другой правкой.",
+    CONTENT_TARGET_MISMATCH: "Первым target CS должно быть окружение Studio.",
     JSON_DRAFT_PENDING: "Сохраните JSON или сбросьте ввод перед переходом к другой правке.",
     FORBIDDEN: "У вашей учётной записи нет права на эту правку.",
     CHANGESET_NOT_OWNER: "Этот черновик принадлежит другому пользователю.",
@@ -105,6 +108,8 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
     PREVIEW_DOCUMENT_MISMATCH: "Приложение открыло другую страницу. Проверьте её маршрут.",
   },
   en: {
+    CONTENT_DRAFT_PENDING: "Save content or discard input before another edit.",
+    CONTENT_TARGET_MISMATCH: "The first CS target must match the Studio environment.",
     JSON_DRAFT_PENDING: "Save JSON or discard the input before starting another change.",
     FORBIDDEN: "Your account cannot make this change.",
     CHANGESET_NOT_OWNER: "This Change Set belongs to another user.",
@@ -259,6 +264,7 @@ function Design({
   );
 }
 export function Studio({ editor, api }: { editor: Editor; api: Api }) {
+  const [showContent, setShowContent] = useState(false);
   const state = useStore(editor.store),
     t = copy[state.locale];
   const saved = new URLSearchParams(
@@ -332,7 +338,8 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
   const tree = doc ? layers(doc) : [],
     selected = doc && state.selected ? doc.nodes[state.selected] : undefined;
   const busy = ["saving", "loading", "uncertain"].includes(state.status);
-  const jsonDirty = !!state.dirtyFields.json;
+  const contentDirty = !!(state.dirtyFields.content || state.dirtyFields.contentUpload);
+  const jsonDirty = !!state.dirtyFields.json || contentDirty;
   const disabled =
     busy ||
     jsonDirty ||
@@ -371,6 +378,22 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
       </header>
       <Workspace {...{ api, editor }} busy={busy || jsonDirty} locale={state.locale} />
       <WorkItems api={api} editor={editor} />
+      {session && (
+        <div className="content-toggle">
+          <button
+            aria-expanded={showContent}
+            disabled={contentDirty || !!state.dirtyFields.json || busy}
+            onClick={() => setShowContent((v) => !v)}
+          >
+            {state.locale === "ru" ? "Контент" : "Content"}
+          </button>
+        </div>
+      )}
+      {showContent && session && doc && (
+        <Suspense fallback={<p role="status">{t.loading}</p>}>
+          <ContentPanel key={session.changeset.id + ":" + session.record.id} {...{ api, editor }} />
+        </Suspense>
+      )}
       {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
       <div className="workspace">
         <StructurePanel editor={editor} />
@@ -516,7 +539,8 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
       <PublishingPanel editor={editor} />
       {session && (
         <HistoryPanel
-          {...{ session, api, editor, busy }}
+          {...{ session, api, editor }}
+          busy={busy || jsonDirty}
           locale={state.locale}
           revision={state.historyRevision}
           retry={state.historyRetry}
