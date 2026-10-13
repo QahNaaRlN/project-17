@@ -14,6 +14,7 @@ import {
 import { applyOperations } from "./operations.js";
 import type { ContentOperation } from "./types.js";
 export interface EditorState {
+  remotePending: boolean;
   contentRetry: boolean;
   dirtyFields: Record<string, boolean>;
   workflowRetry: boolean;
@@ -46,6 +47,7 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    remotePending: false,
     contentRetry: false,
     dirtyFields: {},
     workflowRetry: false,
@@ -143,6 +145,7 @@ export function createEditor(
     comment: string;
     key: string;
   } | null = null;
+  let remoteReading = false;
   function historyRead() {
     return { historyRevision: store.getState().historyRevision + 1 };
   }
@@ -165,6 +168,7 @@ export function createEditor(
     pendingContent = null;
     store.setState({
       status: "loading",
+      remotePending: false,
       dirtyFields: {},
       workflowRetry: false,
       contentRetry: false,
@@ -200,14 +204,24 @@ export function createEditor(
         });
     }
   }
-  async function refresh() {
+  async function refresh(remote = false) {
     const session = store.getState().session;
     if (!session || ["saving", "loading"].includes(store.getState().status)) return;
-    store.setState({ status: "loading", error: null });
+    if (!remote) store.setState({ status: "loading", error: null });
     const stamp = epoch;
     try {
       const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
+      // Input can become dirty while the asynchronous read is in flight.
+      if (
+        remote &&
+        (Object.values(store.getState().dirtyFields).some(Boolean) ||
+          store.getState().status !== "ready" ||
+          store.getState().session?.changeset.seq !== session.changeset.seq)
+      ) {
+        store.setState({ remotePending: true });
+        return;
+      }
       const selected = store.getState().selected;
       store.setState({
         ...historyRead(),
@@ -228,6 +242,24 @@ export function createEditor(
           error: error instanceof StudioError ? error.code : "REFRESH_FAILED",
         });
     }
+  }
+  async function refreshRemote() {
+    const state = store.getState();
+    if (
+      remoteReading ||
+      !state.remotePending ||
+      state.status !== "ready" ||
+      Object.values(state.dirtyFields).some(Boolean)
+    )
+      return;
+    remoteReading = true;
+    store.setState({ remotePending: false });
+    try {
+      await refresh(true);
+    } finally {
+      remoteReading = false;
+    }
+    if (store.getState().remotePending) void refreshRemote();
   }
   async function apply(operations: Operation[], selection?: string, source?: "json") {
     if (contentDirty()) {
@@ -670,6 +702,10 @@ export function createEditor(
     }
   }
   return {
+    remoteChanged() {
+      store.setState({ remotePending: true });
+    },
+    refreshRemote,
     formDirty(id: string, dirty: boolean) {
       const current = store.getState().dirtyFields;
       if (!!current[id] !== dirty) store.setState({ dirtyFields: { ...current, [id]: dirty } });

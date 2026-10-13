@@ -104,6 +104,18 @@ export async function studioFixture(id: string, previewToken: string) {
     actions: HistoryAction[] = [];
   const historyKeys = new Map<string, { body: string; seq: number }>();
   let historyId = 0;
+  const leases = new Map<
+    string,
+    {
+      actorId: string;
+      actorName: string;
+      changesetId: string;
+      changesetTitle: string;
+      expires: number;
+    }
+  >();
+  let revision = 0,
+    fingerprint = "";
   function logHistory(kind: HistoryAction["kind"], operations: HistoryAction["operations"]) {
     const firstSeq = seq + 1;
     seq += operations.length;
@@ -120,6 +132,7 @@ export async function studioFixture(id: string, previewToken: string) {
     });
   }
   function reset(enabled: boolean) {
+    leases.clear();
     active = enabled;
     seq = 1;
     fault = "";
@@ -254,8 +267,13 @@ export async function studioFixture(id: string, previewToken: string) {
           identity?: boolean;
           expired?: boolean;
           user?: string;
+          remoteTitle?: string;
         };
         if (control.reset) reset(true);
+        if (control.remoteTitle !== undefined) {
+          document.localContent!.t_title!.value = { ru: control.remoteTitle, en: "Remote heading" };
+          seq++;
+        }
         fault = control.fault ?? "";
         state = control.state ?? state;
         human = control.human ?? human;
@@ -285,6 +303,49 @@ export async function studioFixture(id: string, previewToken: string) {
         return true;
       }
       const owner = !identity.enabled || who?.id === id;
+      if (path === "/api/v1/events") {
+        const query = new URL(req.url!, "http://127.0.0.1").searchParams;
+        let cursor = query.get("after") ?? "";
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        const emit = (event: string, value: unknown, revision?: string) =>
+          res.write(
+            `${revision === undefined ? "" : "id: " + revision + "\n"}event: ${event}\ndata: ${JSON.stringify(value)}\n\n`,
+          );
+        const snapshot = () => {
+          const next = JSON.stringify({ seq, state, document, content, drafts: [...draftTitles] });
+          if (next !== fingerprint) {
+            fingerprint = next;
+            revision++;
+          }
+          const current = String(revision);
+          if (cursor !== current) {
+            emit("invalidate", { revision: current }, current);
+            cursor = current;
+          } else emit("sync", { revision: current }, current);
+          const items = new Map<
+            string,
+            Omit<typeof leases extends Map<string, infer V> ? V : never, "expires">
+          >();
+          for (const [key, lease] of leases) {
+            if (lease.expires <= Date.now()) {
+              leases.delete(key);
+              continue;
+            }
+            const { expires: _expires, ...item } = lease;
+            items.set(lease.actorId + lease.changesetId, item);
+          }
+          emit("presence", { items: [...items.values()] });
+        };
+        snapshot();
+        // Only the HTTP boundary is modelled here; Go tests verify storage/TTL.
+        const poll = setInterval(snapshot, 100),
+          timeout = setTimeout(() => res.end(), 25_000);
+        res.once("close", () => {
+          clearInterval(poll);
+          clearTimeout(timeout);
+        });
+        return true;
+      }
       if (path === "/api/v1/content-catalog") {
         const query = new URL(req.url!, "http://127.0.0.1").searchParams;
         res.end(
@@ -491,6 +552,22 @@ export async function studioFixture(id: string, previewToken: string) {
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);
+      if (path.includes("/commands/presence-")) {
+        const p = envelope.payload,
+          actorId = who?.id ?? id;
+        const key = actorId + p.leaseId;
+        if (path.endsWith("presence-leave")) leases.delete(key);
+        else
+          leases.set(key, {
+            actorId,
+            actorName: who?.name ?? "Studio actor",
+            changesetId: p.changesetId,
+            changesetTitle: draftTitles.get(p.changesetId) ?? "Draft",
+            expires: Date.now() + 30_000,
+          });
+        res.end(JSON.stringify({ result: { ttlSeconds: 30 } }));
+        return true;
+      }
       if (
         !owner &&
         ["apply-operations", "undo", "redo", "submit-changeset", "reopen-changeset"].some(

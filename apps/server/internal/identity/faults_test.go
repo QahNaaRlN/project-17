@@ -64,7 +64,25 @@ func TestHumanIdentityMigrationGuard(t *testing.T) {
 			} else {
 				f.begin(t)
 			}
-			err := postgres.Migrate(context.Background(), f.e.Pool, "down", slog.New(slog.NewTextHandler(io.Discard, nil)))
+			// Reach the identity migration; later transport metadata can be removed
+			// without weakening the guard on persisted human/session facts.
+			log := slog.New(slog.NewTextHandler(io.Discard, nil))
+			for {
+				var version int
+				if err := f.e.Pool.QueryRow(context.Background(), `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil {
+					t.Fatal(err)
+				}
+				if version == 16 {
+					break
+				}
+				if version < 16 {
+					t.Fatal("identity migration missing", version)
+				}
+				if err := postgres.Migrate(context.Background(), f.e.Pool, "down", log); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := postgres.Migrate(context.Background(), f.e.Pool, "down", log)
 			if err == nil || !strings.Contains(err.Error(), "human identity/session data prevents downgrade") {
 				t.Fatal(err)
 			}

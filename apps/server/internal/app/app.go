@@ -26,6 +26,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/realtime"
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
@@ -128,6 +129,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	}()
 
 	bus := commandbus.New(pool)
+	realtime.Register(bus)
 	bus.WithContext(jobs.WithClient(queue))
 	projects.Register(bus)
 	identity.Register(bus)

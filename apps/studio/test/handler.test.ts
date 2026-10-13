@@ -14,6 +14,53 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-110/113: SSE streams immediately; adapter validates scope and cancels on disconnect", async () => {
+  const { origin, fetcher, post } = await setup();
+  const path = `/api/studio/api/v1/events?environment=staging&documentId=${documentId}&changesetId=${changesetId}`;
+  for (const suffix of ["&after=bad", "&documentId=" + documentId, "&unknown=1"])
+    expect((await fetch(origin + path + suffix)).status).toBe(400);
+  expect(
+    (await fetch(origin + path.replace("environment=staging", "environment=production"))).status,
+  ).toBe(403);
+  const cancelled = vi.fn();
+  fetcher.mockResolvedValueOnce(
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('event: sync\ndata: {"revision":"1"}\n\n'));
+        },
+        cancel: cancelled,
+      }),
+      { headers: { "Content-Type": "text/event-stream", "Set-Cookie": "secret" } },
+    ),
+  );
+  const lifecycle = new AbortController();
+  const response = await fetch(origin + path + "&after=1", { signal: lifecycle.signal });
+  expect(response.headers.get("content-type")).toBe("text/event-stream");
+  expect(response.headers.get("set-cookie")).toBeNull();
+  const reader = response.body!.getReader();
+  expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: sync");
+  const upstreamSignal = fetcher.mock.calls.at(-1)![1]!.signal!;
+  lifecycle.abort();
+  await reader.cancel().catch(() => {});
+  await vi.waitFor(() => expect(upstreamSignal.aborted).toBe(true));
+  for (const leave of [false, true]) {
+    const route = "/api/studio/api/v1/commands/presence-" + (leave ? "leave" : "heartbeat");
+    const payload = {
+      leaseId: documentId,
+      ...(leave ? {} : { documentId, changesetId, environment: "staging" }),
+    };
+    expect((await post(route, { payload })).status).toBe(200);
+    expect((await post(route, { payload: { ...payload, actorId: documentId } })).status).toBe(400);
+    expect((await post(route, { payload: { ...payload, leaseId: "bad" } })).status).toBe(400);
+    if (!leave)
+      expect(
+        (await post(route, { payload: { ...payload, environment: "production" } })).status,
+      ).toBe(403);
+  }
+  fetcher.mockResolvedValueOnce(Response.json({}));
+  expect((await fetch(origin + path)).status).toBe(502);
+});
 it("STU-100/101/103: контент и upload проходят только через разрешённые маршруты/окружение", async () => {
   const { origin, post } = await setup();
   const base =

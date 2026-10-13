@@ -19,7 +19,7 @@ OIDC-режим Studio запрещает service credential и перечиты
 | HTTP | `net/http` + chi |
 | PostgreSQL | pgx v5, sqlc для запросов, goose для миграций |
 | Фоновые задачи и outbox | River (очередь на PostgreSQL) — с появлением фоновых задач |
-| Кэш, rate limiting, presence | Redis 7 |
+| Кэш, rate limiting, presence (целевая архитектура) | Redis 7; MVP presence — PostgreSQL, [контракт](../studio-realtime.md) |
 | Объектное хранилище | S3-совместимое (MinIO локально) |
 | Трансформации изображений | imgproxy |
 | Валидация JSON Schema | `santhosh-tekuri/jsonschema` |

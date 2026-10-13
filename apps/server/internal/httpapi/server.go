@@ -73,6 +73,7 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authenticate(d))
+		r.Get("/events", eventsHandler(d))
 		workspaceRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))

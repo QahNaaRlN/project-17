@@ -39,7 +39,7 @@ Studio, эта панель доступна для чтения. Нужен CS 
 Пакет не реализует locale fallback/upcast, параллельный перевод, редактор схем,
 изменение document.content деклараций, локальный richText через localContent.set,
 CDN/deploy или настройку реального S3/IdP. JSON страницы продолжает редактировать
-только локальный text. SSE/presence и Agent — следующие независимые направления.
+только локальный text. [SSE/presence](studio-realtime.md) реализован; следующий пакет — Agent.
 
 Приёмка: каталог → создание сущности → поля/локали/rich text → сохранение →
 history/undo/redo/reload; metadata/выбор ассета → загрузка/обработка → явное

@@ -24,6 +24,7 @@ export default function ContentPanel({ api, editor }: { api: Api; editor: Editor
     [errors, setErrors] = useState<Record<string, boolean>>({}),
     [fieldReset, setFieldReset] = useState<Record<string, number>>({}),
     [serial, setSerial] = useState(0),
+    [uploadSerial, setUploadSerial] = useState(0),
     [locale, setLocale] = useState<string>(state.locale);
   const schemas = session.manifest.schemas ?? {},
     fields = kind === "asset" ? assetFields : (schemas[draft?.schema ?? filter]?.fields ?? {});
@@ -113,6 +114,7 @@ export default function ContentPanel({ api, editor }: { api: Api; editor: Editor
     else setDraft(null);
     setErrors({});
     setSerial((v) => v + 1);
+    setUploadSerial((v) => v + 1);
     editor.formDirty("content", false);
     editor.error("");
   };
@@ -126,7 +128,10 @@ export default function ContentPanel({ api, editor }: { api: Api; editor: Editor
     }
   };
   const saveOps = async (ops: ContentOperation[], seq: number) => {
-    finish(await editor.applyContent(ops, seq));
+    const ids = await editor.applyContent(ops, seq);
+    finish(ids);
+    if (ids && ops.some((op) => op.type === "asset.create" || op.type === "asset.replaceFile"))
+      setUploadSerial((v) => v + 1);
   };
   const save = () => {
     if (!draft || blocked || stale || uploadDirty || schemaMismatch) return;
@@ -454,7 +459,7 @@ export default function ContentPanel({ api, editor }: { api: Api; editor: Editor
       )}
       {kind === "asset" && (
         <AssetUpload
-          key={serial}
+          key={id + ":" + uploadSerial}
           {...{ api, editor, ru }}
           disabled={blocked || dirty || stale || (!!id && (!draft || read.isPending))}
           target={draft?.base?.id}
