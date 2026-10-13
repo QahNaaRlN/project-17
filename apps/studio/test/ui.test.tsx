@@ -68,6 +68,13 @@ async function submit(element: HTMLFormElement) {
     element.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
   await flush();
+  // A preview hash and the command response may outlive one event-loop tick.
+  await vi.waitFor(async () => {
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(editor.store.getState().status).not.toBe("saving");
+  });
 }
 const input = (id: string) => document.getElementById(id) as HTMLInputElement;
 const layer = (id: string) =>
