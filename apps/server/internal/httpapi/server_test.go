@@ -26,6 +26,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/realtime"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
@@ -59,6 +60,7 @@ func setup(t *testing.T) env {
 		fixture.ActivateManifest(name, []byte(cmstest.DefaultManifest))
 	}
 	bus := commandbus.New(pool)
+	realtime.Register(bus)
 	queue, err := jobs.NewInserter(pool)
 	if err != nil {
 		t.Fatal(err)

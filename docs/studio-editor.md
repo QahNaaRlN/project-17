@@ -79,7 +79,7 @@ renderer; локальный текст меняет перевод. Это не
 [пакете структуры](studio-structure.md). Согласование/публикация подключены в
 [пакете проверок](studio-publishing.md). CodeMirror/JSON diff реализован в
 [пакете JSON](studio-json-diff.md). Сущности, RichText и ассеты подключены в
-[пакете контента](studio-content.md). Остались SSE/presence и Agent.
+[пакете контента](studio-content.md). [SSE/presence](studio-realtime.md) реализован; остался Agent.
 Универсальный OIDC-вход реализован в [пакете identity](studio-identity.md);
 настройка реального IdP и deploy ещё не выполнены. В M3 остаются streaming/selective
 hydration, изоляция native render ошибок и остальной каталог.

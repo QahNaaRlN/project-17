@@ -255,6 +255,16 @@ type Operation struct {
 	RedoOf           *uuid.UUID `json:"redoOf"`
 }
 
+type PresenceLease struct {
+	ProjectID   uuid.UUID `json:"projectId"`
+	ActorID     uuid.UUID `json:"actorId"`
+	LeaseID     uuid.UUID `json:"leaseId"`
+	DocumentID  uuid.UUID `json:"documentId"`
+	ChangesetID uuid.UUID `json:"changesetId"`
+	Environment string    `json:"environment"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
 type PreviewSchemaSnapshot struct {
 	ManifestID uuid.UUID `json:"manifestId"`
 	SchemaName string    `json:"schemaName"`
@@ -268,6 +278,11 @@ type Project struct {
 	Name      string    `json:"name"`
 	Settings  []byte    `json:"settings"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type ProjectRevision struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Revision  int64     `json:"revision"`
 }
 
 type Publication struct {

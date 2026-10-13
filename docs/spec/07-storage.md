@@ -485,6 +485,12 @@ CREATE TABLE security_events (
 
 ## 4. Redis
 
+Целевая архитектура ниже. В текущем MVP [SSE/presence](../studio-realtime.md)
+использует PostgreSQL: `project_revisions` (одна ревизия на проект) и
+`presence_leases` (lease вкладки, TTL 30 с). Это transport metadata;
+сохранённые факты и история не зависят от присутствия. Идемпотентность ephemeral
+heartbeat/leave сохраняется минимум одну минуту, затем очищается при heartbeat.
+
 | Ключ | Назначение | TTL |
 |---|---|---|
 | `dlv:{project}:{env}:{kind}:{key}:{locale}` | Кэш ответов Delivery API | 1 ч + явная инвалидация |

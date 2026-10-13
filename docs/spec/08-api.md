@@ -138,7 +138,7 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/review` | Состояние, риск, проверки, роли/счётчики/история согласований, needsAttention, краткие objects без тел и actions для текущего актора; согласованный снимок без блокировок записи (STU-070) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
-| `GET /api/v1/events` (SSE) | Поток событий проекта для Studio: изменения CS, проверки, публикации, presence |
+| `GET /api/v1/events` (SSE) | Инвалидация состояния проекта и presence для документа/CS/окружения; [контракт](../studio-realtime.md) |
 
 Ответ `register-manifest` различает активированный manifest и сохранённого кандидата: `manifestHash`, `activation` (`active` или `pending`), для кандидата — `changesetId` (MF-025). Регистрация кандидата не меняет ответы запросов активного manifest и схем.
 

@@ -95,6 +95,7 @@ export function createStudioHandler(
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const allowedGet =
+          path === "/api/v1/events" ||
           path === "/api/v1/content-catalog" ||
           new RegExp(`^/api/v1/(content|asset-uploads)/${uuid}$`).test(path) ||
           path === "/api/v1/pages" ||
@@ -105,6 +106,8 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          "/api/v1/commands/presence-heartbeat",
+          "/api/v1/commands/presence-leave",
           "/api/v1/commands/create-asset-upload",
           "/api/v1/commands/complete-asset-upload",
           "/api/v1/commands/apply-operations",
@@ -134,7 +137,23 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (path === "/api/v1/content-catalog" || path.startsWith("/api/v1/content/")) {
+          if (path === "/api/v1/events") {
+            if (
+              [...url.searchParams.keys()].some(
+                (key) =>
+                  !["environment", "documentId", "changesetId", "after"].includes(key) ||
+                  url.searchParams.getAll(key).length !== 1,
+              ) ||
+              !new RegExp(`^${uuid}$`).test(url.searchParams.get("documentId") ?? "") ||
+              !new RegExp(`^${uuid}$`).test(url.searchParams.get("changesetId") ?? "") ||
+              (url.searchParams.has("after") &&
+                !/^(0|[1-9][0-9]{0,18})$/.test(url.searchParams.get("after")!))
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (path === "/api/v1/content-catalog" || path.startsWith("/api/v1/content/")) {
             const allowed = [
               "environment",
               "changesetId",
@@ -218,6 +237,25 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (path.includes("/commands/presence-")) {
+            const p = envelope.payload,
+              leave = path.endsWith("presence-leave");
+            if (
+              Object.keys(p).some(
+                (key) =>
+                  !(
+                    leave ? ["leaseId"] : ["leaseId", "documentId", "changesetId", "environment"]
+                  ).includes(key),
+              ) ||
+              !new RegExp(`^${uuid}$`).test(String(p.leaseId)) ||
+              (!leave &&
+                (!new RegExp(`^${uuid}$`).test(String(p.documentId)) ||
+                  !new RegExp(`^${uuid}$`).test(String(p.changesetId))))
+            )
+              return error(400, "PAYLOAD_INVALID");
+            if (!leave && p.environment !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          }
           if (path.endsWith("create-asset-upload") || path.endsWith("complete-asset-upload")) {
             const allowed = path.endsWith("create-asset-upload")
               ? ["filename", "mimeType", "size", "sha256"]
@@ -326,12 +364,19 @@ export function createStudioHandler(
           headers["Content-Type"] = "application/json";
           headers["Idempotency-Key"] = String(req.headers["idempotency-key"]);
         }
+        const stream = path === "/api/v1/events";
+        const connection = new AbortController();
+        const disconnect = () => connection.abort();
+        const streamSignal = stream
+          ? AbortSignal.any([connection.signal, AbortSignal.timeout(35_000)])
+          : undefined;
+        if (stream) res.once("close", disconnect);
         const result = await fetcher(upstream, {
           method: req.method,
           headers,
           ...(body === undefined ? {} : { body }),
           redirect: "error",
-          signal: AbortSignal.timeout(15_000),
+          signal: streamSignal ?? AbortSignal.timeout(15_000),
         });
         // Do not forward Set-Cookie, Location, request metadata or upstream error details.
         if (!result.ok) {
@@ -345,6 +390,44 @@ export function createStudioHandler(
             /* safe generic code */
           }
           return error(result.status, code, diagnostics);
+        }
+        if (stream) {
+          try {
+            if (
+              !result.headers.get("content-type")?.startsWith("text/event-stream") ||
+              !result.body
+            )
+              return error(502, "RESPONSE_INVALID");
+            res.writeHead(200, { "Content-Type": "text/event-stream", "X-Accel-Buffering": "no" });
+            res.flushHeaders();
+            const reader = result.body.getReader();
+            try {
+              while (!streamSignal!.aborted) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                if (!res.write(chunk.value))
+                  await new Promise<void>((resolve) => {
+                    const done = () => {
+                      res.off("drain", done);
+                      res.off("close", done);
+                      streamSignal!.removeEventListener("abort", done);
+                      resolve();
+                    };
+                    res.once("drain", done);
+                    res.once("close", done);
+                    streamSignal!.addEventListener("abort", done, { once: true });
+                  });
+              }
+            } finally {
+              await reader.cancel().catch(() => {});
+              reader.releaseLock();
+            }
+            res.end();
+          } finally {
+            connection.abort();
+            res.off("close", disconnect);
+          }
+          return;
         }
         res.writeHead(result.status, { "Content-Type": "application/json" });
         res.end(await result.text());
@@ -373,6 +456,10 @@ export function createStudioHandler(
       );
       res.end(bytes);
     } catch (cause) {
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
       error(
         cause instanceof SyntaxError ? 400 : 502,
         cause instanceof SyntaxError ? "PAYLOAD_INVALID" : "STUDIO_REQUEST_FAILED",

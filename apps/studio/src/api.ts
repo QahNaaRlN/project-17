@@ -110,6 +110,60 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async events(session, after, signal) {
+      if (human) {
+        const account = await api.account(signal);
+        if (!account.authenticated) {
+          onSessionLost?.();
+          throw new StudioError("UNAUTHENTICATED");
+        }
+      }
+      const query = new URLSearchParams({
+        environment: session.config.environment,
+        documentId: session.record.id,
+        changesetId: session.changeset.id,
+        ...(after === undefined ? {} : { after }),
+      });
+      const response = await fetcher("/api/studio/api/v1/events?" + query, {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal,
+        headers: {
+          Accept: "text/event-stream",
+          ...(human && actor ? { "X-CMS-Actor": actor } : {}),
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) onSessionLost?.();
+        throw new StudioError(
+          response.status === 401 || response.status === 403
+            ? "UNAUTHENTICATED"
+            : "EVENTS_UNAVAILABLE",
+        );
+      }
+      if (!response.headers.get("content-type")?.startsWith("text/event-stream") || !response.body)
+        throw new StudioError("RESPONSE_INVALID");
+      return response;
+    },
+    async presence(session, leaseId, leave, signal) {
+      await request(
+        "/api/v1/commands/presence-" + (leave ? "leave" : "heartbeat"),
+        signal,
+        {
+          payload: {
+            leaseId,
+            ...(leave
+              ? {}
+              : {
+                  environment: session.config.environment,
+                  documentId: session.record.id,
+                  changesetId: session.changeset.id,
+                }),
+          },
+        },
+        crypto.randomUUID(),
+      );
+    },
     async contentCatalog(session, kind, schema, cursor, signal) {
       const value = (await listing<ContentItem>(
         "/api/v1/content-catalog",

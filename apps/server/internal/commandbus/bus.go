@@ -200,10 +200,21 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 			return fmt.Errorf("commandbus: marshal result: %w", err)
 		}
 		resp = Response{Status: http.StatusOK, Body: body}
-		return q.SaveIdempotencyKey(ctx, store.SaveIdempotencyKeyParams{
+		if err := q.SaveIdempotencyKey(ctx, store.SaveIdempotencyKeyParams{
 			ActorID: actor.ID, Key: req.IdempotencyKey, Command: req.Name,
 			RequestHash: hash, Status: int32(resp.Status), Response: body,
-		})
+		}); err != nil {
+			return err
+		}
+		// Ephemeral leases and preview credentials do not invalidate saved content.
+		if req.Name == "presence-heartbeat" || req.Name == "presence-leave" || req.Name == "create-preview-token" {
+			return nil
+		}
+		// UPSERT holds the project row until commit: concurrent commands cannot
+		// expose revision N+1 before N commits. Rollback and replay emit nothing.
+		_, err = tx.Exec(ctx, `INSERT INTO project_revisions(project_id,revision) VALUES($1,1)
+		 ON CONFLICT(project_id) DO UPDATE SET revision=project_revisions.revision+1`, actor.ProjectID)
+		return err
 	})
 	if err != nil {
 		return Response{}, err

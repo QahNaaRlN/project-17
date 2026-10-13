@@ -47,6 +47,8 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  events?(session: Session, after: string | undefined, signal: AbortSignal): Promise<Response>;
+  presence?(session: Session, leaseId: string, leave: boolean, signal: AbortSignal): Promise<void>;
   contentCatalog(
     session: Session,
     kind: ContentRecord["kind"],

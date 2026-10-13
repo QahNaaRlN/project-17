@@ -296,17 +296,20 @@ export function StructurePanel({ editor }: { editor: Editor }) {
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
         collisionDetection={pointerWithin}
         onDragStart={(event) => {
+          editor.formDirty("structureDrag", true);
           setDragging(String(event.active.id));
           setNotice(t.moving);
           editor.select(String(event.active.id));
         }}
         onDragCancel={() => {
+          editor.formDirty("structureDrag", false);
           setDragging(null);
           setNotice(t.cancelled);
         }}
         onDragEnd={(event) => {
           const place = dropPlaces.find((p) => placeKey(p) === event.over?.id);
           if (place) report(() => move(place, String(event.active.id)));
+          editor.formDirty("structureDrag", false);
           setDragging(null);
           setNotice(place ? "" : t.cancelled);
         }}

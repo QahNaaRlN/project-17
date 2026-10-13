@@ -10,6 +10,7 @@ import { HistoryPanel } from "./history.js";
 import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
+import { PresencePanel } from "./presence.js";
 const JsonPanel = lazy(() => import("./json-panel.js"));
 const ContentPanel = lazy(() => import("./content-panel.js"));
 const copy = {
@@ -377,6 +378,7 @@ export function Studio({ editor, api }: { editor: Editor; api: Api }) {
         </label>
       </header>
       <Workspace {...{ api, editor }} busy={busy || jsonDirty} locale={state.locale} />
+      <PresencePanel {...{ api, editor }} />
       <WorkItems api={api} editor={editor} />
       {session && (
         <div className="content-toggle">
