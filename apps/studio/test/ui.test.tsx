@@ -120,6 +120,11 @@ it("STU-137/139: фактический документ и CS видны; сб�
   expect(Object.values(editor.store.getState().dirtyFields).some(Boolean)).toBe(false);
   expect(api.apply).not.toHaveBeenCalled();
   expect(button("Страницы").disabled).toBe(false);
+  await act(async () => {
+    editor.formDirty("structureDrag", true);
+  });
+  expect(layer("n_heading").getAttribute("aria-roledescription")).toBe("Перемещаемый элемент");
+  expect(button("Страницы").disabled).toBe(true);
 });
 it("STU-138/141: вписывание меняет масштаб, сохраняя viewport приложения и координаты overlay", async () => {
   let measure: (() => void) | undefined;

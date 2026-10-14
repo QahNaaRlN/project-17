@@ -116,6 +116,7 @@ test("STU-074: lost committed publication retries exact key/body without another
   await expect(
     panel.getByRole("button", { name: "Повторить тот же запрос", exact: true }),
   ).toBeVisible();
+  await page.locator(".editor-selector > summary").click();
   await expect(page.getByRole("button", { name: "Открыть", exact: true })).toBeDisabled();
   await expect(panel).not.toContainText("Публикация подтверждена");
   await panel.getByRole("button", { name: "Повторить тот же запрос", exact: true }).click();

@@ -173,7 +173,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
   );
   const enabled =
     state.status === "ready" &&
-    !Object.values(state.dirtyFields).some(Boolean) &&
+    !Object.entries(state.dirtyFields).some(([key, value]) => key !== "structureDrag" && value) &&
     session?.changeset.state === "open" &&
     session.review.canEdit;
   const removable =
