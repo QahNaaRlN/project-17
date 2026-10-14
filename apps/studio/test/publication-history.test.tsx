@@ -141,6 +141,7 @@ async function confirm() {
 it("STU-164/166/170: historical comparison and explicit reason precede a fresh guarded rollback", async () => {
   const api = await setup();
   expect(document.body.textContent).toContain("9007199254740993");
+  expect(document.activeElement).toBe(document.querySelector(".publication-card"));
   await confirm();
   expect(api.rollback).not.toHaveBeenCalled();
   expect(editor.store.getState().dirtyFields.publication).toBe(true);
@@ -157,6 +158,8 @@ it("STU-164/166/170: historical comparison and explicit reason precede a fresh g
   expect(document.body.textContent).toContain("Черновики сохранены");
   expect(document.querySelector("a")?.href).toContain("/old");
   expect(editor.store.getState().dirtyFields.publication).toBe(false);
+  await click("К списку публикаций");
+  expect(document.activeElement).toBe(document.querySelector(".publication-list"));
 });
 it("STU-171: unknown outcome locks navigation and retries the identical attempt", async () => {
   const api = await setup();

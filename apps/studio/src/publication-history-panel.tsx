@@ -34,6 +34,9 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
   const attempt = useRef<RollbackAttempt | null>(null),
     generation = useRef(0);
   const sending = useRef(false);
+  const cardElement = useRef<HTMLDivElement>(null),
+    listElement = useRef<HTMLDivElement>(null);
+  const focusPublication = useRef<string | null>(id || null);
   const ownDirty = stage !== "idle" || reason.length > 0;
   const locked =
     state.status === "saving" ||
@@ -55,6 +58,12 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     refetchInterval: 30000,
   });
   const visible = card.isSuccess && !card.isError ? card.data : undefined;
+  useEffect(() => {
+    if (visible && focusPublication.current === id) {
+      cardElement.current?.focus();
+      focusPublication.current = null;
+    }
+  }, [visible, id]);
   const selected = visible?.objects.find((o) => o.id === object) ?? visible?.objects[0];
   const page = useInfiniteQuery({
     queryKey: ["publication-diff", id, preview, visible?.snapshot, selected?.id],
@@ -113,6 +122,7 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
   function choose(next: string) {
     if (ownDirty || locked) return;
     generation.current++;
+    focusPublication.current = next;
     setId(next);
     setPreview(false);
     setObject("");
@@ -165,6 +175,7 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
       if (token !== generation.current) return;
       attempt.current = null;
       setReceipt(result.id);
+      focusPublication.current = result.id;
       setStage("idle");
       setReason("");
       setDialog(false);
@@ -262,7 +273,7 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
         <p>{ru ? "Публикаций пока нет" : "No publications yet"}</p>
       )}
       <div className="publication-layout">
-        <div className="publication-list">
+        <div className="publication-list" ref={listElement} tabIndex={-1}>
           {entries.map((p) => (
             <Button
               key={p.id}
@@ -292,7 +303,12 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
             </Button>
           )}
         </div>
-        <div className="publication-card">
+        <div className="publication-card" ref={cardElement} tabIndex={-1}>
+          {id && (
+            <Button disabled={ownDirty || locked} onClick={() => listElement.current?.focus()}>
+              {ru ? "К списку публикаций" : "Back to publication list"}
+            </Button>
+          )}
           {receipt === id && (
             <Notice>
               {ru
