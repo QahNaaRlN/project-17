@@ -15,12 +15,20 @@ const database = new URL(process.env.CMS_DATABASE_URL);
 if (!["postgres:", "postgresql:"].includes(database.protocol) || database.hostname !== "127.0.0.1")
   throw Error("Only a loopback development database is allowed");
 const binary = resolve(process.env.CMS_REVIEW_BINARY);
+const basePort = Number(process.env.CMS_REVIEW_BASE_PORT ?? 18093);
+if (!Number.isInteger(basePort) || basePort < 1024 || basePort > 65532)
+  throw Error("Invalid loopback port range");
+const apiOrigin = `http://127.0.0.1:${basePort}`,
+  studioOrigin = `http://127.0.0.1:${basePort + 1}`,
+  oidcOrigin = `http://127.0.0.1:${basePort + 2}`,
+  appOrigin = `http://127.0.0.1:${basePort + 3}`;
+
 const env = {
   ...process.env,
-  CMS_HTTP_ADDR: "127.0.0.1:18093",
-  CMS_OIDC_ISSUER: "http://127.0.0.1:18095",
+  CMS_HTTP_ADDR: `127.0.0.1:${basePort}`,
+  CMS_OIDC_ISSUER: oidcOrigin,
   CMS_OIDC_CLIENT_ID: "studio",
-  CMS_STUDIO_PUBLIC_URL: "http://127.0.0.1:18094",
+  CMS_STUDIO_PUBLIC_URL: studioOrigin,
   CMS_OIDC_ALLOW_LOOPBACK_HTTP: "true",
 };
 mkdirSync(local, { recursive: true });
@@ -44,7 +52,7 @@ process.on("uncaughtException", () => {
   process.exit(1);
 });
 const project = "studio-work-review";
-for (const port of [18093, 18094, 18095, 18096]) {
+for (const port of [basePort, basePort + 1, basePort + 2, basePort + 3]) {
   const probe = createServer();
   await new Promise((resolve, reject) => {
     probe.once("error", reject);
@@ -70,7 +78,7 @@ const start = (binary, args, extra, log) => {
 const oidcPid = start(
   process.execPath,
   [join(repo, "scripts", "dev-oidc.mjs")],
-  {},
+  { DEV_OIDC_PORT: String(basePort + 2), DEV_STUDIO_PORT: String(basePort + 1) },
   "studio-work-oidc.log",
 );
 const ready = async (url) => {
@@ -85,7 +93,7 @@ const ready = async (url) => {
   }
   throw Error("Local service startup failed");
 };
-await ready("http://127.0.0.1:18095/.well-known/openid-configuration");
+await ready(oidcOrigin + "/.well-known/openid-configuration");
 const boot = spawnSync(
   binary,
   ["bootstrap", "-slug", project, "-name", "Studio Work Review", "-token-ttl", "8h"],
@@ -94,8 +102,8 @@ const boot = spawnSync(
 if (boot.status !== 0) throw Error("Local bootstrap failed");
 const credential = boot.stdout.match(/cms_svc_[a-zA-Z0-9_-]+/)[0];
 const apiPid = start(binary, ["serve"], {}, "studio-work-api.log");
-await ready("http://127.0.0.1:18093/healthz");
-const baseUrl = "http://127.0.0.1:18093";
+await ready(apiOrigin + "/healthz");
+const baseUrl = apiOrigin;
 const command = async (name, payload) => {
   const r = await fetch(baseUrl + "/api/v1/commands/" + name, {
     method: "POST",
@@ -111,12 +119,14 @@ const command = async (name, payload) => {
   if (!r.ok) throw Error(name + " " + r.status + " " + d.code);
   return d.result;
 };
-await command("register-manifest", {
-  environment: "staging",
-  manifest: JSON.parse(
-    readFileSync(join(repo, "examples", "react-store", ".cms", "manifest.json"), "utf8"),
-  ),
-});
+const reviewManifest = JSON.parse(
+  readFileSync(join(repo, "examples", "react-store", ".cms", "manifest.json"), "utf8"),
+);
+reviewManifest.schemas = {
+  ...reviewManifest.schemas,
+  Article: { version: 1, title: "Article", fields: { title: { type: "text", localized: true } } },
+};
+await command("register-manifest", { environment: "staging", manifest: reviewManifest });
 const author = await command("create-role", {
   name: "studio-author",
   capabilities: [
@@ -124,6 +134,7 @@ const author = await command("create-role", {
     "content.read",
     "design.compose",
     "content.write",
+    "asset.write",
     "content.publish",
   ],
 });
@@ -139,8 +150,8 @@ writeFileSync(
     project,
     environment: "staging",
     authMode: "oidc",
-    studioOrigin: "http://127.0.0.1:18094",
-    appOrigin: "http://127.0.0.1:18096",
+    studioOrigin,
+    appOrigin,
   }),
 );
 const delivery = await command("create-delivery-key", {
@@ -169,10 +180,10 @@ const storePid = start(
   [join(repo, "examples", "react-store", "dist", "server", "server.js")],
   {
     NODE_ENV: "production",
-    PORT: "18096",
+    PORT: String(basePort + 3),
     CMS_STORE_CONFIG_FILE: storeFile,
-    CMS_STUDIO_ORIGIN: "http://127.0.0.1:18094",
-    CMS_APP_ORIGIN: "http://127.0.0.1:18096",
+    CMS_STUDIO_ORIGIN: studioOrigin,
+    CMS_APP_ORIGIN: appOrigin,
   },
   "studio-work-store.log",
 );
@@ -184,11 +195,13 @@ writeFileSync(
     credential,
     authorRole: author.id,
     reviewerRole: reviewer.id,
+    studioOrigin,
+    appOrigin,
   }),
 );
 writeFileSync(
   join(local, "studio-work-review.processes.json"),
   JSON.stringify({ oidcPid, apiPid, studioPid, storePid }),
 );
-await ready("http://127.0.0.1:18094/api/studio/config");
-console.log("Live two-user stand ready at http://127.0.0.1:18094");
+await ready(studioOrigin + "/api/studio/config");
+console.log("Live two-user stand ready at " + studioOrigin);

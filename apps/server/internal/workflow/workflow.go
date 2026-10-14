@@ -20,6 +20,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/zonepolicy"
+	"github.com/qahnaarln/project-17/apps/server/internal/reviewdiff"
 	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -483,9 +484,10 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 // --- approve-changeset / request-changes ---------------------------------------------
 
 type reviewPayload struct {
-	ChangesetID uuid.UUID `json:"changesetId"`
-	Comment     *string   `json:"comment"`
-	ExpectedSeq *int32    `json:"expectedSeq,omitempty"`
+	ExpectedDiffSnapshot *string   `json:"expectedDiffSnapshot,omitempty"`
+	ChangesetID          uuid.UUID `json:"changesetId"`
+	Comment              *string   `json:"comment"`
+	ExpectedSeq          *int32    `json:"expectedSeq,omitempty"`
 }
 
 func requireComment(p reviewPayload) error {
@@ -515,6 +517,10 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 	if err := RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Review{}, err
 	}
+	if err := reviewdiff.CheckExpected(ctx, q, actor, cs.ID, p.ExpectedDiffSnapshot); err != nil {
+		return Review{}, err
+	}
+
 	// PUB-002: согласующий не автор ни одной операции, в том числе как onBehalfOf агента.
 	authors, err := q.ChangesetAuthors(ctx, cs.ID)
 	if err != nil {
@@ -626,6 +632,9 @@ func validatePolicy(p ApprovalPolicy) error {
 }
 
 func handleSetPolicy(ctx context.Context, tx pgx.Tx, actor auth.Actor, p ApprovalPolicy) (ApprovalPolicy, error) {
+	if err := validation.LockProjectEnvironments(ctx, store.New(tx), actor.ProjectID); err != nil {
+		return ApprovalPolicy{}, err
+	}
 	q := store.New(tx)
 	raw, err := q.GetProjectSettings(ctx, actor.ProjectID)
 	if err != nil {

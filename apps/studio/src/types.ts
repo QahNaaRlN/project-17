@@ -22,6 +22,7 @@ export interface DocumentRecord {
   body: IrDocument;
 }
 export interface Session {
+  diffSnapshot?: string;
   review: Review;
   history: History;
   config: Config;
@@ -47,6 +48,15 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  diffIndex?(session: Session, signal?: AbortSignal): Promise<DiffIndex>;
+  diffPage?(
+    session: Session,
+    index: DiffIndex,
+    objectId: string,
+    baseline: DiffBaseline,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<DiffPage>;
   agentConfig?(signal?: AbortSignal): Promise<AgentConfig>;
   agentRuns?(session: Session, signal?: AbortSignal): Promise<AgentRun[]>;
   agentCommand?(
@@ -282,4 +292,58 @@ export interface Rect {
   w: number;
   h: number;
   instance?: string;
+}
+export type DiffBaseline = "base" | "published";
+export interface DiffSummary {
+  effect: "added" | "modified" | "deleted" | "restored" | "metadata-only" | "unchanged";
+  changeCount: number;
+}
+export interface DiffObject {
+  id: string;
+  kind: "document" | "entity" | "asset";
+  docKind?: string;
+  title: string;
+  beforePath: string | null;
+  afterPath: string | null;
+  baseVersionId: string | null;
+  workingVersionId: string;
+  headVersionId: string | null;
+  publishedVersionId: string | null;
+  baseStale: boolean;
+  summaries: Record<DiffBaseline, DiffSummary>;
+}
+export interface DiffIndex {
+  changesetId: string;
+  seq: number;
+  snapshot: string;
+  environment: string;
+  targets: string[];
+  complete: true;
+  objects: DiffObject[];
+}
+export type DiffValue =
+  | { present: false }
+  | { present: true; value: unknown }
+  | { present: true; rawJson: string }
+  | { present: true; redacted: true; reason: "service-field" };
+export interface DiffChange {
+  key: string;
+  category: string;
+  kind: "add" | "remove" | "replace" | "move";
+  pointer: string;
+  nodeId?: string;
+  locale?: string;
+  before: DiffValue;
+  after: DiffValue;
+}
+export interface DiffPage {
+  changesetId: string;
+  objectId: string;
+  seq: number;
+  snapshot: string;
+  environment: string;
+  baseline: DiffBaseline;
+  totalChanges: number;
+  items: DiffChange[];
+  nextCursor: string | null;
 }

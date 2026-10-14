@@ -1,3 +1,5 @@
+import { validateDiffIndex, validateDiffPage } from "./review-diff.js";
+import type { DiffIndex, DiffPage } from "./types.js";
 import { validateDocument } from "@cms/ir";
 import { jsonValue } from "@cms/runtime";
 import { canonicalJson } from "@cms/manifest";
@@ -421,6 +423,9 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
             expectedSeq: session.changeset.seq,
             ...(action === "publish" ? { environment: session.config.environment } : {}),
             ...(action === "request-changes" ? { comment } : {}),
+            ...(session.diffSnapshot && ["approve", "request-changes", "publish"].includes(action)
+              ? { expectedDiffSnapshot: session.diffSnapshot }
+              : {}),
           },
           reason: `Studio: ${action} Change Set`,
         },
@@ -460,6 +465,35 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         environment: p.environment,
         createdAt: p.createdAt,
       };
+    },
+    async diffIndex(session, signal) {
+      const query = new URLSearchParams({ environment: session.config.environment });
+      return validateDiffIndex(
+        await request<DiffIndex>(
+          `/api/v1/changesets/${session.changeset.id}/diff?${query}`,
+          signal,
+        ),
+        session,
+      );
+    },
+    async diffPage(session, index, objectId, baseline, cursor, signal) {
+      const query = new URLSearchParams({
+        environment: session.config.environment,
+        baseline,
+        snapshot: index.snapshot,
+      });
+      if (cursor) query.set("after", cursor);
+      const result = validateDiffPage(
+        await request<DiffPage>(
+          `/api/v1/changesets/${session.changeset.id}/diff/${objectId}?${query}`,
+          signal,
+        ),
+        index,
+        objectId,
+        baseline,
+      );
+      if (cursor && result.nextCursor === cursor) throw new StudioError("RESPONSE_INVALID");
+      return result;
     },
     async history(session, beforeSeq, signal) {
       return readHistory(session.changeset.id, session.changeset.seq, beforeSeq, signal);

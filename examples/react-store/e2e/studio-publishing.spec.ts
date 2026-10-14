@@ -51,7 +51,7 @@ test("STU-071/072: failed check selects its node; reopening and fixing allows an
   await request.post(origin + "/studio-control", { data: { fault: "submit-invalid" } });
   await panel.getByRole("button", { name: "Отправить на проверку", exact: true }).click();
   await expect(panel.getByText("PROP_REQUIRED", { exact: true })).toBeVisible();
-  await panel.getByRole("button", { name: "Выбрать блок", exact: true }).click();
+  await panel.getByRole("button", { name: "Выбрать блок", exact: true }).last().click();
   await expect(page.locator('[role="treeitem"][aria-selected="true"]')).toHaveAttribute(
     "title",
     "n_title",
