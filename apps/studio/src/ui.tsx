@@ -376,6 +376,7 @@ export function Studio({
         action = event.shiftKey ? "redo" : "undo";
       if (
         current.status !== "ready" ||
+        Object.values(current.dirtyFields).some(Boolean) ||
         !current.session?.history[action === "undo" ? "canUndo" : "canRedo"]
       )
         return;

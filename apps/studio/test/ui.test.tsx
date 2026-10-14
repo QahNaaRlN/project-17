@@ -103,6 +103,11 @@ it("STU-137/139: фактический документ и CS видны; сб�
   expect(editor.store.getState().selected).toBe("n_heading");
   expect(input("property-text").value).toBe("Unsaved private text");
   expect(button("Сохранить level").disabled).toBe(true);
+  editor.store.getState().session!.history.canUndo = true;
+  await act(async () => {
+    await editor.changeHistory("undo");
+  });
+  expect(api.changeHistory).not.toHaveBeenCalled();
   const reads = vi.mocked(api.open).mock.calls.length;
   await act(async () => {
     await editor.open(documentId, changesetId);

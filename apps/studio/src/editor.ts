@@ -380,6 +380,10 @@ export function createEditor(
     }
   }
   async function changeHistory(action: "undo" | "redo") {
+    if (fieldDirty()) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
+      return;
+    }
     if (contentDirty()) {
       store.setState({ error: "CONTENT_DRAFT_PENDING" });
       return;
