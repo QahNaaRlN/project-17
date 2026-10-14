@@ -17,6 +17,7 @@ CMS нового поколения: контент и визуальная ко
 | `packages/react` | React-адаптер и серверная загрузка страниц ([границы пакета](docs/react-ir-renderer.md)) |
 | `examples/react-store` | React-витрина из CMS: SSR, адаптивный каталог, Radix Dialog ([запуск](examples/react-store/README.md)) |
 | `apps/server` | CMS Core на Go: HTTP API, Command Bus, проекты и окружения, IR ([README](apps/server/README.md)) |
+| `apps/studio` | Studio: каталог страниц, редактор, черновики и согласование ([запуск](apps/studio/README.md), [каркас и Страницы](docs/studio-shell-pages.md)) |
 | `deploy/compose` | Локальное окружение Docker Compose |
 | `docs/spec` | Техническая спецификация |
 

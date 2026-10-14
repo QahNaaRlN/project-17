@@ -3,6 +3,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -26,10 +28,15 @@ func workspaceRoutes(r chi.Router, d Deps) {
 			}
 			values := r.URL.Query()
 			for key, entries := range values {
-				if len(entries) != 1 || (key != "environment" && key != "after" && !(route == "/working-drafts" && key == "documentId")) {
+				if len(entries) != 1 || (key != "environment" && key != "after" && !(route == "/working-drafts" && key == "documentId") && !(route == "/pages" && key == "q")) {
 					writeError(w, r, d.Log, badParam(key, "один поддерживаемый параметр"))
 					return
 				}
+			}
+			search := strings.TrimSpace(values.Get("q"))
+			if !utf8.ValidString(search) || utf8.RuneCountInString(search) > 200 || strings.ContainsRune(search, '\x00') {
+				writeError(w, r, d.Log, badParam("q", "не более 200 символов без NUL"))
+				return
 			}
 			after := uuid.Nil
 			if raw, present := values["after"]; present {
@@ -51,7 +58,7 @@ func workspaceRoutes(r chi.Router, d Deps) {
 				return
 			}
 			if route == "/pages" {
-				rows, err := q.ListStudioPages(r.Context(), store.ListStudioPagesParams{ProjectID: actor.ProjectID, OwnerID: actor.ID, Environment: env.Name, AfterID: after})
+				rows, err := q.ListStudioPages(r.Context(), store.ListStudioPagesParams{ProjectID: actor.ProjectID, OwnerID: actor.ID, Environment: env.Name, AfterID: after, Search: search})
 				items := make([]workspacePage, 0, len(rows))
 				for _, row := range rows {
 					items = append(items, workspacePage{ID: row.ID, Path: row.Path, Title: row.Title, HasHead: row.HasHead})

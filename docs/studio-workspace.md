@@ -16,7 +16,7 @@
 
 ## Query API
 
-`GET /api/v1/pages?environment=staging[&after=UUID]` и
+`GET /api/v1/pages?environment=staging[&q=строка][&after=UUID]` и
 `GET /api/v1/working-drafts?environment=staging&documentId=UUID[&after=UUID]`
 требуют `design.read`, ограничены проектом аутентифицированного актора и
 существующим standard окружением. Ответ `{items, nextCursor}`: максимум 50,
@@ -26,6 +26,9 @@ UUID по возрастанию, `nextCursor=null` в конце. Фильтр�
 head (как у существующего чтения/редактирования), а не Delivery publication.
 Для страницы без head маршрут/имя берутся из последнего своего подходящего CS.
 Страницы без маршрута пока исключены: текущий preview требует маршрут.
+Поиск по названию/маршруту, каталог в новом каркасе и состояния чтения описаны в
+[пакете каркаса и Страниц](studio-shell-pages.md). Параметр q не расширяет права
+или доступность страниц; фильтр применяется до пагинации.
 
 Адаптер разрешает только эти два новых чтения и create-changeset с ровно одним
 настроенным target; сохраняет Host/Origin/Fetch Metadata и credential вне браузера.
@@ -41,7 +44,7 @@ head (как у существующего чтения/редактирован
 
 Пакет не завершает M4. CodeMirror/JSON diff подключён в
 [пакете JSON](studio-json-diff.md). Content editor подключён в [пакете контента](studio-content.md).
-[SSE/presence](studio-realtime.md) реализован; остался Agent. [Review/publish](studio-publishing.md), история и undo/redo теперь
+[SSE/presence](studio-realtime.md) и [Agent](studio-agent.md) реализованы. [Review/publish](studio-publishing.md), история и undo/redo теперь
 реализованы в [следующем пакете](studio-history.md).
 Палитра, DnD/перемещение, удаление и дублирование реализованы
 в [пакете структуры](studio-structure.md).

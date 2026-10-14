@@ -475,11 +475,13 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         key,
       );
     },
-    async pages(cursor, signal) {
+    async pages(cursor, signal, query = "") {
+      query = query.trim();
+      if ([...query].length > 200 || query.includes("\0")) throw new StudioError("PARAM_INVALID");
       const config = await api.config(signal);
       const value = await listing<PageItem>(
         "/api/v1/pages",
-        { environment: config.environment },
+        { environment: config.environment, ...(query ? { q: query } : {}) },
         cursor,
         signal,
       );
