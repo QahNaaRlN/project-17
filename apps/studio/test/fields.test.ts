@@ -1,8 +1,35 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { fields, fieldOperations, designOperation, layers } from "../src/fields.js";
+import { fields, fieldOperations, designOperation, designFields, layers } from "../src/fields.js";
 import { fixture, documentId } from "./fixture.js";
+import { applyOperations } from "../src/operations.js";
 describe("STU-003/IR-041: manifest forms and catalog operations", () => {
+  it("STU-138/141: отступы предлагаются только применимым компонентам", () => {
+    const s = fixture();
+    expect(designFields({ id: "n_test", type: "Heading" }, s.manifest)).toEqual([]);
+    expect(designFields({ id: "n_test", type: "Box" }, s.manifest)).toEqual(["padding"]);
+    expect(designFields({ id: "n_test", type: "Button" }, s.manifest)).toEqual(["padding"]);
+    for (const type of ["Stack", "Flex", "Grid"])
+      expect(designFields({ id: "n_test", type }, s.manifest)).toEqual(["padding", "gap"]);
+    s.manifest.components!.Custom!.container = true;
+    expect(designFields({ id: "n_test", type: "Custom" }, s.manifest)).toEqual(["padding"]);
+    expect(designFields({ id: "n_test", type: "Missing" }, s.manifest)).toEqual([]);
+  });
+  it("STU-141: правка literal text удаляет props перед созданием локальной привязки", () => {
+    const s = fixture(),
+      doc = s.record.body,
+      node = doc.nodes.n_heading!;
+    delete node.bindings;
+    node.props = { level: 2, text: "Literal text" };
+    const field = fields(doc, node, s.manifest).find((item) => item.name === "text")!;
+    const result = applyOperations(
+      doc,
+      fieldOperations(documentId, node, field, "Edited text", "t_edit_title"),
+    );
+    expect(result.nodes.n_heading!.props).toEqual({ level: 2 });
+    expect(result.nodes.n_heading!.bindings).toEqual({ text: "$local.t_edit_title" });
+    expect(result.localContent!.t_edit_title!.value).toEqual({ ru: "Edited text" });
+  });
   it("строит builtin/native формы и защищает bindings/структуры", () => {
     const s = fixture(),
       doc = s.record.body;

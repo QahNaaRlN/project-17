@@ -108,6 +108,23 @@ it("SDK-033/040: витрина выбирает экземпляр в design, �
     );
   });
   expect(document.querySelector(".about")!.className).toMatch(/c-[a-f0-9]+/);
+  // STU-141: patch rendering must use the same application tokens as SSR.
+  doc.nodes.n_about!.design = { padding: "lg" };
+  const tokenHash = await documentHash(doc);
+  await act(async () => {
+    post("document.patch", {
+      documentId: id,
+      baseHash: hash,
+      hash: tokenHash,
+      patch: [{ op: "replace", path: "/nodes/n_about/design", value: { padding: "lg" } }],
+    });
+    await vi.waitFor(() =>
+      expect(send.mock.calls.filter(([value]) => value.type === "rendered")).toHaveLength(
+        rendered + 2,
+      ),
+    );
+  });
+  expect(document.body.innerHTML).toContain("--cms-spacing-lg:24px");
 });
 it("SDK-040: полный reload использует серверную модель, отказ не заменяет текущий preview", async () => {
   const initial = await model(),

@@ -4,6 +4,15 @@ import { cms, id, page, image, now } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
 afterEach(() => vi.restoreAllMocks());
 describe("STORE-001/005/006/007: чтение CMS", () => {
+  it("STU-141: SSR разрешает дизайн-токены приложения", async () => {
+    const c = cms(),
+      data = page(catalog);
+    data.document.nodes.n_about!.design = { padding: "lg" };
+    vi.mocked(c.getPage).mockResolvedValue(data);
+    const result = await loadStore(c, "/store");
+    expect(result.status).toBe("ready");
+    expect(JSON.stringify(result.plan)).toContain("--cms-spacing-lg:24px");
+  });
   it("STU-102/104: данные контента страницы доступны RichText и preview reload", async () => {
     const c = cms(),
       data = page(catalog);

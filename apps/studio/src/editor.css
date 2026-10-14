@@ -1,0 +1,198 @@
+.editor-selector > summary {
+  padding: 14px 24px;
+  cursor: pointer;
+  color: var(--p17-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--p17-border);
+}
+.studio-shell[data-screen="pages"] .editor-selector > summary {
+  display: none;
+}
+.editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  background: var(--p17-bg);
+  border-bottom: 1px solid var(--p17-border);
+}
+.editor-document {
+  min-width: 0;
+}
+.editor-document h1 {
+  font-size: 22px;
+  letter-spacing: -0.4px;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.editor-document p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  color: var(--p17-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.editor-save-state {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  color: var(--p17-muted);
+  font-size: 12px;
+}
+.editor-heading .content-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.editor-surface .presence-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 24px;
+  font-size: 12px;
+}
+.editor-surface .presence-panel h2,
+.editor-surface .presence-panel p,
+.editor-surface .presence-panel ul {
+  margin: 0;
+}
+.editor-surface .presence-panel h2 {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: var(--p17-muted);
+}
+.editor-surface .presence-panel ul {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
+  gap: 12px;
+}
+.canvas-zoom {
+  margin: 0 auto;
+}
+.editor-surface > .canvas-tools {
+  background: var(--p17-panel);
+  flex-wrap: wrap;
+  padding: 12px 24px;
+}
+.editor-surface .workspace {
+  grid-template-columns: 224px minmax(0, 1fr) 280px;
+  min-height: 680px;
+}
+.editor-surface .layers,
+.editor-surface .properties {
+  padding: 20px 16px;
+  min-width: 0;
+}
+.editor-surface .properties {
+  border-left: 1px solid var(--p17-border);
+}
+.editor-surface .layers h2,
+.editor-surface .properties h2 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--p17-muted);
+  margin: 0 0 18px;
+}
+.editor-surface .properties h2:not(:first-child) {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--p17-border);
+}
+.editor-surface .selected-name {
+  padding: 12px;
+  border: 1px solid var(--p17-border);
+  border-radius: 6px;
+  background: var(--p17-raised);
+  overflow-wrap: anywhere;
+}
+.editor-surface .field input,
+.editor-surface .field select {
+  width: 100%;
+  min-width: 0;
+}
+.editor-surface .field button {
+  color: var(--p17-accent);
+  border-color: var(--p17-border);
+  background: var(--p17-selected);
+}
+.editor-surface .readonly-field {
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--p17-raised);
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.editor-surface [role="treeitem"] {
+  overflow-wrap: anywhere;
+}
+.editor-surface .canvas-scroll {
+  background-color: var(--p17-bg);
+  background-image: radial-gradient(var(--p17-border) 1px, transparent 1px);
+  background-size: 16px 16px;
+  min-height: 500px;
+  max-height: 850px;
+}
+.editor-surface footer {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.panel-load-error,
+.panel-loading {
+  padding: 20px;
+  margin: 0;
+  background: var(--p17-panel);
+  border-bottom: 1px solid var(--p17-border);
+}
+.panel-load-error {
+  color: var(--p17-danger);
+}
+@media (max-width: 1200px) {
+  .studio-shell[data-screen="editor"] .studio-layout {
+    grid-template-columns: 172px minmax(0, 1fr);
+  }
+  .editor-surface .workspace {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .editor-surface .properties {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--p17-border);
+  }
+}
+@media (max-width: 680px) {
+  .editor-heading {
+    padding: 20px 16px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .editor-surface > .canvas-tools {
+    padding: 12px 16px;
+    align-items: stretch;
+  }
+  .editor-surface > .canvas-tools [role="group"] {
+    flex-wrap: wrap;
+  }
+  .editor-surface > .canvas-tools label {
+    flex-wrap: wrap;
+  }
+  .editor-surface .workspace {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .editor-save-state {
+    flex-wrap: wrap;
+  }
+  .editor-surface .canvas-scroll {
+    padding: 16px;
+    min-height: 450px;
+    max-height: 650px;
+  }
+}

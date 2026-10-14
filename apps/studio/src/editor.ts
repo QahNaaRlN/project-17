@@ -139,6 +139,10 @@ export function createEditor(
   } | null = null;
   const contentDirty = () =>
     !!(store.getState().dirtyFields.content || store.getState().dirtyFields.contentUpload);
+  const fieldDirty = () =>
+    Object.entries(store.getState().dirtyFields).some(
+      ([key, dirty]) => dirty && (key.startsWith("property-") || key.startsWith("design-")),
+    );
   let pendingWorkflow: {
     session: Session;
     action: WorkflowAction;
@@ -150,6 +154,10 @@ export function createEditor(
     return { historyRevision: store.getState().historyRevision + 1 };
   }
   async function open(documentId: string, changesetId: string) {
+    if (fieldDirty()) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
+      return;
+    }
     if (contentDirty()) {
       store.setState({ error: "CONTENT_DRAFT_PENDING" });
       return;
@@ -597,6 +605,10 @@ export function createEditor(
     invalidate();
   }
   function select(nodeId: string, instance: string | null = null, source?: "json") {
+    if (nodeId !== store.getState().selected && fieldDirty()) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
+      return;
+    }
     if (
       store.getState().dirtyFields.json &&
       source !== "json" &&
@@ -734,6 +746,10 @@ export function createEditor(
       send("mode", { mode });
     },
     viewMode(viewMode: EditorState["viewMode"]) {
+      if (fieldDirty()) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return;
+      }
       if (contentDirty()) {
         store.setState({ error: "CONTENT_DRAFT_PENDING" });
         return;
