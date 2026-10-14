@@ -173,3 +173,114 @@
     white-space: normal;
   }
 }
+.review-diff {
+  background: var(--p17-panel);
+  border: 1px solid var(--p17-border);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.review-diff-heading,
+.diff-change-heading,
+.diff-baselines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.diff-baselines {
+  justify-content: flex-start;
+  margin: 20px 0;
+}
+.diff-baselines button[aria-pressed="true"],
+.diff-object-list button[aria-pressed="true"] {
+  background: var(--p17-selected);
+  color: var(--p17-accent);
+  border-color: var(--p17-accentBorder);
+}
+.diff-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 24px;
+}
+.diff-object-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.diff-object-list button {
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.diff-object-list span,
+.diff-object-list small {
+  color: var(--p17-muted);
+}
+.diff-details {
+  min-width: 0;
+}
+.diff-change {
+  border: 1px solid var(--p17-border);
+  border-radius: 6px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.diff-change-heading {
+  padding: 12px;
+  background: var(--p17-raised);
+  font-size: 12px;
+}
+.diff-change-heading code {
+  overflow-wrap: anywhere;
+}
+.diff-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.diff-values > div {
+  padding: 12px;
+  min-width: 0;
+}
+.diff-values > div + div {
+  border-left: 1px solid var(--p17-border);
+  background: var(--p17-selected);
+}
+.diff-values small {
+  color: var(--p17-muted);
+}
+.diff-values pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+@media (max-width: 1100px) {
+  .diff-layout {
+    grid-template-columns: 1fr;
+  }
+  .diff-object-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 680px) {
+  .review-diff {
+    padding: 16px;
+  }
+  .diff-values {
+    grid-template-columns: 1fr;
+  }
+  .diff-values > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--p17-border);
+  }
+  .diff-object-list {
+    flex-direction: column;
+  }
+}

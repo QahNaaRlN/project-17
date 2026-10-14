@@ -13,13 +13,21 @@ type Draft = {
   seq: number;
   schema: string;
 };
-export default function ContentPanel({ api, editor }: { api: Api; editor: Editor }) {
+export default function ContentPanel({
+  api,
+  editor,
+  initialSelection,
+}: {
+  api: Api;
+  editor: Editor;
+  initialSelection?: { id: string; kind: "entity" | "asset" } | undefined;
+}) {
   const state = useStore(editor.store),
     session = state.session!,
     ru = state.locale === "ru";
-  const [kind, setKind] = useState<"entity" | "asset">("entity"),
+  const [kind, setKind] = useState<"entity" | "asset">(initialSelection?.kind ?? "entity"),
     [filter, setFilter] = useState(""),
-    [id, setId] = useState(""),
+    [id, setId] = useState(initialSelection?.id ?? ""),
     [draft, setDraft] = useState<Draft | null>(null),
     [errors, setErrors] = useState<Record<string, boolean>>({}),
     [fieldReset, setFieldReset] = useState<Record<string, number>>({}),

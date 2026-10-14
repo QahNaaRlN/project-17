@@ -27,6 +27,9 @@ type promotePayload struct {
 // (PROMOTE_OUTDATED): для возврата служит rollback.
 func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePayload) (Publication, error) {
 	q := store.New(tx)
+	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
+		return Publication{}, err
+	}
 	src, err := q.GetPublication(ctx, store.GetPublicationParams{ID: p.PublicationID, ProjectID: actor.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Publication{}, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Публикация не найдена",

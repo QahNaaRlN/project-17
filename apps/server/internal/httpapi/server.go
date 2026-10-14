@@ -155,6 +155,7 @@ func NewRouter(d Deps) http.Handler {
 			respond(w, r, d, map[string]any{"items": items}, err)
 		})
 		r.Get("/changesets/{id}/review", reviewHandler(d))
+		reviewDiffRoutes(r, d)
 		r.Get("/delivery-keys", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.ProjectAdmin); err != nil {

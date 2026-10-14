@@ -214,6 +214,9 @@ export async function studioFixture(id: string, previewToken: string) {
     };
   }
   reset(false);
+  const diffSnapshot = () =>
+    "sha256:" +
+    createHash("sha256").update(JSON.stringify({ seq, document, content })).digest("hex");
   const changeset = (draftId = id) => ({
     id: draftId,
     title: draftTitles.get(draftId),
@@ -446,6 +449,66 @@ export async function studioFixture(id: string, previewToken: string) {
       }
       if (path === "/api/v1/manifest") {
         res.end(JSON.stringify({ manifest, manifestHash: "sha256:" + "a".repeat(64) }));
+        return true;
+      }
+      if (/\/changesets\/[^/]+\/diff(?:\/[^/]+)?$/.test(path)) {
+        const query = new URL(req.url!, "http://127.0.0.1").searchParams;
+        const csId = path.split("/")[4]!;
+        const index = {
+          changesetId: csId,
+          seq,
+          snapshot: diffSnapshot(),
+          environment: "staging",
+          targets: ["staging"],
+          complete: true,
+          objects: [
+            {
+              id,
+              kind: "document",
+              docKind: "page",
+              title: "Store",
+              beforePath: "/store",
+              afterPath: "/store",
+              baseVersionId: id,
+              workingVersionId: createdId,
+              headVersionId: id,
+              publishedVersionId: id,
+              baseStale: false,
+              summaries: {
+                base: { effect: "modified", changeCount: 1 },
+                published: { effect: "modified", changeCount: 1 },
+              },
+            },
+          ],
+        };
+        if (path.endsWith("/diff")) res.end(JSON.stringify(index));
+        else if (query.get("snapshot") !== index.snapshot) fail(409, "DIFF_SNAPSHOT_STALE");
+        else
+          res.end(
+            JSON.stringify({
+              ...index,
+              objectId: id,
+              baseline: query.get("baseline"),
+              totalChanges: 1,
+              nextCursor: null,
+              items: [
+                {
+                  key: "0",
+                  category: "property",
+                  kind: "replace",
+                  pointer: "/nodes/n_title/props/text",
+                  nodeId: "n_title",
+                  before: { present: true, value: "Before" },
+                  after: {
+                    present: true,
+                    value:
+                      (document.nodes.n_title?.props as Record<string, unknown> | undefined)
+                        ?.text ?? "After",
+                  },
+                },
+              ],
+            }),
+          );
         return true;
       }
       if (path.endsWith("/review")) {
@@ -697,6 +760,13 @@ export async function studioFixture(id: string, previewToken: string) {
         if (fault === "workflow-stale") seq++;
         if (envelope.payload.expectedSeq !== seq) {
           fail(409, "CHANGESET_SEQ_CONFLICT");
+          return true;
+        }
+        if (
+          envelope.payload.expectedDiffSnapshot &&
+          envelope.payload.expectedDiffSnapshot !== diffSnapshot()
+        ) {
+          fail(409, "DIFF_SNAPSHOT_STALE");
           return true;
         }
         let result: unknown;

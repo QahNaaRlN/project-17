@@ -1,3 +1,4 @@
+import { refreshMountedEditor } from "./identity-controls.js";
 import { expect, test, type Page } from "@playwright/test";
 import type { IrDocument } from "@cms/ir";
 const origin = "http://127.0.0.1:18084",
@@ -190,7 +191,7 @@ test("STU-093: changed OIDC actor destroys unsaved JSON and cannot send it", asy
     if (r.url().includes("/commands/apply-operations")) writes++;
   });
   await page.context().request.post(origin + "/studio-control", { data: { user: "bob" } });
-  await page.getByRole("button", { name: "Сбросить ввод и перечитать", exact: true }).click();
+  await refreshMountedEditor(page, "Сбросить ввод и перечитать");
   await expect(page.locator(".person-bar")).toContainText("Bob");
   await expect(page.locator(".cm-editor")).toHaveCount(0);
   expect(writes).toBe(0);

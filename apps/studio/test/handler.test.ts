@@ -564,3 +564,31 @@ it("отклоняет публичный сервер, userinfo, чужие п�
     "https://app.example",
   );
 });
+it("STU-156: diff proxy bounds query context and guarded workflow payloads", async () => {
+  const { origin, post, fetcher } = await setup();
+  const hash = "sha256:" + "a".repeat(64);
+  const route = `/api/studio/api/v1/changesets/${changesetId}/diff`;
+  expect((await fetch(origin + route + "?environment=staging")).status).toBe(200);
+  const detail = route + `/${documentId}?environment=staging&baseline=base&snapshot=${hash}`;
+  expect((await fetch(origin + detail + "&limit=100&after=opaque")).status).toBe(200);
+  for (const q of [
+    "&limit=101",
+    "&limit=0",
+    "&baseline=published",
+    "&other=1",
+    "&after=",
+    "&snapshot=bad",
+  ])
+    expect((await fetch(origin + detail + q)).status).toBe(400);
+  expect((await fetch(origin + route + "?environment=production")).status).toBe(403);
+  const command = "/api/studio/api/v1/commands/approve-changeset";
+  expect(
+    (await post(command, { payload: { changesetId, expectedSeq: 1, expectedDiffSnapshot: hash } }))
+      .status,
+  ).toBe(200);
+  expect(
+    (await post(command, { payload: { changesetId, expectedSeq: 1, expectedDiffSnapshot: "bad" } }))
+      .status,
+  ).toBe(400);
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes("/diff/"))).toBe(true);
+});

@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
+	"github.com/qahnaarln/project-17/apps/server/internal/reviewdiff"
 	"github.com/qahnaarln/project-17/apps/server/internal/schemaflow"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
@@ -70,9 +71,10 @@ func Register(bus *commandbus.Bus) {
 }
 
 type publishPayload struct {
-	ChangesetID uuid.UUID `json:"changesetId"`
-	Environment string    `json:"environment"`
-	ExpectedSeq *int32    `json:"expectedSeq,omitempty"`
+	ExpectedDiffSnapshot *string   `json:"expectedDiffSnapshot,omitempty"`
+	ChangesetID          uuid.UUID `json:"changesetId"`
+	Environment          string    `json:"environment"`
+	ExpectedSeq          *int32    `json:"expectedSeq,omitempty"`
 }
 
 func reasonPtr(ctx context.Context) *string {
@@ -118,6 +120,10 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := workflow.RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Publication{}, err
 	}
+	if err := reviewdiff.CheckExpected(ctx, q, actor, cs.ID, p.ExpectedDiffSnapshot); err != nil {
+		return Publication{}, err
+	}
+
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID) // упорядочены по ID объекта
 	if err != nil {
 		return Publication{}, err

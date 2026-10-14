@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { refreshMountedEditor } from "./identity-controls.js";
 const origin = "http://127.0.0.1:18084";
 async function login(page: Page, name: string) {
   await page.getByRole("link", { name: "Войти", exact: true }).click();
@@ -56,7 +57,7 @@ test("STU-081/082: expired session destroys the old editor", async ({ page, requ
   await login(page, "Alice");
   await openWork(page);
   await request.post(origin + "/studio-control", { data: { expired: true } });
-  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  await refreshMountedEditor(page);
   await expect(page.getByRole("link", { name: "Войти", exact: true })).toBeVisible();
   await expect(page.locator(".frame-wrap iframe")).toHaveCount(0);
   expect(new URL(page.url()).hash).toBe("");
@@ -72,7 +73,7 @@ test("STU-082: another-tab actor change clears editor and does not replay a comm
     if (r.method() === "POST" && r.url().includes("/commands/")) writes.push(r.url());
   });
   await page.context().request.post(origin + "/studio-control", { data: { user: "bob" } });
-  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  await refreshMountedEditor(page);
   await expect(page.locator(".person-bar")).toContainText("Bob");
   await expect(page.locator(".frame-wrap iframe")).toHaveCount(0);
   expect(new URL(page.url()).hash).toBe("");

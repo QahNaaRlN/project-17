@@ -1,3 +1,5 @@
+import { ReviewDiff } from "./review-diff-panel.js";
+import type { Api } from "./types.js";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { Editor } from "./editor.js";
@@ -58,6 +60,7 @@ const copy = {
     },
     stages: { ir: "Страница и контракт окружения", policy: "Права и правила проекта" },
     reasons: {
+      DIFF_SNAPSHOT_STALE: "Работа или окружение изменились. Перечитайте сравнение перед решением.",
       FORBIDDEN: "У текущей учётной записи нет права на это действие.",
       CHANGESET_NOT_OWNER: "Подавать и возвращать в работу может владелец черновика.",
       APPROVAL_FORBIDDEN_ACTOR:
@@ -129,6 +132,7 @@ const copy = {
     status: { passed: "Passed", failed: "Failed", pending: "Pending", running: "Running" },
     stages: { ir: "Page and environment contract", policy: "Permissions and project rules" },
     reasons: {
+      DIFF_SNAPSHOT_STALE: "Work or environment changed. Reload the comparison before deciding.",
       FORBIDDEN: "The current account cannot perform this action.",
       CHANGESET_NOT_OWNER: "Only the draft owner can submit or reopen it.",
       APPROVAL_FORBIDDEN_ACTOR:
@@ -154,8 +158,12 @@ const copy = {
 export function PublishingPanel({
   editor,
   onSelectDiagnostic,
+  api,
+  onContent,
 }: {
   editor: Editor;
+  api?: Api;
+  onContent?: (id: string, kind: "entity" | "asset") => void;
   onSelectDiagnostic?: (node: string) => void;
 }) {
   const state = useStore(editor.store),
@@ -163,7 +171,27 @@ export function PublishingPanel({
     t = copy[state.locale];
   const [choice, setChoice] = useState<"publish" | "reopen" | "request-changes" | null>(null),
     [comment, setComment] = useState("");
+  const [diffSnapshot, setDiffSnapshot] = useState<string | null>(null),
+    [confirmationSnapshot, setConfirmationSnapshot] = useState<string | null>(null);
+  const hasDiff = !!api?.diffIndex && !!api.diffPage;
   const confirmation = useRef<HTMLDivElement>(null);
+  const comparisonRequest = useRef<AbortController | null>(null);
+  const [checkingComparison, setCheckingComparison] = useState(false);
+  useEffect(() => {
+    comparisonRequest.current?.abort();
+    comparisonRequest.current = null;
+    setCheckingComparison(false);
+    return () => comparisonRequest.current?.abort();
+  }, [
+    session?.changeset.id,
+    session?.changeset.seq,
+    session?.changeset.state,
+    session?.config.environment,
+  ]);
+  useEffect(() => {
+    if (diffSnapshot && confirmationSnapshot && diffSnapshot !== confirmationSnapshot)
+      setChoice(null);
+  }, [diffSnapshot, confirmationSnapshot]);
   useEffect(() => {
     setChoice(null);
     setComment("");
@@ -173,7 +201,10 @@ export function PublishingPanel({
   }, [choice]);
   if (!session) return null;
   const review = session.review,
-    busy = state.status !== "ready" || Object.values(state.dirtyFields).some(Boolean);
+    busy =
+      state.status !== "ready" ||
+      checkingComparison ||
+      Object.values(state.dirtyFields).some(Boolean);
   const reasons = t.reasons as Record<string, string>;
   const diagnostics = [
     ...review.checks.flatMap((c) => reviewDiagnostics(c.details)),
@@ -189,10 +220,48 @@ export function PublishingPanel({
           : ["failed", "changes_requested"].includes(session.changeset.state)
             ? ["reopen"]
             : [];
-  function act(action: WorkflowAction) {
+  async function act(action: WorkflowAction) {
+    if (hasDiff && ["approve", "request-changes", "publish"].includes(action) && !diffSnapshot)
+      return;
+    if (busy || comparisonRequest.current) return;
+    if (action === "publish" && hasDiff) {
+      const controller = new AbortController();
+      comparisonRequest.current = controller;
+      setCheckingComparison(true);
+      try {
+        const current = await api!.diffIndex!(session!, controller.signal);
+        if (controller.signal.aborted) return;
+        const latest = editor.store.getState();
+        if (
+          latest.session?.changeset.id !== session!.changeset.id ||
+          latest.session?.changeset.seq !== session!.changeset.seq ||
+          latest.session?.changeset.state !== session!.changeset.state ||
+          latest.session?.config.environment !== session!.config.environment ||
+          latest.status !== "ready" ||
+          Object.values(latest.dirtyFields).some(Boolean)
+        )
+          return;
+        if (current.snapshot !== diffSnapshot) {
+          setDiffSnapshot(null);
+          editor.error("DIFF_SNAPSHOT_STALE");
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        setDiffSnapshot(null);
+        editor.error("DIFF_SNAPSHOT_STALE");
+        return;
+      } finally {
+        if (comparisonRequest.current === controller) {
+          comparisonRequest.current = null;
+          setCheckingComparison(false);
+        }
+      }
+    }
+    setConfirmationSnapshot(diffSnapshot);
     if (action === "publish" || action === "reopen" || action === "request-changes")
       setChoice(action);
-    else void editor.workflow(action);
+    else void editor.workflow(action, "", diffSnapshot ?? undefined);
   }
   const objectList = (
     <ul>
@@ -249,13 +318,30 @@ export function PublishingPanel({
         <p>{t.all}</p>
         {objectList}
       </details>
+      {hasDiff && (
+        <ReviewDiff
+          api={api!}
+          editor={editor}
+          onSnapshot={setDiffSnapshot}
+          onOpen={onSelectDiagnostic}
+          onContent={onContent}
+        />
+      )}
       <div className="publishing-actions">
         {actions.map((action) => (
           <div key={action} className="workflow-action">
             <button
               className={`studio-button ${["submit", "approve", "publish"].includes(action) ? "primary" : "secondary"}`}
-              disabled={busy || review.actions[action] !== null}
-              onClick={() => act(action)}
+              disabled={
+                busy ||
+                review.actions[action] !== null ||
+                (hasDiff &&
+                  ["approve", "request-changes", "publish"].includes(action) &&
+                  !diffSnapshot)
+              }
+              onClick={() => {
+                void act(action);
+              }}
             >
               {t.actions[action]}
             </button>
@@ -297,9 +383,19 @@ export function PublishingPanel({
             </label>
           )}
           <button
-            disabled={busy || (choice === "request-changes" && !comment.trim())}
+            disabled={
+              busy ||
+              (hasDiff &&
+                choice !== "reopen" &&
+                (!diffSnapshot || diffSnapshot !== confirmationSnapshot)) ||
+              (choice === "request-changes" && !comment.trim())
+            }
             onClick={() => {
-              void editor.workflow(choice, comment);
+              void editor.workflow(
+                choice,
+                comment,
+                choice !== "reopen" ? (confirmationSnapshot ?? undefined) : undefined,
+              );
               setChoice(null);
             }}
           >

@@ -296,6 +296,9 @@ export function Studio({
   accountControls?: ReactNode;
 }) {
   const [showContent, setShowContent] = useState(false);
+  const [contentSelection, setContentSelection] = useState<
+    { id: string; kind: "entity" | "asset"; changesetId: string } | undefined
+  >();
   const [formRevision, setFormRevision] = useState(0);
   const [fitCanvas, setFitCanvas] = useState(true);
   const [canvasWidth, setCanvasWidth] = useState(1024);
@@ -601,7 +604,20 @@ export function Studio({
             {showContent && session && doc && (
               <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                 <ContentPanel
-                  key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
+                  key={
+                    session.changeset.id +
+                    ":" +
+                    session.record.id +
+                    ":" +
+                    formRevision +
+                    ":" +
+                    (contentSelection?.id ?? "")
+                  }
+                  initialSelection={
+                    contentSelection?.changesetId === session.changeset.id
+                      ? contentSelection
+                      : undefined
+                  }
                   {...{ api, editor }}
                 />
               </DeferredPanel>
@@ -622,6 +638,7 @@ export function Studio({
                   <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                     <AgentPanel
                       key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
+
                       {...{ api, editor }}
                     />
                   </DeferredPanel>
@@ -630,6 +647,7 @@ export function Studio({
                   <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                     <JsonPanel
                       key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
+
                       editor={editor}
                     />
                   </DeferredPanel>
@@ -858,6 +876,13 @@ export function Studio({
                 </p>
               ))}
             <PublishingPanel
+              api={api}
+              onContent={(id, kind) => {
+                if (navigationLocked || !session) return;
+                setContentSelection({ id, kind, changesetId: session.changeset.id });
+                setShowContent(true);
+                setScreen("editor");
+              }}
               editor={editor}
               onSelectDiagnostic={(node) => {
                 setDiagnosticNode(node);

@@ -404,7 +404,7 @@ export function createEditor(
     pendingHistory = { session, action, key: crypto.randomUUID() };
     await sendHistory();
   }
-  async function workflow(action: WorkflowAction, comment = "") {
+  async function workflow(action: WorkflowAction, comment = "", diffSnapshot?: string) {
     const state = store.getState(),
       session = state.session;
     if (
@@ -416,7 +416,7 @@ export function createEditor(
     )
       return;
     pendingWorkflow = {
-      session: structuredClone(session),
+      session: { ...structuredClone(session), ...(diffSnapshot ? { diffSnapshot } : {}) },
       action,
       comment: comment.trim(),
       key: crypto.randomUUID(),

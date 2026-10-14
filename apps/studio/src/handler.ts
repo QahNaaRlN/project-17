@@ -103,7 +103,9 @@ export function createStudioHandler(
       if (url.pathname.startsWith("/api/studio/")) {
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
+        const diffRoute = new RegExp(`^/api/v1/changesets/${uuid}/diff(?:/${uuid})?$`).test(path);
         const allowedGet =
+          diffRoute ||
           path === "/api/v1/agent-config" ||
           path === "/api/v1/agent-runs" ||
           path === "/api/v1/events" ||
@@ -168,6 +170,30 @@ export function createStudioHandler(
             )
               return error(400, "PARAM_INVALID");
             if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (diffRoute) {
+            const detail = !path.endsWith("/diff"),
+              params = url.searchParams;
+            const allowed = [
+              "environment",
+              ...(detail ? ["baseline", "snapshot", "after", "limit"] : []),
+            ];
+            if (
+              [...params.keys()].some(
+                (k) => !allowed.includes(k) || params.getAll(k).length !== 1,
+              ) ||
+              (detail &&
+                (!["base", "published"].includes(params.get("baseline") ?? "") ||
+                  !/^sha256:[a-f0-9]{64}$/.test(params.get("snapshot") ?? "") ||
+                  (params.has("after") &&
+                    (params.get("after")!.length > 2048 || !params.get("after"))) ||
+                  (params.has("limit") &&
+                    (!/^[1-9][0-9]*$/.test(params.get("limit")!) ||
+                      Number(params.get("limit")) > 100))))
+            )
+              return error(400, "PARAM_INVALID");
+            if (params.get("environment") !== config.environment)
               return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
             upstream.search = url.search;
           } else if (path === "/api/v1/content-catalog" || path.startsWith("/api/v1/content/")) {
@@ -324,11 +350,18 @@ export function createStudioHandler(
             const allowed = [
               "changesetId",
               "expectedSeq",
+              ...(["/approve-changeset", "/request-changes", "/publish"].some((c) =>
+                path.endsWith(c),
+              )
+                ? ["expectedDiffSnapshot"]
+                : []),
               ...(path.endsWith("/publish") ? ["environment"] : []),
               ...(path.endsWith("/request-changes") ? ["comment"] : []),
             ];
             if (
               Object.keys(p).some((key) => !allowed.includes(key)) ||
+              (p.expectedDiffSnapshot !== undefined &&
+                !/^sha256:[a-f0-9]{64}$/.test(p.expectedDiffSnapshot)) ||
               !new RegExp(`^${uuid}$`).test(String(p.changesetId)) ||
               !Number.isSafeInteger(p.expectedSeq) ||
               p.expectedSeq < 0 ||

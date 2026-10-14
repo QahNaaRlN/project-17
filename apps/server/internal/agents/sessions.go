@@ -14,6 +14,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -119,6 +120,9 @@ func (s *Service) Register(bus *commandbus.Bus) {
 			return nil
 		},
 		Handle: func(ctx context.Context, tx pgx.Tx, a auth.Actor, p auth.AgentPolicy) (auth.AgentPolicy, error) {
+			if err := validation.LockProjectEnvironments(ctx, store.New(tx), a.ProjectID); err != nil {
+				return auth.AgentPolicy{}, err
+			}
 			raw, _ := json.Marshal(p)
 			_, err := tx.Exec(ctx, `UPDATE projects SET settings=jsonb_set(settings,'{agentPolicy}',$2) WHERE id=$1`, a.ProjectID, raw)
 			return p, err
