@@ -136,6 +136,8 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/history?beforeSeq=` | Метаданные 20 целых действий CS и canUndo/canRedo в одном снимке; design.read (STU-050) |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
 | `GET /api/v1/changesets/{id}/review` | Состояние, риск, проверки, роли/счётчики/история согласований, needsAttention, краткие objects без тел и actions для текущего актора; согласованный снимок без блокировок записи (STU-070) |
+| `GET /api/v1/changesets/{id}/diff?environment=` | **Предлагается, не реализован:** полный индекс сравнения standard CS, база/публикация → рабочие версии, snapshot; [STU-149…161](../studio-review-diff.md) |
+| `GET /api/v1/changesets/{id}/diff/{objectId}?environment=&baseline=&snapshot=&after=&limit=` | **Предлагается, не реализован:** детали объекта из того же снимка, безопасные значения и курсорная пагинация; [контракт](../studio-review-diff.md#52-детали-объекта) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
 | `GET /api/v1/events` (SSE) | Инвалидация состояния проекта и presence для документа/CS/окружения; [контракт](../studio-realtime.md) |
