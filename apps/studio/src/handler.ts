@@ -197,6 +197,7 @@ export function createStudioHandler(
               "environment",
               "after",
               ...(path.endsWith("working-drafts") ? ["documentId"] : []),
+              ...(path.endsWith("/pages") ? ["q"] : []),
             ];
             if (
               [...url.searchParams.keys()].some(
@@ -205,7 +206,10 @@ export function createStudioHandler(
               (url.searchParams.has("after") &&
                 !new RegExp(`^${uuid}$`).test(url.searchParams.get("after")!)) ||
               (path.endsWith("working-drafts") &&
-                !new RegExp(`^${uuid}$`).test(url.searchParams.get("documentId") ?? ""))
+                !new RegExp(`^${uuid}$`).test(url.searchParams.get("documentId") ?? "")) ||
+              (url.searchParams.has("q") &&
+                ([...(url.searchParams.get("q") ?? "").trim()].length > 200 ||
+                  url.searchParams.get("q")!.includes("\0")))
             )
               return error(400, "PARAM_INVALID");
             if (url.searchParams.get("environment") !== config.environment)
@@ -478,16 +482,18 @@ export function createStudioHandler(
           ? "index.html"
           : decodeURIComponent(url.pathname).slice(1);
       const file = resolve(directory, relative);
-      if (!file.startsWith(directory + sep) || !/\.(html|js|css)$/.test(file))
+      if (!file.startsWith(directory + sep) || !/\.(html|js|css|woff2)$/.test(file))
         return error(404, "NOT_FOUND");
       const bytes = await readFile(file);
       res.setHeader(
         "Content-Type",
         file.endsWith(".html")
           ? "text/html; charset=utf-8"
-          : file.endsWith(".js")
-            ? "text/javascript"
-            : "text/css",
+          : file.endsWith(".woff2")
+            ? "font/woff2"
+            : file.endsWith(".js")
+              ? "text/javascript"
+              : "text/css",
       );
       res.end(bytes);
     } catch (cause) {

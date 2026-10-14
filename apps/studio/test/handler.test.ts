@@ -357,6 +357,7 @@ async function setup() {
   await writeFile(join(directory, "index.html"), "<h1>Studio</h1>");
   await writeFile(join(directory, "client.js"), "export const studio=true");
   await writeFile(join(directory, "style.css"), "body{color:red}");
+  await writeFile(join(directory, "inter.woff2"), Buffer.from([119, 79, 70, 50]));
   const fetcher = vi.fn<typeof fetch>(async () => Response.json({ result: { ok: true } }));
   const server = createServer((req, res) => {
     void handler(req, res);
@@ -382,6 +383,31 @@ async function setup() {
     });
   return { origin, fetcher, post };
 }
+it("STU-132: поиск остаётся в выбранном окружении и не расширяет allowlist", async () => {
+  const { origin, fetcher } = await setup();
+  const route = origin + "/api/studio/api/v1/pages";
+  expect(
+    (await fetch(route + "?environment=staging&q=" + encodeURIComponent("Главная_%"))).status,
+  ).toBe(200);
+  const forwarded = new URL(String(fetcher.mock.calls[0]![0]));
+  expect(forwarded.searchParams.get("q")).toBe("Главная_%");
+  expect(forwarded.searchParams.get("environment")).toBe("staging");
+  fetcher.mockClear();
+  for (const query of ["q=" + "x".repeat(201), "q=%00", "q=x&q=y"])
+    expect((await fetch(route + "?environment=staging&" + query)).status).toBe(400);
+  expect((await fetch(route + "?environment=production&q=home")).status).toBe(403);
+  expect(
+    (await fetch(origin + "/api/studio/api/v1/manifest?environment=staging&q=home")).status,
+  ).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+it("STU-130: локальный шрифт отдаётся как WOFF2", async () => {
+  const { origin } = await setup();
+  const response = await fetch(origin + "/inter.woff2");
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("font/woff2");
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([119, 79, 70, 50]));
+});
 it("STU-001: config и bundle не раскрывают credential; CSP ограничивает iframe", async () => {
   const { origin, fetcher } = await setup();
   let response = await fetch(origin + "/api/studio/config");

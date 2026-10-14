@@ -134,12 +134,15 @@ test("STU-053/054: отказ и конфликт undo не заменяют т�
   await expect(page.getByRole("button", { name: "Отменить", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Повторить", exact: true })).toBeDisabled();
 });
-test("STU-040/041/042/044: открытие страницы и нового черновика без ручного ввода ID", async ({
+test("STU-040/041/042/044/131/133: открытие страницы и нового черновика без ручного ввода ID", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(origin + "/editor");
-  await page.getByLabel("Страница", { exact: true }).selectOption({ label: "/store · Store" });
+  await expect(page.getByRole("heading", { name: "Страницы", exact: true })).toBeVisible();
+  await expect(page.locator(".pages-table")).toContainText("Store");
+  await page.getByRole("button", { name: "Выбрать страницу /store", exact: true }).click();
+  await expect(page.locator(".frame-wrap iframe")).toHaveCount(0);
   await page
     .getByLabel("Мой черновик", { exact: true })
     .selectOption({ label: "Studio browser draft" });

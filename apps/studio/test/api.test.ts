@@ -3,6 +3,22 @@ import { createApi } from "../src/api.js";
 import { fixture, documentId, changesetId } from "./fixture.js";
 import fc from "fast-check";
 import { StudioError } from "../src/types.js";
+it("STU-132: поиск сохраняет Unicode и курсор, отклоняет слишком длинный запрос и NUL до сети", async () => {
+  const fetcher = vi.fn(async (url: RequestInfo | URL) =>
+    String(url).endsWith("/config")
+      ? Response.json(fixture().config)
+      : Response.json({ items: [], nextCursor: null }),
+  );
+  const api = createApi(fetcher);
+  await api.pages(documentId, undefined, "  Главная %_  ");
+  const url = new URL(String(fetcher.mock.calls.at(-1)![0]), "http://localhost");
+  expect(url.searchParams.get("q")).toBe("Главная %_");
+  expect(url.searchParams.get("after")).toBe(documentId);
+  const calls = fetcher.mock.calls.length;
+  await expect(api.pages(undefined, undefined, "я".repeat(201))).rejects.toThrow("PARAM_INVALID");
+  await expect(api.pages(undefined, undefined, "\0")).rejects.toThrow("PARAM_INVALID");
+  expect(fetcher).toHaveBeenCalledTimes(calls);
+});
 it("STU-050: произвольные JSON ответы не вызывают исключение без безопасного кода", async () => {
   await fc.assert(
     fc.asyncProperty(fc.jsonValue(), async (body) => {

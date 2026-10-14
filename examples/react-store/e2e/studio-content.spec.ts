@@ -182,6 +182,7 @@ test("STU-104: смена OIDC человека уничтожает прежн�
   await page.goto(origin + "/editor");
   await page.getByRole("link", { name: "Войти", exact: true }).click();
   await page.getByRole("link", { name: "Войти как Alice", exact: true }).click();
+  await page.getByRole("button", { name: "Работы", exact: true }).click();
   await page.getByText("Мои работы и согласование", { exact: true }).click();
   await button(page, "Открыть работу").click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();

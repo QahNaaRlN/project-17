@@ -94,7 +94,7 @@ export interface Api {
     key: string,
     signal: AbortSignal,
   ): Promise<void>;
-  pages(cursor?: string, signal?: AbortSignal): Promise<List<PageItem>>;
+  pages(cursor?: string, signal?: AbortSignal, query?: string): Promise<List<PageItem>>;
   drafts(documentId: string, cursor?: string, signal?: AbortSignal): Promise<List<Changeset>>;
   createDraft(title: string, key: string): Promise<Changeset>;
   config(signal?: AbortSignal): Promise<Config>;

@@ -176,6 +176,7 @@ test("STU-093: changed OIDC actor destroys unsaved JSON and cannot send it", asy
   await page.goto(origin + "/editor");
   await page.getByRole("link", { name: "Войти", exact: true }).click();
   await page.getByRole("link", { name: "Войти как Alice", exact: true }).click();
+  await page.getByRole("button", { name: "Работы", exact: true }).click();
   await page.getByText("Мои работы и согласование", { exact: true }).click();
   await page.getByRole("button", { name: "Открыть работу", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();

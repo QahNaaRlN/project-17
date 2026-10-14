@@ -10,6 +10,7 @@ async function openAgent(page: Page) {
     await page.getByRole("link", { name: "Войти как Alice", exact: true }).click();
   }
   await expect(page.locator(".person-bar")).toContainText("Alice");
+  await page.getByRole("button", { name: "Работы", exact: true }).click();
   await page.getByText("Мои работы и согласование", { exact: true }).click();
   await page.getByRole("button", { name: "Открыть работу", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();

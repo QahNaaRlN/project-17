@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { Editor } from "./editor.js";
 import { StudioError, type Api, type Changeset } from "./types.js";
+import { Button, Dialog, Notice } from "./components.js";
 
 const copy = {
   ru: {
@@ -28,6 +29,19 @@ const copy = {
     createError: "Не удалось создать черновик",
     openError: "Не удалось открыть черновик",
     draftOnly: "Страница существует только в черновике. Продолжите работу в нём.",
+    catalogue: "Страницы",
+    description: "Выберите страницу и рабочий черновик, чтобы продолжить редактирование.",
+    search: "Поиск страниц",
+    find: "Найти",
+    clear: "Сбросить поиск",
+    noMatches: "Нет страниц, соответствующих поиску",
+    route: "Маршрут",
+    availability: "Доступность",
+    head: "В каталоге",
+    draftPage: "Только в черновике",
+    select: "Выбрать страницу",
+    loaded: "Загружено страниц",
+    partialError: "Не удалось загрузить следующие страницы. Уже загруженные доступны.",
   },
   en: {
     workspace: "Pages and drafts",
@@ -54,6 +68,19 @@ const copy = {
     createError: "Could not create draft",
     openError: "Could not open draft",
     draftOnly: "This page exists only in a draft. Continue working in that draft.",
+    catalogue: "Pages",
+    description: "Choose a page and a working draft to continue editing.",
+    search: "Search pages",
+    find: "Search",
+    clear: "Clear search",
+    noMatches: "No pages match your search",
+    route: "Route",
+    availability: "Availability",
+    head: "In catalogue",
+    draftPage: "Draft only",
+    select: "Select page",
+    loaded: "Pages loaded",
+    partialError: "Could not load more pages. Previously loaded pages remain available.",
   },
 };
 interface Attempt {
@@ -68,13 +95,19 @@ export function Workspace({
   editor,
   locale,
   busy,
+  compact = false,
+  onOpened,
 }: {
   api: Api;
   editor: Editor;
   locale: "ru" | "en";
   busy: boolean;
+  compact?: boolean;
+  onOpened?: () => void;
 }) {
   const t = copy[locale];
+  const [searchInput, setSearchInput] = useState(""),
+    [search, setSearch] = useState("");
   const saved = new URLSearchParams(window.location.hash.slice(1));
   const [documentId, setDocumentId] = useState(saved.get("document") ?? "");
   const [changesetId, setChangesetId] = useState(saved.get("changeset") ?? "");
@@ -90,9 +123,10 @@ export function Workspace({
     null,
   );
   const pages = useInfiniteQuery({
-    queryKey: ["studio-pages"],
+    queryKey: ["studio-pages", search],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) => api.pages(pageParam, signal),
+    queryFn: ({ pageParam, signal }) =>
+      search ? api.pages(pageParam, signal, search) : api.pages(pageParam, signal),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     retry: false,
   });
@@ -115,6 +149,14 @@ export function Workspace({
   const selectedPage = pageItems.find((p) => p.id === documentId);
   const selectedDraft = draftItems.find((d) => d.id === changesetId);
   const locked = busy || pending || uncertain || !!createdId;
+  function choosePage(id: string) {
+    if (locked) return;
+    setDocumentId(id);
+    setChangesetId("");
+    setCreating(false);
+    setRecentDraft(null);
+    setError(null);
+  }
 
   async function open(doc: string, cs: string) {
     await editor.open(doc, cs);
@@ -126,6 +168,7 @@ export function Workspace({
     )
       throw new StudioError("OPEN_FAILED");
     window.location.hash = new URLSearchParams({ document: doc, changeset: cs }).toString();
+    onOpened?.();
   }
   async function create() {
     if (running.current || busy) return;
@@ -168,7 +211,105 @@ export function Workspace({
     }
   }
   return (
-    <section className="workspace-picker" aria-label={t.workspace}>
+    <section
+      className={`workspace-picker ${compact ? "compact" : "page-catalogue"}`}
+      aria-label={t.workspace}
+    >
+      {!compact && (
+        <>
+          <div className="catalogue-heading">
+            <div>
+              <p className="studio-eyebrow">Project 17</p>
+              <h1>{t.catalogue}</h1>
+              <p>{t.description}</p>
+            </div>
+          </div>
+          <form
+            className="page-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!locked) setSearch(searchInput.trim());
+            }}
+          >
+            <label>
+              {t.search}
+              <input
+                type="search"
+                aria-label={t.search}
+                value={searchInput}
+                maxLength={400}
+                disabled={locked}
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+            </label>
+            <Button type="submit" disabled={locked || [...searchInput.trim()].length > 200}>
+              {t.find}
+            </Button>
+            {search && (
+              <Button
+                disabled={locked}
+                onClick={() => {
+                  setSearchInput("");
+                  setSearch("");
+                }}
+              >
+                {t.clear}
+              </Button>
+            )}
+          </form>
+          {pages.isPending && <Notice>{t.loading}</Notice>}
+          {pages.isSuccess && pageItems.length === 0 && (
+            <Notice>{search ? t.noMatches : t.emptyPages}</Notice>
+          )}
+          {pageItems.length > 0 && (
+            <div className="pages-table-scroll">
+              <table className="pages-table">
+                <thead>
+                  <tr>
+                    <th>{t.page}</th>
+                    <th>{t.route}</th>
+                    <th>{t.availability}</th>
+                    <th>
+                      <span className="sr-only">{t.select}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map((page) => (
+                    <tr key={page.id} data-selected={page.id === documentId}>
+                      <td>
+                        <strong>{page.title || page.path}</strong>
+                      </td>
+                      <td>
+                        <code>{page.path}</code>
+                      </td>
+                      <td>
+                        <span className={`studio-badge ${page.hasHead ? "" : "accent"}`}>
+                          {page.hasHead ? t.head : t.draftPage}
+                        </span>
+                      </td>
+                      <td>
+                        <Button
+                          disabled={locked}
+                          aria-pressed={page.id === documentId}
+                          aria-label={`${t.select} ${page.path}`}
+                          onClick={() => choosePage(page.id)}
+                        >
+                          {t.select}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="catalogue-count" role="status">
+            {t.loaded}: {pageItems.length}
+            {pages.isFetching && !pages.isPending ? ` · ${t.loading}` : ""}
+          </p>
+        </>
+      )}
       <form
         className="open-bar"
         onSubmit={(event) => {
@@ -185,11 +326,7 @@ export function Workspace({
             value={selectedPage ? documentId : ""}
             disabled={locked || pages.isPending}
             onChange={(event) => {
-              setDocumentId(event.target.value);
-              setChangesetId("");
-              setCreating(false);
-              setRecentDraft(null);
-              setError(null);
+              choosePage(event.target.value);
             }}
           >
             <option value="">{t.choosePage}</option>
@@ -217,7 +354,13 @@ export function Workspace({
             ))}
           </select>
         </label>
-        <button disabled={locked || !selectedPage || !selectedDraft}>{t.open}</button>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={locked || !selectedPage || !selectedDraft}
+        >
+          {t.open}
+        </Button>
         <button
           type="button"
           disabled={locked || !selectedPage?.hasHead}
@@ -241,7 +384,9 @@ export function Workspace({
       </form>
       <div className="picker-status" role="status">
         {(pages.isPending || (!!documentId && drafts.isPending)) && <span>{t.loading}</span>}
-        {pages.isSuccess && pageItems.length === 0 && <span>{t.emptyPages}</span>}
+        {compact && pages.isSuccess && pageItems.length === 0 && (
+          <span>{search ? t.noMatches : t.emptyPages}</span>
+        )}
         {selectedPage && drafts.isSuccess && draftItems.length === 0 && (
           <span>{t.emptyDrafts}</span>
         )}
@@ -267,42 +412,61 @@ export function Workspace({
           </button>
         )}
       </div>
-      {(pages.isError || (!!documentId && drafts.isError)) && <p role="alert">{t.failed}</p>}
+      {(pages.isError || (!!documentId && drafts.isError)) && (
+        <Notice error>{pages.isFetchNextPageError ? t.partialError : t.failed}</Notice>
+      )}
       {creating && (
-        <form
-          className="create-bar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void create();
+        <Dialog
+          title={t.newDraft}
+          locked={locked}
+          onDismiss={() => {
+            setCreating(false);
+            setError(null);
           }}
         >
-          <label>
-            {t.title}
-            <input
-              aria-label={t.title}
-              value={title}
-              required
-              disabled={locked}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
-          <button disabled={busy || pending || (!title.trim() && !attempt.current)}>
-            {pending ? t.loading : createdId ? t.retryOpen : uncertain ? t.retry : t.create}
-          </button>
-          <button
-            type="button"
-            disabled={locked}
-            onClick={() => {
-              setCreating(false);
-              setError(null);
+          <form
+            className="create-bar"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void create();
             }}
           >
-            {t.cancel}
-          </button>
-        </form>
+            <label>
+              {t.title}
+              <input
+                aria-label={t.title}
+                value={title}
+                required
+                maxLength={200}
+                disabled={locked}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={busy || pending || (!title.trim() && !attempt.current)}
+            >
+              {pending ? t.loading : createdId ? t.retryOpen : uncertain ? t.retry : t.create}
+            </Button>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => {
+                setCreating(false);
+                setError(null);
+              }}
+            >
+              {t.cancel}
+            </button>
+          </form>
+          {uncertain && <Notice error>{t.uncertain}</Notice>}
+          {error && <Notice error>{error === "open" ? t.openError : t.createError}</Notice>}
+        </Dialog>
       )}
-      {uncertain && <p role="alert">{t.uncertain}</p>}
-      {error && <p role="alert">{error === "open" ? t.openError : t.createError}</p>}
+      {!creating && error && (
+        <Notice error>{error === "open" ? t.openError : t.createError}</Notice>
+      )}
     </section>
   );
 }

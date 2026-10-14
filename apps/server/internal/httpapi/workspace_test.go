@@ -3,6 +3,8 @@ package httpapi_test
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -186,6 +188,72 @@ func TestStudioWorkspaceErrors(t *testing.T) {
 	for _, path := range []string{"/pages", "/working-drafts"} {
 		resp, body := e.do(t, "GET", "/api/v1"+path+"?environment=staging", "", e.authed(nil))
 		expectProblem(t, resp, body, 403, "FORBIDDEN")
+	}
+}
+
+func TestStudioPageSearch(t *testing.T) {
+	// STU-132: search is literal, case insensitive and applied before pagination.
+	e := setup(t)
+	actor := workspaceActor(t, e)
+	for i := 0; i < 55; i++ {
+		workspacePage(t, e, actor, fmt.Sprintf("/item-%d", i), "page")
+	}
+	id := workspacePage(t, e, actor, "/special_%", "page")
+	workspaceExec(t, e, `UPDATE object_versions SET body=jsonb_set(body,'{nodes,n_root,name}','"Главная страница"') WHERE object_id=$1`, id)
+	deleted := workspacePage(t, e, actor, "/special_%/deleted", "page")
+	workspaceExec(t, e, `UPDATE objects SET deleted_at=now() WHERE id=$1`, deleted)
+	workspacePage(t, e, actor, "/special_%/component", "component")
+	bootstrap, err := projects.Bootstrap(context.Background(), e.pool, "search-other", "Other", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := auth.Authenticate(context.Background(), store.New(e.pool), "Bearer "+bootstrap.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspacePage(t, e, other, "/special_%/foreign", "page")
+	for _, query := range []string{"SPEcial", "_%", "главная", "  ГЛАВНАЯ  "} {
+		resp, body := e.do(t, "GET", "/api/v1/pages?environment=staging&q="+url.QueryEscape(query), "", e.authed(nil))
+		items := body["items"].([]any)
+		if resp.StatusCode != 200 || len(items) != 1 || items[0].(map[string]any)["id"] != id.String() || body["nextCursor"] != nil {
+			t.Fatalf("query %q: %d %v", query, resp.StatusCode, body)
+		}
+	}
+	resp, body := e.do(t, "GET", "/api/v1/pages?environment=staging&q=missing", "", e.authed(nil))
+	if resp.StatusCode != 200 || len(body["items"].([]any)) != 0 {
+		t.Fatal(body)
+	}
+	for _, query := range []string{"q=" + strings.Repeat("x", 201), "q=%00", "q=%FF", "q=x&q=y"} {
+		resp, body := e.do(t, "GET", "/api/v1/pages?environment=staging&"+query, "", e.authed(nil))
+		expectProblem(t, resp, body, 400, "PARAM_INVALID")
+	}
+	seen := map[string]bool{}
+	cursor := ""
+	for page := 0; page < 2; page++ {
+		path := "/api/v1/pages?environment=staging&q=item"
+		if cursor != "" {
+			path += "&after=" + cursor
+		}
+		resp, body := e.do(t, "GET", path, "", e.authed(nil))
+		if resp.StatusCode != 200 {
+			t.Fatal(body)
+		}
+		for _, raw := range body["items"].([]any) {
+			item := raw.(map[string]any)
+			id := item["id"].(string)
+			if seen[id] || !strings.Contains(item["path"].(string), "item") {
+				t.Fatal("search pagination leaked or duplicated an item", item)
+			}
+			seen[id] = true
+		}
+		if page == 0 {
+			cursor = body["nextCursor"].(string)
+		} else if body["nextCursor"] != nil {
+			t.Fatal("unexpected third page", body)
+		}
+	}
+	if len(seen) != 55 {
+		t.Fatalf("search lost items: %d", len(seen))
 	}
 }
 func TestStudioWorkspaceStorageErrors(t *testing.T) {

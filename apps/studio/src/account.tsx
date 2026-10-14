@@ -69,8 +69,11 @@ function WorkspaceSession({
   );
   return (
     <QueryClientProvider client={client}>
-      {account && <Person {...{ api, account, editor, reset }} />}
-      <Studio api={api} editor={editor} />
+      <Studio
+        api={api}
+        editor={editor}
+        accountControls={account ? <Person {...{ api, account, editor, reset }} /> : null}
+      />
     </QueryClientProvider>
   );
 }

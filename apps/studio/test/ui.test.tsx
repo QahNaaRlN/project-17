@@ -83,6 +83,85 @@ const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent === text,
   )!;
+it("STU-131/133: каталог выбирает страницу явно, не выдаёт head за публикацию и сохраняет сессию при возврате", async () => {
+  const { api } = await setup();
+  expect(document.querySelector(".pages-table")?.textContent).toContain("Store");
+  expect(document.querySelector(".pages-table")?.textContent).toContain("В каталоге");
+  expect(document.querySelector(".pages-table")?.textContent).not.toContain("Опубликовано");
+  await click(document.querySelector<HTMLElement>('[aria-label="Выбрать страницу /store"]')!);
+  expect(api.open).not.toHaveBeenCalled();
+  await change(
+    document.querySelector<HTMLSelectElement>('[aria-label="Мой черновик"]')!,
+    changesetId,
+  );
+  await submit(document.querySelector<HTMLFormElement>(".open-bar")!);
+  expect(document.querySelector<HTMLElement>(".editor-surface")!.hidden).toBe(false);
+  const current = editor.store.getState().session;
+  await click(button("Страницы"));
+  expect(document.querySelector(".pages-table")).not.toBeNull();
+  expect(editor.store.getState().session).toBe(current);
+  await act(async () => {
+    editor.formDirty("property-title", true);
+  });
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>(".studio-navigation button")].every(
+      (b) => b.disabled,
+    ),
+  ).toBe(true);
+  expect(document.querySelector<HTMLSelectElement>('[aria-label="Страница"]')!.disabled).toBe(true);
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Выбрать страницу /store"]')!.disabled,
+  ).toBe(true);
+});
+it("STU-132/134: поиск передаётся API, различает пустой результат и сохраняет строки при ошибке пагинации", async () => {
+  const { api } = await setup();
+  vi.mocked(api.pages).mockImplementation(async (cursor, _signal, q) => {
+    if (cursor) throw Error("secret");
+    return {
+      items:
+        q === "missing" ? [] : [{ id: documentId, path: "/store", title: "Store", hasHead: true }],
+      nextCursor: q === "Store" ? documentId : null,
+    };
+  });
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Поиск страниц"]')!,
+    " Store ",
+  );
+  await submit(document.querySelector<HTMLFormElement>(".page-search")!);
+  expect(api.pages).toHaveBeenLastCalledWith(undefined, expect.any(AbortSignal), "Store");
+  await click(button("Ещё страницы"));
+  expect(document.querySelector(".pages-table")?.textContent).toContain("Store");
+  expect(document.body.textContent).toContain("Уже загруженные доступны");
+  expect(document.body.textContent).not.toContain("secret");
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="Поиск страниц"]')!,
+    "missing",
+  );
+  await submit(document.querySelector<HTMLFormElement>(".page-search")!);
+  expect(document.body.textContent).toContain("Нет страниц, соответствующих поиску");
+  await click(button("Сбросить поиск"));
+  expect(document.querySelector(".pages-table")?.textContent).toContain("Store");
+  expect(api.open).not.toHaveBeenCalled();
+});
+it("STU-130/135: диалог нового черновика удерживает фокус, Escape отменяет только подтверждённо безопасное состояние", async () => {
+  const { api } = await setup();
+  await selectPage();
+  await click(button("Новый черновик"));
+  expect(document.activeElement).toBe(document.querySelector('[aria-label="Название черновика"]'));
+  await act(async () => {
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }),
+    );
+  });
+  expect(document.activeElement).toBe(button("Отмена"));
+  await act(async () => {
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(api.createDraft).not.toHaveBeenCalled();
+});
 function action(
   kind: HistoryAction["kind"],
   type: string,

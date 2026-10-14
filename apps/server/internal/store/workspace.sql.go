@@ -99,6 +99,11 @@ LEFT JOIN LATERAL (
 WHERE o.project_id = $1 AND o.kind = 'document' AND o.doc_kind = 'page'
   AND o.deleted_at IS NULL AND COALESCE(h.path, w.path) IS NOT NULL
   AND o.id > $4::uuid
+  AND ($5::text = ''
+       OR strpos(lower(COALESCE(h.path, w.path)), lower($5::text)) > 0
+       OR strpos(lower(COALESCE(h.body->'nodes'->(h.body->>'root')->>'name',
+                               w.body->'nodes'->(w.body->>'root')->>'name', '')),
+                 lower($5::text)) > 0)
 ORDER BY o.id LIMIT 51
 `
 
@@ -107,6 +112,7 @@ type ListStudioPagesParams struct {
 	OwnerID     uuid.UUID `json:"ownerId"`
 	Environment string    `json:"environment"`
 	AfterID     uuid.UUID `json:"afterId"`
+	Search      string    `json:"search"`
 }
 
 type ListStudioPagesRow struct {
@@ -122,6 +128,7 @@ func (q *Queries) ListStudioPages(ctx context.Context, arg ListStudioPagesParams
 		arg.OwnerID,
 		arg.Environment,
 		arg.AfterID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

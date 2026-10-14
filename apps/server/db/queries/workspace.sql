@@ -18,6 +18,11 @@ LEFT JOIN LATERAL (
 WHERE o.project_id = sqlc.arg(project_id) AND o.kind = 'document' AND o.doc_kind = 'page'
   AND o.deleted_at IS NULL AND COALESCE(h.path, w.path) IS NOT NULL
   AND o.id > sqlc.arg(after_id)::uuid
+  AND (sqlc.arg(search)::text = ''
+       OR strpos(lower(COALESCE(h.path, w.path)), lower(sqlc.arg(search)::text)) > 0
+       OR strpos(lower(COALESCE(h.body->'nodes'->(h.body->>'root')->>'name',
+                               w.body->'nodes'->(w.body->>'root')->>'name', '')),
+                 lower(sqlc.arg(search)::text)) > 0)
 ORDER BY o.id LIMIT 51;
 
 -- name: ListStudioDrafts :many
