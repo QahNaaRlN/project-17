@@ -32,7 +32,7 @@ func TestStudioDiffSnapshotAndIdempotentPublish(t *testing.T) {
 			t.Fatal(page)
 		}
 	}
-	for _, bad := range []string{route + "&x=1", route + "&environment=staging", "/api/v1/changesets/bad/diff?environment=staging", details + "&after=bad", strings.Replace(details, "baseline=base", "baseline=wrong", 1)} {
+	for _, bad := range []string{route + "&x=1", strings.Split(route, "?")[0], strings.Replace(details, "limit=1", "limit=bad", 1), strings.Replace(details, doc, "bad", 1), details + "&after=" + strings.Repeat("x", 2049), route + "&environment=staging", "/api/v1/changesets/bad/diff?environment=staging", details + "&after=bad", strings.Replace(details, "baseline=base", "baseline=wrong", 1)} {
 		r, p := e.do(t, "GET", bad, "", e.authed(nil))
 		if r.StatusCode < 400 {
 			t.Fatal(bad, p)

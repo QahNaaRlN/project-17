@@ -33,6 +33,7 @@ export function validateDiffIndex(v: DiffIndex, session: Session): DiffIndex {
         ![o.beforePath, o.afterPath].every((p) => p === null || typeof p === "string") ||
         ![o.baseVersionId, o.headVersionId, o.publishedVersionId].every(nullableID) ||
         typeof o.baseStale !== "boolean" ||
+        (o.workingDeleted !== undefined && typeof o.workingDeleted !== "boolean") ||
         ["base", "published"].some(
           (b) =>
             !o.summaries?.[b as DiffBaseline] ||

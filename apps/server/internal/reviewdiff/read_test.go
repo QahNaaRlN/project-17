@@ -2,9 +2,13 @@ package reviewdiff_test
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/qahnaarln/project-17/apps/server/internal/agents"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
@@ -278,5 +282,165 @@ func TestRepeatableReadMutableBodyAndObjectLimit(t *testing.T) {
 	e.Exec(`WITH o AS (INSERT INTO objects(id,project_id,kind) VALUES(gen_random_uuid(),$1,'asset') RETURNING id), v AS (INSERT INTO object_versions(id,project_id,object_id,state,changeset_id,body,body_hash,created_by) SELECT gen_random_uuid(),$1,id,'working',$2,'{}',decode('00','hex'),$3 FROM o RETURNING id,object_id) INSERT INTO changeset_objects(changeset_id,object_id,working_version_id) SELECT $2,object_id,id FROM v`, e.Admin.ProjectID, cs, e.Admin.ID)
 	if _, err := reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging"); cmstest.Code(err) != "DIFF_LIMIT_EXCEEDED" {
 		t.Fatal(err)
+	}
+}
+
+func TestIndexMarksWorkingTombstone(t *testing.T) {
+	e := cmstest.New(t)
+	ctx := context.Background()
+	cs, _ := e.Draft(e.Admin, "deleted")
+	e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+	e.Exec(`UPDATE object_versions SET deleted=true WHERE changeset_id=$1`, cs)
+	idx, err := reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging")
+	if err != nil || !idx.Objects[0].WorkingDeleted || idx.Objects[0].Summaries["base"].Effect != "metadata-only" {
+		t.Fatal(idx, err)
+	}
+}
+
+func TestStorageFailuresAndUnsupportedImages(t *testing.T) {
+	for _, table := range []string{"changesets", "changeset_objects", "objects", "environments", "projects", "published_pointers", "object_versions"} {
+		t.Run(table, func(t *testing.T) {
+			e := cmstest.New(t)
+			cs, _ := e.Draft(e.Admin, "fault")
+			e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+			e.Exec(`ALTER TABLE ` + table + ` RENAME TO ` + table + `_broken`)
+			_, err := reviewdiff.ReadIndex(context.Background(), e.Q, e.Admin, cs, "staging")
+			if err == nil || cmstest.Code(err) != "" {
+				t.Fatal("expected storage failure", err)
+			}
+		})
+	}
+	for _, body := range []string{`null`, `[]`, `{"nodes":{"n_root":"bad"},"root":"n_root"}`} {
+		t.Run(body, func(t *testing.T) {
+			e := cmstest.New(t)
+			cs, _ := e.Draft(e.Admin, "bad")
+			e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+			e.Exec(`UPDATE object_versions SET body=$1 WHERE changeset_id=$2`, body, cs)
+			_, err := reviewdiff.ReadIndex(context.Background(), e.Q, e.Admin, cs, "staging")
+			if cmstest.Code(err) != "DIFF_PROJECTION_UNSUPPORTED" {
+				t.Fatal(err)
+			}
+		})
+	}
+	for _, fault := range []string{"wrongObject", "committedWorking", "workingBase", "settings", "missingEnvironment", "unknownKind"} {
+		t.Run(fault, func(t *testing.T) {
+			e := cmstest.New(t)
+			cs, doc := e.Draft(e.Admin, "fault")
+			e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+			env := "staging"
+			code := "DIFF_BASE_UNAVAILABLE"
+			switch fault {
+			case "wrongObject":
+				other, _ := e.Draft(e.Admin, "other")
+				e.Exec(`UPDATE changeset_objects SET working_version_id=(SELECT working_version_id FROM changeset_objects WHERE changeset_id=$1) WHERE changeset_id=$2`, other, cs)
+			case "committedWorking":
+				e.Exec(`UPDATE object_versions SET state='committed',number=1 WHERE changeset_id=$1`, cs)
+			case "workingBase":
+				e.Exec(`UPDATE changeset_objects SET base_version_id=working_version_id WHERE changeset_id=$1 AND object_id=$2`, cs, doc)
+			case "settings":
+				e.Exec(`UPDATE projects SET settings='[]' WHERE id=$1`, e.Admin.ProjectID)
+				code = "DIFF_PROJECTION_UNSUPPORTED"
+			case "unknownKind":
+				e.Exec(`ALTER TABLE objects DROP CONSTRAINT objects_kind_check`)
+				e.Exec(`UPDATE objects SET kind='unsupported',doc_kind=NULL WHERE id=$1`, doc)
+				code = "DIFF_PROJECTION_UNSUPPORTED"
+			case "missingEnvironment":
+				e.Exec(`UPDATE changesets SET targets=ARRAY['missing'] WHERE id=$1`, cs)
+				env = "missing"
+				code = "DIFF_ENVIRONMENT_FORBIDDEN"
+			}
+			_, err := reviewdiff.ReadIndex(context.Background(), e.Q, e.Admin, cs, env)
+			if cmstest.Code(err) != code {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+func TestDetailSingleValueAndBytePaginationLimits(t *testing.T) {
+	e := cmstest.New(t)
+	ctx := context.Background()
+	cs, doc := e.Draft(e.Admin, "large")
+	e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+	e.Exec(`UPDATE object_versions SET body=jsonb_set(body,'{!oversize}',to_jsonb(repeat('x',$1))) WHERE changeset_id=$2`, reviewdiff.MaxBytes, cs)
+	idx, err := reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reviewdiff.ReadPage(ctx, e.Q, e.Admin, cs, doc, "staging", "base", idx.Snapshot, "", 100); cmstest.Code(err) != "DIFF_LIMIT_EXCEEDED" {
+		t.Fatal(err)
+	}
+	base := uuid.New()
+	e.Exec(`INSERT INTO object_versions(id,project_id,object_id,number,state,body,body_hash,created_by,path,ir_version) SELECT $1,project_id,object_id,1,'committed',jsonb_set(body #- '{!oversize}','{fields}','{"a":"old","b":"old"}'),body_hash,created_by,path,ir_version FROM object_versions WHERE changeset_id=$2`, base, cs)
+	e.Exec(`UPDATE objects SET head_version_id=$1 WHERE id=$2`, base, doc)
+	e.Exec(`UPDATE changeset_objects SET base_version_id=$1 WHERE changeset_id=$2`, base, cs)
+	e.Exec(`UPDATE object_versions SET body=jsonb_set(body #- '{!oversize}','{fields}',jsonb_build_object('a',repeat('x',$1),'b',repeat('y',$1))) WHERE changeset_id=$2`, reviewdiff.MaxBytes/2+1000, cs)
+	idx, err = reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := reviewdiff.ReadPage(ctx, e.Q, e.Admin, cs, doc, "staging", "base", idx.Snapshot, "", 100)
+	if err != nil || page.NextCursor == nil || len(page.Items) == 0 {
+		t.Fatal(page, err)
+	}
+	next, err := reviewdiff.ReadPage(ctx, e.Q, e.Admin, cs, doc, "staging", "base", idx.Snapshot, *page.NextCursor, 100)
+	if err != nil || len(next.Items) == 0 {
+		t.Fatal(next, err)
+	}
+	if _, err := reviewdiff.ReadPage(ctx, e.Q, e.Admin, cs, doc, "staging", "base", idx.Snapshot, "bad", 100); cmstest.Code(err) != "DIFF_CURSOR_INVALID" {
+		t.Fatal(err)
+	}
+
+	env, err := e.Q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: e.Admin.ProjectID, Name: "staging"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursorContext := e.Admin.ProjectID.String() + ":" + cs.String() + ":" + doc.String() + ":staging:base:" + idx.Snapshot
+	token := base64.RawURLEncoding.EncodeToString([]byte(cursorContext + ":9999"))
+	mac := hmac.New(sha256.New, env.PreviewKey)
+	mac.Write([]byte(token))
+	token += "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if _, err := reviewdiff.ReadPage(ctx, e.Q, e.Admin, cs, doc, "staging", "base", idx.Snapshot, token, 100); cmstest.Code(err) != "DIFF_CURSOR_INVALID" {
+		t.Fatal(err)
+	}
+}
+
+func TestDeletedCounterpartTitlesAndProtectedWriterFailures(t *testing.T) {
+	e := cmstest.New(t, workflow.Register, publishing.Register)
+	ctx := context.Background()
+	cs, _ := e.Draft(e.Admin, "title")
+	e.Exec(`UPDATE changesets SET targets=ARRAY['staging'] WHERE id=$1`, cs)
+	asset := e.ContentFixture("asset", "", map[string]any{"title": map[string]any{"fr": "Picture title"}}, "staging")
+	version := uuid.New()
+	e.Exec(`INSERT INTO object_versions(id,project_id,object_id,state,changeset_id,body,body_hash,created_by,deleted) SELECT $1,project_id,object_id,'working',$2,'{"title":"deleted title"}',body_hash,created_by,true FROM object_versions WHERE id=(SELECT head_version_id FROM objects WHERE id=$3)`, version, cs, asset)
+	e.Exec(`INSERT INTO changeset_objects(changeset_id,object_id,working_version_id,base_version_id) SELECT $1,id,$2,head_version_id FROM objects WHERE id=$3`, cs, version, asset)
+	for _, publishedOnly := range []bool{false, true} {
+		if publishedOnly {
+			e.Exec(`UPDATE changeset_objects SET base_version_id=NULL WHERE changeset_id=$1 AND object_id=$2`, cs, asset)
+		}
+		idx, err := reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, o := range idx.Objects {
+			if o.ID == asset && (!o.WorkingDeleted || o.Title != "Picture title") {
+				t.Fatal(o)
+			}
+		}
+	}
+	idx, err := reviewdiff.ReadIndex(ctx, e.Q, e.Admin, cs, "staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Exec(`UPDATE changesets SET state='merged' WHERE id=$1`, cs)
+	if err := reviewdiff.CheckExpected(ctx, e.Q, e.Admin, cs, &idx.Snapshot); cmstest.Code(err) != "DIFF_STATE_UNSUPPORTED" {
+		t.Fatal(err)
+	}
+	(&agents.Service{Pool: e.Pool}).Register(e.Bus)
+	e.Exec(`ALTER TABLE environments RENAME TO environments_broken`)
+	for _, row := range []struct {
+		name    string
+		payload any
+	}{{"set-approval-policy", map[string]int{"low": 1, "medium": 1, "high": 1}}, {"set-agent-policy", auth.AgentPolicy{Allow: []string{"design.read"}}}, {"promote", map[string]any{"publicationId": uuid.New(), "toEnvironment": "production"}}} {
+		cmstest.ExpectDBError(t, e.Do(e.Admin, row.name, row.payload, nil))
 	}
 }

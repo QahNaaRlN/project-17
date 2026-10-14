@@ -1,7 +1,11 @@
 package reviewdiff
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"github.com/google/uuid"
 	"strings"
 	"testing"
 )
@@ -116,5 +120,29 @@ func TestMetadataOnlyAndNestedServiceProjection(t *testing.T) {
 	_, summary := Diff("entity", a, b)
 	if summary.Effect != "metadata-only" {
 		t.Fatal(summary)
+	}
+}
+
+func TestDeterministicTitlesAndCursorOverflow(t *testing.T) {
+	path := "/fallback"
+	for _, row := range []struct {
+		body map[string]any
+		want string
+	}{{map[string]any{"title": map[string]any{"ru": "Russian", "en": "English"}}, "Russian"}, {map[string]any{"title": map[string]any{"ru": "", "en": "English"}}, "English"}, {map[string]any{"title": map[string]any{"fr": "French"}}, "French"}, {map[string]any{"title": map[string]any{"en": 3}, "name": "Name"}, "Name"}} {
+		if got := title("entity", &Image{Body: row.body}, nil, uuid.New()); got != row.want {
+			t.Fatal(got)
+		}
+	}
+	if title("document", nil, &path, uuid.New()) != path {
+		t.Fatal("fallback")
+	}
+	context := "context"
+	key := []byte("key")
+	raw := base64.RawURLEncoding.EncodeToString([]byte(context + ":9999999999999999999999999999"))
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(raw))
+	raw += "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+	if _, err := offset(raw, context, key); err == nil {
+		t.Fatal("overflow cursor accepted")
 	}
 }

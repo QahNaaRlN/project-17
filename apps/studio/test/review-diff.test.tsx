@@ -304,3 +304,34 @@ it("STU-156/158: API scopes index/detail and sends snapshot only with protected 
     hash,
   );
 });
+it("STU-157: tombstone metadata remains readable without navigation even when both versions are deleted", async () => {
+  const { api } = await setup();
+  const tombstone = index();
+  tombstone.objects[0]!.workingDeleted = true;
+  tombstone.objects[0]!.summaries.base.effect = "metadata-only";
+  vi.mocked(api.diffIndex!).mockResolvedValue(tombstone);
+  await act(async () => client.invalidateQueries({ queryKey: ["studio-diff"] }));
+  await settle();
+  await settle();
+  expect(document.querySelector(".review-diff")?.textContent).toContain("After");
+  expect(button("Открыть объект")).toBeUndefined();
+  expect(button("Выбрать блок")).toBeUndefined();
+});
+it("STU-155/159: revoked read access hides cached index and before/after values", async () => {
+  const { api } = await setup("in_review");
+  vi.mocked(api.diffIndex!).mockRejectedValue(new StudioError("FORBIDDEN"));
+  await act(async () => client.invalidateQueries({ queryKey: ["studio-diff"] }));
+  await settle();
+  expect(document.querySelector(".review-diff")?.textContent).not.toContain("Before");
+  expect(document.querySelector(".review-diff")?.textContent).not.toContain("Store");
+  expect(button("Согласовать").disabled).toBe(true);
+  vi.mocked(api.diffIndex!).mockResolvedValue(index());
+  await act(async () => client.invalidateQueries({ queryKey: ["studio-diff"] }));
+  await settle();
+  await settle();
+  vi.mocked(api.diffPage!).mockRejectedValue(new StudioError("FORBIDDEN"));
+  await act(async () => client.invalidateQueries({ queryKey: ["studio-diff-page"] }));
+  await settle();
+  expect(document.querySelector(".review-diff")?.textContent).not.toContain("Before");
+  expect(button("Согласовать").disabled).toBe(true);
+});

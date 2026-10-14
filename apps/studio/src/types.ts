@@ -309,6 +309,7 @@ export interface DiffObject {
   workingVersionId: string;
   headVersionId: string | null;
   publishedVersionId: string | null;
+  workingDeleted?: boolean;
   baseStale: boolean;
   summaries: Record<DiffBaseline, DiffSummary>;
 }

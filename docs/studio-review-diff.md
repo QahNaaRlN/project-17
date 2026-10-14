@@ -126,6 +126,7 @@ interface DiffIndex {
     workingVersionId: string;
     headVersionId: string | null;
     publishedVersionId: string | null; // выбранное окружение
+    workingDeleted: boolean; // tombstone: переход к удалённому объекту отключён
     baseStale: boolean;
     summaries: {
       base: DiffSummary;

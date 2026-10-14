@@ -37,6 +37,7 @@ type Object struct {
 	WorkingVersionID   uuid.UUID          `json:"workingVersionId"`
 	HeadVersionID      *uuid.UUID         `json:"headVersionId"`
 	PublishedVersionID *uuid.UUID         `json:"publishedVersionId"`
+	WorkingDeleted     bool               `json:"workingDeleted"`
 	BaseStale          bool               `json:"baseStale"`
 	Summaries          map[string]Summary `json:"summaries"`
 }
@@ -245,7 +246,7 @@ func load(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID,
 				chosen = published
 			}
 		}
-		out.index.Objects = append(out.index.Objects, Object{ID: o.ID, Kind: o.Kind, DocKind: o.DocKind, Title: title(o.Kind, chosen, afterPath, o.ID), BeforePath: beforePath, AfterPath: afterPath, BaseVersionID: o.BaseVersionID, WorkingVersionID: o.WorkingVersionID, HeadVersionID: o.HeadVersionID, PublishedVersionID: pubID, BaseStale: !same(o.BaseVersionID, o.HeadVersionID), Summaries: map[string]Summary{"base": bs, "published": ps}})
+		out.index.Objects = append(out.index.Objects, Object{ID: o.ID, Kind: o.Kind, DocKind: o.DocKind, Title: title(o.Kind, chosen, afterPath, o.ID), BeforePath: beforePath, AfterPath: afterPath, BaseVersionID: o.BaseVersionID, WorkingVersionID: o.WorkingVersionID, HeadVersionID: o.HeadVersionID, PublishedVersionID: pubID, WorkingDeleted: work.Deleted, BaseStale: !same(o.BaseVersionID, o.HeadVersionID), Summaries: map[string]Summary{"base": bs, "published": ps}})
 		parts = append(parts, map[string]any{"id": o.ID, "kind": o.Kind, "base": o.BaseVersionID, "working": o.WorkingVersionID, "body": hash(work.Body), "meta": work.Meta, "head": o.HeadVersionID})
 		if wanted != nil && o.ID == *wanted {
 			out.details = bc

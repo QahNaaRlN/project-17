@@ -149,7 +149,7 @@ export function ReviewDiff({
           ? "Не удалось загрузить сравнение."
           : "Could not load comparison.";
   async function go(node?: string) {
-    if (locked || !object) return;
+    if (locked || !object || object.workingDeleted) return;
     if (object.kind !== "document") {
       onContent?.(object.id, object.kind);
       return;
@@ -218,7 +218,7 @@ export function ReviewDiff({
           </p>
           {index.isPending && <Notice>{ru ? "Загружаем изменения…" : "Loading changes…"}</Notice>}
           {index.isError && <Notice error>{errorText(index.error)}</Notice>}
-          {index.data && (
+          {index.isSuccess && index.data && (
             <>
               <p className="catalogue-count" role="status">
                 {ru ? "Объектов в работе" : "Objects in work"}: {index.data.objects.length} · #
@@ -245,7 +245,13 @@ export function ReviewDiff({
                       onClick={() => setSelected(o.id)}
                     >
                       <strong>{o.title}</strong>
-                      <span>{o.afterPath ?? o.beforePath ?? o.kind}</span>
+                      <span>
+                        {o.afterPath ??
+                          o.beforePath ??
+                          (ru
+                            ? { document: "Документ", entity: "Сущность", asset: "Ассет" }[o.kind]
+                            : o.kind)}
+                      </span>
                       <small>
                         {effects[o.summaries[baseline].effect]} ·{" "}
                         {o.summaries[baseline].changeCount}
@@ -258,6 +264,7 @@ export function ReviewDiff({
                     <div className="review-diff-heading">
                       <h3>{object.title}</h3>
                       {(object.docKind === "page" || object.kind !== "document") &&
+                        !object.workingDeleted &&
                         object.summaries[baseline].effect !== "deleted" && (
                           <Button
                             disabled={locked}
@@ -283,7 +290,8 @@ export function ReviewDiff({
                     {page.isSuccess && !items.length && (
                       <Notice>{ru ? "Итоговых изменений нет" : "No final changes"}</Notice>
                     )}
-                    {!invalid &&
+                    {page.isSuccess &&
+                      !invalid &&
                       items.map((change) => (
                         <article className="diff-change" key={change.key}>
                           <div className="diff-change-heading">
@@ -293,6 +301,7 @@ export function ReviewDiff({
                             {change.nodeId &&
                               object.docKind === "page" &&
                               change.kind !== "remove" &&
+                              !object.workingDeleted &&
                               object.summaries[baseline].effect !== "deleted" &&
                               (object.id !== session.record.id ||
                                 !!state.document?.nodes[change.nodeId]) && (
@@ -318,7 +327,7 @@ export function ReviewDiff({
                           </div>
                         </article>
                       ))}
-                    {page.data && (
+                    {page.isSuccess && page.data && (
                       <p className="hint">
                         {ru ? "Загружено изменений" : "Changes loaded"}: {items.length} /{" "}
                         {page.data.pages[0]!.totalChanges}
