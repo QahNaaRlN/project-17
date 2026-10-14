@@ -310,6 +310,18 @@ export function Studio({
   const [screen, setScreen] = useState<"pages" | "editor" | "work">(
     documentId && changesetId ? "editor" : "pages",
   );
+  const [openedWork, setOpenedWork] = useState(0);
+  const [diagnosticNode, setDiagnosticNode] = useState<string | null>(null);
+  useEffect(() => {
+    if (openedWork) document.getElementById("work-card-title")?.focus();
+  }, [openedWork]);
+  useEffect(() => {
+    if (!diagnosticNode || screen !== "editor") return;
+    [...document.querySelectorAll<HTMLElement>('[role="treeitem"]')]
+      .find((item) => item.title === diagnosticNode)
+      ?.focus();
+    setDiagnosticNode(null);
+  }, [diagnosticNode, screen]);
   const [point, setPoint] = useState("base");
   const frame = useRef<HTMLIFrameElement>(null);
   const config = useQuery({
@@ -388,9 +400,6 @@ export function Studio({
   }, [editor]);
   const session = state.session,
     doc = state.document;
-  useEffect(() => {
-    if (session) setScreen("editor");
-  }, [session?.record.id, session?.changeset.id]);
   const tree = doc ? layers(doc) : [],
     selected = doc && state.selected ? doc.nodes[state.selected] : undefined;
   const busy = ["saving", "loading", "uncertain"].includes(state.status);
@@ -483,7 +492,7 @@ export function Studio({
           )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
-          <details className="editor-selector" open={screen !== "editor"}>
+          <details className="editor-selector" open={screen === "pages"}>
             <summary>{state.locale === "ru" ? "Страница и черновик" : "Page and draft"}</summary>
             <Workspace
               {...{ api, editor }}
@@ -748,16 +757,6 @@ export function Studio({
                 )}
               </aside>
             </div>
-            <PublishingPanel editor={editor} />
-            {session && (
-              <HistoryPanel
-                {...{ session, api, editor }}
-                busy={navigationLocked}
-                locale={state.locale}
-                revision={state.historyRevision}
-                retry={state.historyRetry}
-              />
-            )}
             <footer>
               <div role="status">
                 {t[state.status]}
@@ -811,8 +810,69 @@ export function Studio({
               )}
             </footer>
           </div>
-          <div hidden={screen === "pages"}>
-            <WorkItems api={api} editor={editor} />
+          <div hidden={screen !== "editor"}>
+            <WorkItems api={api} editor={editor} onOpened={() => setScreen("editor")} />
+          </div>
+          {screen === "work" && (
+            <WorkItems
+              api={api}
+              editor={editor}
+              compact={false}
+              onOpened={() => setOpenedWork((value) => value + 1)}
+            />
+          )}
+          <div className="work-review" hidden={screen === "pages"}>
+            {screen === "work" &&
+              (session ? (
+                <div className="work-card-heading">
+                  <div>
+                    <p className="studio-eyebrow">
+                      {state.locale === "ru" ? "Выбранная работа" : "Selected work"}
+                    </p>
+                    <h2 id="work-card-title" tabIndex={-1}>
+                      {session.changeset.title}
+                    </h2>
+                    <p>
+                      <code>{session.record.path}</code> · #{session.changeset.seq}
+                    </p>
+                  </div>
+                  <div className="work-card-actions">
+                    <Button disabled={navigationLocked} onClick={() => setScreen("editor")}>
+                      {state.locale === "ru" ? "Открыть редактор" : "Open editor"}
+                    </Button>
+                    <Button
+                      disabled={state.status === "saving" || state.status === "loading" || dirty}
+                      onClick={() => {
+                        void editor.refresh();
+                      }}
+                    >
+                      {t.refresh}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="studio-notice" role="status">
+                  {state.locale === "ru"
+                    ? "Откройте работу из очереди, чтобы увидеть изменения, проверки и решения."
+                    : "Open a work item to see changes, checks and decisions."}
+                </p>
+              ))}
+            <PublishingPanel
+              editor={editor}
+              onSelectDiagnostic={(node) => {
+                setDiagnosticNode(node);
+                setScreen("editor");
+              }}
+            />
+            {session && (
+              <HistoryPanel
+                {...{ session, api, editor }}
+                busy={navigationLocked}
+                locale={state.locale}
+                revision={state.historyRevision}
+                retry={state.historyRetry}
+              />
+            )}
           </div>
         </section>
       </div>

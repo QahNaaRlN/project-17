@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { checkConfig, createStudioHandler, type ServerConfig } from "../src/handler.js";
 import { identityCookies } from "../src/identity-proxy.js";
@@ -25,10 +28,37 @@ async function setup() {
     environment: "staging",
     authMode: "oidc",
   };
-  const handler = createStudioHandler(config, ".", fetcher);
+  const directory = await mkdtemp(join(tmpdir(), "studio-identity-"));
+  await writeFile(join(directory, "index.html"), "<!doctype html><div id=root></div>");
+  const handler = createStudioHandler(config, directory, fetcher);
+  cleanups.push(() => rm(directory, { recursive: true, force: true }));
   cleanups.push(() => new Promise((r) => server.close(() => r())));
   return { fetcher, origin, config };
 }
+it("STU-147: OIDC return may navigate to the static shell, but never to APIs or commands", async () => {
+  const { origin, fetcher } = await setup();
+  const headers = {
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Dest": "document",
+  };
+  const send = (path: string, requestHeaders = headers, method = "GET") =>
+    new Promise<number>((resolve) => {
+      httpRequest(origin + path, { headers: requestHeaders, method }, (response) => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode!));
+      }).end();
+    });
+  for (const path of ["/editor", "/"]) expect(await send(path)).toBe(200);
+  for (const path of ["/api/studio/config", "/api/studio/auth/session", "/editor?x=y"])
+    expect(await send(path)).toBeGreaterThanOrEqual(400);
+  expect(await send("/editor", { ...headers, "Sec-Fetch-Mode": "cors" })).toBe(403);
+  expect(
+    await send("/editor", { ...headers, Origin: "https://evil.example" } as typeof headers),
+  ).toBe(403);
+  expect(await send("/api/studio/api/v1/commands/publish", headers, "POST")).toBe(403);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 it("STU-080/082: identity mode forbids credentials and non-loopback plain HTTP", () => {
   const c = {
     baseUrl: "https://api.example",

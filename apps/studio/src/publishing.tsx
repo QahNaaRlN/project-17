@@ -151,7 +151,13 @@ const copy = {
     },
   },
 };
-export function PublishingPanel({ editor }: { editor: Editor }) {
+export function PublishingPanel({
+  editor,
+  onSelectDiagnostic,
+}: {
+  editor: Editor;
+  onSelectDiagnostic?: (node: string) => void;
+}) {
   const state = useStore(editor.store),
     session = state.session,
     t = copy[state.locale];
@@ -202,7 +208,7 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
     <section className="publishing-panel" aria-label={t.panel}>
       <div className="publishing-heading">
         <h2>{t.panel}</h2>
-        <strong role="status">
+        <strong className="studio-badge accent" role="status">
           {t.states[session.changeset.state as keyof typeof t.states] ?? session.changeset.state}
         </strong>
       </div>
@@ -236,7 +242,7 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
           {review.requiredRoles.join(", ")}
         </p>
       )}
-      <details>
+      <details className="review-section">
         <summary>
           {t.objects} ({review.objects.length})
         </summary>
@@ -245,8 +251,12 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
       </details>
       <div className="publishing-actions">
         {actions.map((action) => (
-          <div key={action}>
-            <button disabled={busy || review.actions[action] !== null} onClick={() => act(action)}>
+          <div key={action} className="workflow-action">
+            <button
+              className={`studio-button ${["submit", "approve", "publish"].includes(action) ? "primary" : "secondary"}`}
+              disabled={busy || review.actions[action] !== null}
+              onClick={() => act(action)}
+            >
               {t.actions[action]}
             </button>
             {review.actions[action] && (
@@ -334,7 +344,7 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
           </a>
         </p>
       )}
-      <h3>{t.checks}</h3>
+      <h3 className="review-section-title">{t.checks}</h3>
       {review.checks.length ? (
         <ul>
           {review.checks.map((c, i) => (
@@ -387,8 +397,10 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
                   <code>{d.pointer}</code>
                   {available && (
                     <button
+                      disabled={busy}
                       onClick={() => {
                         editor.select(node);
+                        if (editor.store.getState().selected === node) onSelectDiagnostic?.(node);
                         [...document.querySelectorAll<HTMLElement>('[role="treeitem"]')]
                           .find((el) => el.title === node)
                           ?.focus();
@@ -403,7 +415,7 @@ export function PublishingPanel({ editor }: { editor: Editor }) {
           </ul>
         </div>
       )}
-      <details>
+      <details className="review-section">
         <summary>
           {t.history} ({review.history.length})
         </summary>

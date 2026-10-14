@@ -7,8 +7,8 @@ async function login(page: Page, name: string) {
 }
 async function openWork(page: Page) {
   await page.getByRole("button", { name: "Работы", exact: true }).click();
-  await page.getByText("Мои работы и согласование", { exact: true }).click();
   await page.getByRole("button", { name: "Открыть работу", exact: true }).click();
+  await page.getByRole("button", { name: "Открыть редактор", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
 }
 test.beforeEach(async ({ request }) => {
@@ -40,6 +40,10 @@ test("STU-080/081/083/084: two people open, submit, approve and explicitly publi
   );
   await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
   await expect(page.getByRole("button", { name: "Сохранить text", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Работы", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Работы и согласование", exact: true }),
+  ).toBeVisible();
   await panel.getByRole("button", { name: "Согласовать", exact: true }).click();
   await expect(panel.getByText("Готов к публикации", { exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "Опубликовать", exact: true }).click();

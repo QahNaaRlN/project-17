@@ -67,6 +67,14 @@ export function createStudioHandler(
         config.authMode === "oidc" &&
         req.method === "GET" &&
         url.pathname === "/api/studio/auth/callback";
+      // The IdP callback redirects to the static shell. Browsers retain the
+      // redirect chain's fetch-site value; this exception grants no API access.
+      const navigation =
+        config.authMode === "oidc" &&
+        req.method === "GET" &&
+        ["/", "/editor"].includes(url.pathname) &&
+        req.headers["sec-fetch-mode"] === "navigate" &&
+        req.headers["sec-fetch-dest"] === "document";
       if (
         req.headers.host !== host ||
         (!callback &&
@@ -74,6 +82,7 @@ export function createStudioHandler(
           req.headers.origin !== config.studioOrigin) ||
         (req.headers["sec-fetch-site"] !== undefined &&
           !callback &&
+          !navigation &&
           !["same-origin", "none"].includes(String(req.headers["sec-fetch-site"])))
       )
         return error(403, "STUDIO_ORIGIN_FORBIDDEN");
