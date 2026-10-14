@@ -259,7 +259,10 @@ try {
   await expect(diff.locator(".diff-object-list button")).toHaveCount(
     process.env.STUDIO_REVIEW_ASSET_ID ? 4 : 3,
   );
-  await diff.locator(".diff-object-list button").filter({ hasText: "Article for comparison" }).click();
+  await diff
+    .locator(".diff-object-list button")
+    .filter({ hasText: "Article for comparison" })
+    .click();
   await expect(diff).toContainText("Article for comparison");
   await diff.getByRole("button", { name: "Изменения в окружении · staging", exact: true }).click();
   await expect(diff).toContainText("Опубликовано в окружении");
