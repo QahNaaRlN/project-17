@@ -136,7 +136,7 @@ func (q *Queries) ValidationPage(ctx context.Context, arg ValidationPageParams) 
 }
 
 const validationPublishedVersions = `-- name: ValidationPublishedVersions :many
-SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified, v.deleted
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
@@ -155,6 +155,7 @@ type ValidationPublishedVersionsRow struct {
 	Body      []byte    `json:"body"`
 	Path      *string   `json:"path"`
 	Certified bool      `json:"certified"`
+	Deleted   bool      `json:"deleted"`
 }
 
 func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg ValidationPublishedVersionsParams) ([]ValidationPublishedVersionsRow, error) {
@@ -172,6 +173,7 @@ func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg Validatio
 			&i.Body,
 			&i.Path,
 			&i.Certified,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}

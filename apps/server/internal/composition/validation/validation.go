@@ -383,7 +383,12 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 	}
 	all := map[uuid.UUID]Document{}
 	for _, r := range rows {
-		all[r.ObjectID] = Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path, Certified: r.Certified}
+		d := Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path, Certified: r.Certified, Deleted: r.Deleted}
+		if r.Deleted {
+			c.Overrides[r.ObjectID] = d
+		} else {
+			all[r.ObjectID] = d
+		}
 	}
 	for _, d := range docs {
 		all[d.ObjectID] = d

@@ -76,3 +76,26 @@ func TestPublishedRollbackConstraints(t *testing.T) {
 		t.Fatal("missing identity hidden")
 	}
 }
+
+// STU-166/169: deleted published versions are not live singleton/unique candidates.
+func TestPublishedTombstonesExcluded(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	var app map[string]any
+	_ = json.Unmarshal([]byte(cmstest.DefaultManifest), &app)
+	app["schemas"] = map[string]any{"Article": map[string]any{"version": 1, "singleton": true, "fields": map[string]any{"slug": map[string]any{"type": "string", "unique": true}}}}
+	raw, _ := json.Marshal(app)
+	e.ActivateManifest("staging", raw)
+	e.ContentFixture("entity", "Article", map[string]any{"slug": "same"}, "staging")
+	deleted := e.ContentFixture("entity", "Article", map[string]any{"slug": "same"}, "staging")
+	e.Exec("UPDATE object_versions SET deleted=true WHERE object_id=$1", deleted)
+	c, err := validation.LoadSnapshot(ctx, e.Q, e.Admin.ProjectID, "staging", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.PublishedOnly = true
+	problems, err := c.CheckPublication(ctx, nil)
+	if err != nil || validation.HasErrors(problems) {
+		t.Fatal(problems, err)
+	}
+}
