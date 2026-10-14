@@ -48,7 +48,8 @@
   min-height: 42px;
   text-align: left;
 }
-.studio-navigation button[aria-current="page"] {
+.studio-navigation button[aria-current="page"],
+.studio-navigation button[aria-current="page"]:hover {
   background: var(--p17-selected);
   color: var(--p17-accent);
 }
