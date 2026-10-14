@@ -1,3 +1,4 @@
+import { refreshMountedEditor } from "./identity-controls.js";
 import { expect, test, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 const origin = "http://127.0.0.1:18084",
@@ -194,7 +195,7 @@ test("STU-104: смена OIDC человека уничтожает прежн�
     if (r.url().includes("/commands/apply-operations")) writes++;
   });
   await page.context().request.post(origin + "/studio-control", { data: { user: "bob" } });
-  await button(page, "Сбросить ввод и перечитать").click();
+  await refreshMountedEditor(page, "Сбросить ввод и перечитать");
   await expect(page.locator(".person-bar")).toContainText("Bob");
   await expect(page.locator(".content-panel")).toHaveCount(0);
   expect(writes).toBe(0);
