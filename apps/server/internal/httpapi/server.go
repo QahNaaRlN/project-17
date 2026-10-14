@@ -156,6 +156,7 @@ func NewRouter(d Deps) http.Handler {
 		})
 		r.Get("/changesets/{id}/review", reviewHandler(d))
 		reviewDiffRoutes(r, d)
+		publicationHistoryRoutes(r, d)
 		r.Get("/delivery-keys", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
 			if err := commandbus.Require(actor, auth.ProjectAdmin); err != nil {
@@ -171,6 +172,20 @@ func NewRouter(d Deps) http.Handler {
 				env = &s
 			}
 			items, err := publishing.ListPublications(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, env)
+			if err == nil {
+				err = publishing.AuthorizeHistory(r.Context(), store.New(d.Pool), actorFrom(r.Context()), uuid.Nil)
+			}
+			if err == nil {
+				for _, p := range items {
+					if err = publishing.AuthorizeHistory(r.Context(), store.New(d.Pool), actorFrom(r.Context()), p.ID); err != nil {
+						break
+					}
+				}
+			}
+			if err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
 			respond(w, r, d, map[string]any{"items": items}, err)
 		})
 		r.Get("/publications/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +194,13 @@ func NewRouter(d Deps) http.Handler {
 				return
 			}
 			pub, err := publishing.GetPublication(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
+			if err == nil {
+				err = publishing.AuthorizeHistory(r.Context(), store.New(d.Pool), actorFrom(r.Context()), id)
+			}
+			if err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
 			respond(w, r, d, pub, err)
 		})
 

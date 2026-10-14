@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -332,7 +334,8 @@ func pathTaken(objectID uuid.UUID, where string) error {
 // --- rollback ------------------------------------------------------------------------
 
 type rollbackPayload struct {
-	PublicationID uuid.UUID `json:"publicationId"`
+	ExpectedRollbackSnapshot *string   `json:"expectedRollbackSnapshot,omitempty"`
+	PublicationID            uuid.UUID `json:"publicationId"`
 	// ResetHead — вернуть и head, если после публикации его никто не сдвигал (§7.3). По умолчанию true.
 	ResetHead *bool `json:"resetHead"`
 }
@@ -356,6 +359,37 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 	}
 	if src.ManifestChanged && !sameID(env.ActiveManifestID, src.CurrentManifestID) {
 		return Publication{}, commandbus.NewError(http.StatusConflict, "ROLLBACK_SUPERSEDED", "Manifest публикации уже перекрыт", "Откатите сначала последующую активацию")
+	}
+	if p.ExpectedRollbackSnapshot != nil {
+		fresh, err := currentHistoryActor(ctx, q, actor)
+		if err != nil {
+			return Publication{}, err
+		}
+		if err := commandbus.Require(fresh, auth.ContentPublish); err != nil {
+			return Publication{}, err
+		}
+		actor = fresh
+		if p.ResetHead == nil || *p.ResetHead || strings.TrimSpace(commandbus.ReasonFrom(ctx)) == "" || utf8.RuneCountInString(strings.TrimSpace(commandbus.ReasonFrom(ctx))) > 2000 {
+			return Publication{}, historyError(400, "INVALID_ARGUMENT")
+		}
+		card, _, _, err := LoadPublicationHistory(ctx, q, actor, p.PublicationID, true, nil)
+		if err != nil {
+			return Publication{}, err
+		}
+		if card.Snapshot != *p.ExpectedRollbackSnapshot {
+			return Publication{}, historyError(409, "ROLLBACK_SNAPSHOT_STALE")
+		}
+		if !card.CanRollback {
+			for _, blocker := range card.Blockers {
+				if strings.HasPrefix(blocker, "ROLLBACK_SUPERSEDED:") {
+					return Publication{}, historyError(409, "ROLLBACK_SUPERSEDED")
+				}
+				if blocker == "VALIDATION_FAILED" || blocker == "ROUTE_CONFLICT" {
+					return Publication{}, historyError(422, "VALIDATION_FAILED")
+				}
+			}
+			return Publication{}, historyError(409, "ROLLBACK_UI_UNSUPPORTED")
+		}
 	}
 	items, err := q.ListPublicationItems(ctx, src.ID) // упорядочены по ID объекта
 	if err != nil {
@@ -423,6 +457,7 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 		if err != nil {
 			return Publication{}, err
 		}
+		c.PublishedOnly = p.ExpectedRollbackSnapshot != nil
 		problems, err := c.CheckPublication(ctx, nil)
 		if err != nil {
 			return Publication{}, err

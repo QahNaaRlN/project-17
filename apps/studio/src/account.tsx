@@ -24,7 +24,9 @@ function Person({
     <div className="person-bar">
       <span>{account.user?.name}</span>
       <button
-        disabled={busy || ["saving", "uncertain"].includes(state.status)}
+        disabled={
+          busy || ["saving", "uncertain"].includes(state.status) || !!state.dirtyFields.publication
+        }
         onClick={async () => {
           setBusy(true);
           setError(false);

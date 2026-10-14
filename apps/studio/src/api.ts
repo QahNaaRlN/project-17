@@ -1,4 +1,13 @@
 import { validateDiffIndex, validateDiffPage } from "./review-diff.js";
+import {
+  publicationList,
+  publicationCard,
+  publicationPage,
+  type PublicationList,
+  type PublicationCard,
+  type PublicationPage,
+  type PublicationEntry,
+} from "./publication-history.js";
 import type { DiffIndex, DiffPage } from "./types.js";
 import { validateDocument } from "@cms/ir";
 import { jsonValue } from "@cms/runtime";
@@ -114,6 +123,78 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async publications(cursor, signal) {
+      const config = await api.config(signal);
+      const query = new URLSearchParams({
+        environment: config.environment,
+        limit: "50",
+        ...(cursor ? { cursor } : {}),
+      });
+      return publicationList(
+        await request<PublicationList>("/api/v1/publication-history?" + query, signal),
+        config.environment,
+      );
+    },
+    async publication(id, preview, signal) {
+      const config = await api.config(signal);
+      return publicationCard(
+        await request<PublicationCard>(
+          "/api/v1/publication-history/" +
+            encodeURIComponent(id) +
+            (preview ? "/rollback-preview" : "") +
+            "?environment=" +
+            encodeURIComponent(config.environment),
+          signal,
+        ),
+        id,
+        config.environment,
+      );
+    },
+    async publicationDiff(card, objectId, preview, cursor, signal) {
+      const query = new URLSearchParams({
+        environment: card.publication.environment,
+        objectId,
+        snapshot: card.snapshot,
+        limit: "100",
+        ...(cursor ? { cursor } : {}),
+      });
+      return publicationPage(
+        await request<PublicationPage>(
+          "/api/v1/publication-history/" +
+            card.publication.id +
+            (preview ? "/rollback-preview" : "") +
+            "/diff?" +
+            query,
+          signal,
+        ),
+        card.publication.id,
+        objectId,
+        card.snapshot,
+      );
+    },
+    async rollback(attempt) {
+      const { reason, key } = attempt;
+      const payload = {
+        publicationId: attempt.publicationId,
+        resetHead: attempt.resetHead,
+        expectedRollbackSnapshot: attempt.expectedRollbackSnapshot,
+      };
+      const value = await request<{ result: PublicationEntry }>(
+        "/api/v1/commands/rollback",
+        undefined,
+        { reason, payload },
+        key,
+      );
+      const p = value?.result;
+      if (
+        !p ||
+        !uuid.test(p.id) ||
+        p.kind !== "rollback" ||
+        p.sourcePublicationId !== attempt.publicationId
+      )
+        throw new StudioError("RESPONSE_INVALID", true);
+      return p;
+    },
     async agentConfig(signal) {
       const value = await request<AgentConfig>("/api/v1/agent-config", signal);
       if (

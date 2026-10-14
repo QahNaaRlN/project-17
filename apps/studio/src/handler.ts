@@ -104,7 +104,11 @@ export function createStudioHandler(
         const path = url.pathname.slice("/api/studio".length);
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const diffRoute = new RegExp(`^/api/v1/changesets/${uuid}/diff(?:/${uuid})?$`).test(path);
+        const publicationRoute = new RegExp(
+          `^/api/v1/publication-history(?:/${uuid}(?:/diff|/rollback-preview(?:/diff)?)?)?$`,
+        ).test(path);
         const allowedGet =
+          publicationRoute ||
           diffRoute ||
           path === "/api/v1/agent-config" ||
           path === "/api/v1/agent-runs" ||
@@ -119,6 +123,7 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          "/api/v1/commands/rollback",
           "/api/v1/commands/start-agent-run",
           "/api/v1/commands/cancel-agent-run",
           "/api/v1/commands/presence-heartbeat",
@@ -152,7 +157,28 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (path === "/api/v1/events" || path === "/api/v1/agent-runs") {
+          if (publicationRoute) {
+            const p = url.searchParams;
+            const detail = path.endsWith("/diff"),
+              list = path === "/api/v1/publication-history";
+            const allowed = [
+              "environment",
+              ...(list ? ["limit", "cursor"] : []),
+              ...(detail ? ["objectId", "limit", "cursor", "snapshot"] : []),
+            ];
+            if (
+              [...p.keys()].some((k) => !allowed.includes(k) || p.getAll(k).length !== 1) ||
+              (p.has("limit") && !/^(?:[1-9][0-9]?|100)$/.test(p.get("limit")!)) ||
+              (p.get("cursor")?.length ?? 0) > 2048 ||
+              (detail &&
+                (!new RegExp(`^${uuid}$`).test(p.get("objectId") ?? "") ||
+                  !/^sha256:[a-f0-9]{64}$/.test(p.get("snapshot") ?? "")))
+            )
+              return error(400, "PARAM_INVALID");
+            if (p.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (path === "/api/v1/events" || path === "/api/v1/agent-runs") {
             if (
               [...url.searchParams.keys()].some(
                 (key) =>
@@ -284,6 +310,36 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (path.endsWith("/commands/rollback")) {
+            const p = envelope.payload;
+            if (
+              Object.keys(envelope).some((k) => !["payload", "reason"].includes(k)) ||
+              Object.keys(p).some(
+                (k) => !["publicationId", "resetHead", "expectedRollbackSnapshot"].includes(k),
+              ) ||
+              !new RegExp(`^${uuid}$`).test(String(p.publicationId)) ||
+              p.resetHead !== false ||
+              !/^sha256:[a-f0-9]{64}$/.test(p.expectedRollbackSnapshot) ||
+              typeof envelope.reason !== "string" ||
+              !envelope.reason.trim() ||
+              [...envelope.reason.trim()].length > 2000
+            )
+              return error(400, "PAYLOAD_INVALID");
+            const check = await fetcher(
+              new URL(
+                "/api/v1/publication-history/" +
+                  p.publicationId +
+                  "?environment=" +
+                  encodeURIComponent(config.environment),
+                config.baseUrl,
+              ),
+              { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+            );
+            if (!check.ok) return error(check.status, "ROLLBACK_PREVIEW_UNAVAILABLE");
+            const card = await check.json();
+            if (card?.publication?.environment !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          }
           if (path.includes("/commands/presence-")) {
             const p = envelope.payload,
               leave = path.endsWith("presence-leave");
