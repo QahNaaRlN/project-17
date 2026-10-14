@@ -56,7 +56,13 @@ test("STU-081/082: expired session destroys the old editor", async ({ page, requ
   await login(page, "Alice");
   await openWork(page);
   await request.post(origin + "/studio-control", { data: { expired: true } });
-  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  // A pending comparison read can detect expiry and unmount the editor first.
+  // Trigger the explicit refresh synchronously only while its control exists.
+  await page.evaluate(() => {
+    [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Перечитать черновик")
+      ?.click();
+  });
   await expect(page.getByRole("link", { name: "Войти", exact: true })).toBeVisible();
   await expect(page.locator(".frame-wrap iframe")).toHaveCount(0);
   expect(new URL(page.url()).hash).toBe("");
