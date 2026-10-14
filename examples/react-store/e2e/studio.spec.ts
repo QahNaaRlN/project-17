@@ -164,7 +164,10 @@ test("STU-053/054: отказ и конфликт undo не заменяют т�
     ).toBeVisible();
   }
   await request.post(origin + "/studio-control", { data: { state: "in_review", fault: "" } });
-  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  await page
+    .locator("footer")
+    .getByRole("button", { name: "Перечитать черновик", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Отменить", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Повторить", exact: true })).toBeDisabled();
 });
@@ -174,7 +177,7 @@ test("STU-040/041/042/044/131/133: открытие страницы и ново
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(origin + "/editor");
   await expect(page.getByRole("heading", { name: "Страницы", exact: true })).toBeVisible();
-  await expect(page.locator(".pages-table")).toContainText("Store");
+  await expect(page.locator(".page-catalogue .pages-table")).toContainText("Store");
   await page.getByRole("button", { name: "Выбрать страницу /store", exact: true }).click();
   await expect(page.locator(".frame-wrap iframe")).toHaveCount(0);
   await page

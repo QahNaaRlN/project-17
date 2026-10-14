@@ -887,3 +887,56 @@ it("ошибки открытия/config и блокировка узла ото
   });
   expect(document.body.textContent).toContain("OPEN_FAILED");
 });
+it("STU-145/146: queue opens its card, keeps review on screen and focuses diagnostic in editor", async () => {
+  const { api, session } = await setup(true);
+  vi.mocked(api.workItems).mockResolvedValue({
+    items: [
+      {
+        id: changesetId,
+        documentId,
+        title: session.changeset.title,
+        path: "/store",
+        ownerId: "alice",
+        ownerName: "Alice",
+        own: true,
+        state: "failed",
+      },
+    ],
+    nextCursor: null,
+  });
+  session.changeset.state = "failed";
+  session.review.checks = [
+    {
+      stage: "ir",
+      status: "failed",
+      blocking: true,
+      details: {
+        documents: {
+          [documentId]: [
+            {
+              objectId: documentId,
+              environment: "staging",
+              code: "IR_INVALID",
+              severity: "error",
+              pointer: "/nodes/n_heading",
+              nodeId: "n_heading",
+            },
+          ],
+        },
+      },
+    },
+  ];
+  await click(button("Работы"));
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ["studio-work-items"] });
+  });
+  await flush();
+  await click(document.querySelector<HTMLButtonElement>(".work-catalogue tbody button")!);
+  expect(document.querySelector<HTMLElement>(".editor-surface")!.hidden).toBe(true);
+  expect(document.activeElement?.id).toBe("work-card-title");
+  expect(document.querySelector(".work-review")!.textContent).toContain("Проверки не пройдены");
+  await click(button("Выбрать блок"));
+  expect(document.querySelector<HTMLElement>(".editor-surface")!.hidden).toBe(false);
+  expect(editor.store.getState().selected).toBe("n_heading");
+  expect(document.activeElement?.getAttribute("title")).toBe("n_heading");
+});
