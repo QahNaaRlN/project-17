@@ -6,6 +6,7 @@ async function login(page: Page, name: string) {
   await expect(page.locator(".person-bar")).toContainText(name);
 }
 async function openWork(page: Page) {
+  await page.getByRole("button", { name: "Работы", exact: true }).click();
   await page.getByText("Мои работы и согласование", { exact: true }).click();
   await page.getByRole("button", { name: "Открыть работу", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
