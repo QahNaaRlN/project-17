@@ -1,20 +1,32 @@
-import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { useEffect, useRef, useState, lazy, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { useQuery } from "@tanstack/react-query";
 import type { Node } from "@cms/ir";
 import type { Editor } from "./editor.js";
-import { fields, fieldOperations, designOperation, layers, type Field } from "./fields.js";
+import {
+  fields,
+  fieldOperations,
+  designOperation,
+  designFields,
+  layers,
+  type Field,
+} from "./fields.js";
 import { StudioError, type Api, type Session } from "./types.js";
 import { Workspace } from "./workspace.js";
 import { HistoryPanel } from "./history.js";
-import { StructurePanel } from "./structure-ui.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
 import { PresencePanel } from "./presence.js";
-import { AgentPanel } from "./agent-panel.js";
+import { DeferredPanel } from "./deferred-panel.js";
+const AgentPanel = lazy(() =>
+  import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
+);
 import { Signal, Button } from "./components.js";
 const JsonPanel = lazy(() => import("./json-panel.js"));
 const ContentPanel = lazy(() => import("./content-panel.js"));
+const StructurePanel = lazy(() =>
+  import("./structure-ui.js").then((module) => ({ default: module.StructurePanel })),
+);
 const copy = {
   ru: {
     page: "Страница",
@@ -96,6 +108,8 @@ const copy = {
 type Copy = typeof copy.ru;
 const errorText: Record<"ru" | "en", Record<string, string>> = {
   ru: {
+    FIELD_DRAFT_PENDING:
+      "Сохраните или сбросьте введённое значение перед выбором другого элемента.",
     CONTENT_DRAFT_PENDING: "Сохраните контент или сбросьте ввод перед другой правкой.",
     CONTENT_TARGET_MISMATCH: "Первым target CS должно быть окружение Studio.",
     JSON_DRAFT_PENDING: "Сохраните JSON или сбросьте ввод перед переходом к другой правке.",
@@ -111,6 +125,7 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
     PREVIEW_DOCUMENT_MISMATCH: "Приложение открыло другую страницу. Проверьте её маршрут.",
   },
   en: {
+    FIELD_DRAFT_PENDING: "Save or discard the field input before selecting another element.",
     CONTENT_DRAFT_PENDING: "Save content or discard input before another edit.",
     CONTENT_TARGET_MISMATCH: "The first CS target must match the Studio environment.",
     JSON_DRAFT_PENDING: "Save JSON or discard the input before starting another change.",
@@ -153,7 +168,12 @@ function Property({
       <div className="readonly-field">
         <strong>{field.name}</strong>
         <p>{field.binding !== undefined ? t.binding : t.unsupported}</p>
-        <code>{JSON.stringify(field.binding ?? field.value)}</code>
+        {(field.binding !== undefined || field.value !== undefined) && (
+          <details>
+            <summary>{t === copy.ru ? "Показать значение" : "Show value"}</summary>
+            <code>{JSON.stringify(field.binding ?? field.value)}</code>
+          </details>
+        )}
       </div>
     );
   return (
@@ -276,6 +296,10 @@ export function Studio({
   accountControls?: ReactNode;
 }) {
   const [showContent, setShowContent] = useState(false);
+  const [formRevision, setFormRevision] = useState(0);
+  const [fitCanvas, setFitCanvas] = useState(true);
+  const [canvasWidth, setCanvasWidth] = useState(1024);
+  const canvasScroll = useRef<HTMLDivElement>(null);
   const state = useStore(editor.store),
     t = copy[state.locale];
   const saved = new URLSearchParams(
@@ -306,6 +330,20 @@ export function Studio({
   useEffect(() => {
     editor.bindFrame(frame.current?.contentWindow ?? null);
   }, [editor, state.previewSrc]);
+  useEffect(() => {
+    const canvas = canvasScroll.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const style = getComputedStyle(canvas);
+      const width =
+        canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      if (width > 0) setCanvasWidth(width);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    measure();
+    return () => observer.disconnect();
+  }, [state.previewSrc]);
   useEffect(() => {
     document.documentElement.lang = state.locale;
   }, [state.locale]);
@@ -338,6 +376,7 @@ export function Studio({
         action = event.shiftKey ? "redo" : "undo";
       if (
         current.status !== "ready" ||
+        Object.values(current.dirtyFields).some(Boolean) ||
         !current.session?.history[action === "undo" ? "canUndo" : "canRedo"]
       )
         return;
@@ -357,7 +396,9 @@ export function Studio({
   const busy = ["saving", "loading", "uncertain"].includes(state.status);
   const contentDirty = !!(state.dirtyFields.content || state.dirtyFields.contentUpload);
   const jsonDirty = !!state.dirtyFields.json || contentDirty;
-  const navigationLocked = busy || Object.values(state.dirtyFields).some(Boolean);
+  const dirty = Object.values(state.dirtyFields).some(Boolean);
+  const navigationLocked = busy || dirty;
+  const zoom = fitCanvas ? Math.min(1, canvasWidth / state.width) : 1;
   const disabled =
     busy ||
     jsonDirty ||
@@ -371,7 +412,7 @@ export function Studio({
         )
       : [];
   return (
-    <main className="studio-shell">
+    <main className="studio-shell" data-screen={screen}>
       <a className="studio-skip-link" href="#studio-content">
         {state.locale === "ru" ? "К содержимому" : "Skip to content"}
       </a>
@@ -391,6 +432,7 @@ export function Studio({
             {t.locale}
             <select
               aria-label={t.locale}
+              disabled={navigationLocked}
               value={state.locale}
               onChange={(event) => editor.locale(event.target.value as "ru" | "en")}
             >
@@ -441,108 +483,147 @@ export function Studio({
           )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
-          <Workspace
-            {...{ api, editor }}
-            busy={navigationLocked}
-            locale={state.locale}
-            compact={screen !== "pages"}
-            onOpened={() => setScreen("editor")}
-          />
-          <div hidden={screen === "pages"}>
-            <WorkItems api={api} editor={editor} />
-          </div>
+          <details className="editor-selector" open={screen !== "editor"}>
+            <summary>{state.locale === "ru" ? "Страница и черновик" : "Page and draft"}</summary>
+            <Workspace
+              {...{ api, editor }}
+              busy={navigationLocked}
+              locale={state.locale}
+              compact={screen !== "pages"}
+              onOpened={() => setScreen("editor")}
+            />
+          </details>
           {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
           <div className="editor-surface" hidden={screen !== "editor"}>
-            <PresencePanel {...{ api, editor }} />
-            {session && (
-              <div className="content-toggle">
+            <div className="editor-heading">
+              <div className="editor-document">
+                <span className="studio-eyebrow">
+                  {state.locale === "ru" ? "Редактор страницы" : "Page editor"}
+                </span>
+                <h1>{session ? doc?.nodes[doc.root]?.name || session.record.path : t.page}</h1>
+                {session && (
+                  <p>
+                    <code>{session.record.path}</code>
+                    <span>{session.changeset.title}</span>
+                  </p>
+                )}
+              </div>
+              <div className="editor-save-state" role="status" aria-live="polite">
+                <span className="studio-badge accent">
+                  {!busy && state.status !== "error" && dirty
+                    ? state.locale === "ru"
+                      ? "Есть несохранённый ввод"
+                      : "Unsaved input"
+                    : t[state.status]}
+                </span>
+                {session && <span>#{session.changeset.seq}</span>}
+                {session && (
+                  <div className="content-toggle">
+                    <button
+                      aria-expanded={showContent}
+                      disabled={navigationLocked}
+                      onClick={() => setShowContent((v) => !v)}
+                    >
+                      {state.locale === "ru" ? "Контент" : "Content"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="canvas-tools">
+              <div
+                role="group"
+                aria-label={state.locale === "ru" ? "Представление редактора" : "Editor view"}
+              >
                 <button
-                  aria-expanded={showContent}
-                  disabled={contentDirty || !!state.dirtyFields.json || busy}
-                  onClick={() => setShowContent((v) => !v)}
+                  aria-pressed={state.viewMode === "visual"}
+                  disabled={navigationLocked}
+                  onClick={() => editor.viewMode("visual")}
                 >
-                  {state.locale === "ru" ? "Контент" : "Content"}
+                  {state.locale === "ru" ? "Визуальный" : "Visual"}
+                </button>
+                <button
+                  aria-pressed={state.viewMode === "structure"}
+                  disabled={navigationLocked}
+                  onClick={() => editor.viewMode("structure")}
+                >
+                  Structure
+                </button>
+                <button
+                  aria-pressed={state.viewMode === "agent"}
+                  disabled={navigationLocked}
+                  onClick={() => editor.viewMode("agent")}
+                >
+                  Agent
                 </button>
               </div>
-            )}
+              <div role="group" aria-label={t.mode}>
+                <button
+                  aria-pressed={state.mode === "design"}
+                  onClick={() => editor.mode("design")}
+                >
+                  {t.design}
+                </button>
+                <button
+                  aria-pressed={state.mode === "interact"}
+                  onClick={() => editor.mode("interact")}
+                >
+                  {t.interact}
+                </button>
+              </div>
+              <label>
+                {t.width}
+                <select
+                  aria-label={t.width}
+                  value={state.width}
+                  onChange={(event) => editor.width(Number(event.target.value))}
+                >
+                  {[375, 768, 1024, 1440].map((width) => (
+                    <option key={width}>{width}</option>
+                  ))}
+                </select>
+              </label>
+              <button aria-pressed={fitCanvas} onClick={() => setFitCanvas((value) => !value)}>
+                {state.locale === "ru" ? "Вписать" : "Fit"} · {Math.round(zoom * 100)}%
+              </button>
+            </div>
+
+            <PresencePanel {...{ api, editor }} />
             {showContent && session && doc && (
-              <Suspense fallback={<p role="status">{t.loading}</p>}>
+              <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                 <ContentPanel
-                  key={session.changeset.id + ":" + session.record.id}
+                  key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
                   {...{ api, editor }}
                 />
-              </Suspense>
+              </DeferredPanel>
             )}
             <div className="workspace">
-              <StructurePanel editor={editor} />
+              {session ? (
+                <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
+                  <StructurePanel editor={editor} />
+                </DeferredPanel>
+              ) : (
+                <aside className="layers">
+                  <h2>{t.layers}</h2>
+                  <p className="hint">{t.idle}</p>
+                </aside>
+              )}
               <section className="canvas" aria-label={t.preview}>
-                <div className="canvas-tools">
-                  <div
-                    role="group"
-                    aria-label={state.locale === "ru" ? "Представление редактора" : "Editor view"}
-                  >
-                    <button
-                      aria-pressed={state.viewMode === "visual"}
-                      disabled={jsonDirty}
-                      onClick={() => editor.viewMode("visual")}
-                    >
-                      {state.locale === "ru" ? "Визуальный" : "Visual"}
-                    </button>
-                    <button
-                      aria-pressed={state.viewMode === "structure"}
-                      disabled={jsonDirty}
-                      onClick={() => editor.viewMode("structure")}
-                    >
-                      Structure
-                    </button>
-                    <button
-                      aria-pressed={state.viewMode === "agent"}
-                      disabled={jsonDirty}
-                      onClick={() => editor.viewMode("agent")}
-                    >
-                      Agent
-                    </button>
-                  </div>
-                  <div role="group" aria-label={t.mode}>
-                    <button
-                      aria-pressed={state.mode === "design"}
-                      onClick={() => editor.mode("design")}
-                    >
-                      {t.design}
-                    </button>
-                    <button
-                      aria-pressed={state.mode === "interact"}
-                      onClick={() => editor.mode("interact")}
-                    >
-                      {t.interact}
-                    </button>
-                  </div>
-                  <label>
-                    {t.width}
-                    <select
-                      aria-label={t.width}
-                      value={state.width}
-                      onChange={(event) => editor.width(Number(event.target.value))}
-                    >
-                      {[375, 768, 1024, 1440].map((width) => (
-                        <option key={width}>{width}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
                 {state.viewMode === "agent" && session && (
-                  <AgentPanel
-                    key={session.changeset.id + ":" + session.record.id}
-                    {...{ api, editor }}
-                  />
+                  <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
+                    <AgentPanel
+                      key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
+                      {...{ api, editor }}
+                    />
+                  </DeferredPanel>
                 )}
                 {state.viewMode === "structure" && session && doc && (
-                  <Suspense fallback={<p role="status">{t.loading}</p>}>
+                  <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                     <JsonPanel
-                      key={session.changeset.id + ":" + session.record.id}
+                      key={session.changeset.id + ":" + session.record.id + ":" + formRevision}
                       editor={editor}
                     />
-                  </Suspense>
+                  </DeferredPanel>
                 )}
                 {state.previewError && (
                   <div role="alert" className="preview-error">
@@ -557,24 +638,36 @@ export function Studio({
                   </div>
                 )}
                 {state.previewSrc ? (
-                  <div className="canvas-scroll">
-                    <div className="frame-wrap" style={{ width: state.width }}>
-                      <iframe
-                        ref={frame}
-                        title={t.preview}
-                        src={state.previewSrc}
-                        sandbox="allow-scripts allow-same-origin allow-forms"
-                        referrerPolicy="no-referrer"
-                        onLoad={() => editor.bindFrame(frame.current?.contentWindow ?? null)}
-                      />
-                      <div className="overlays" aria-hidden="true">
-                        {rects.map((rect, index) => (
-                          <div
-                            key={index}
-                            className="selection-frame"
-                            style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
-                          />
-                        ))}
+                  <div className="canvas-scroll" ref={canvasScroll}>
+                    <div
+                      className="canvas-zoom"
+                      style={{ width: state.width * zoom, height: 800 * zoom }}
+                    >
+                      <div
+                        className="frame-wrap"
+                        style={{
+                          width: state.width,
+                          transform: `scale(${zoom})`,
+                          transformOrigin: "top left",
+                        }}
+                      >
+                        <iframe
+                          ref={frame}
+                          title={t.preview}
+                          src={state.previewSrc}
+                          sandbox="allow-scripts allow-same-origin allow-forms"
+                          referrerPolicy="no-referrer"
+                          onLoad={() => editor.bindFrame(frame.current?.contentWindow ?? null)}
+                        />
+                        <div className="overlays" aria-hidden="true">
+                          {rects.map((rect, index) => (
+                            <div
+                              key={index}
+                              className="selection-frame"
+                              style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -596,8 +689,14 @@ export function Studio({
                     {state.instance && <p className="hint">{t.instance}</p>}
                     {fields(doc, selected, session.manifest, state.locale).map((field) => (
                       <Property
-                        key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${state.locale}:${field.name}`}
-                        {...{ field, node: selected, session, editor, disabled, t }}
+                        key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${state.locale}:${formRevision}:${field.name}`}
+                        {...{ field, node: selected, session, editor, t }}
+                        disabled={
+                          disabled ||
+                          Object.entries(state.dirtyFields).some(
+                            ([key, value]) => value && key !== `property-${field.name}`,
+                          )
+                        }
                       />
                     ))}
                     <h2>{t.design}</h2>
@@ -605,6 +704,7 @@ export function Studio({
                       {t.point}
                       <select
                         aria-label={t.point}
+                        disabled={navigationLocked}
                         value={point}
                         onChange={(event) => setPoint(event.target.value)}
                       >
@@ -623,10 +723,23 @@ export function Studio({
                         ),
                       )}
                     </datalist>
-                    {(["padding", "gap"] as const).map((name) => (
+                    {designFields(selected, session.manifest).length === 0 && (
+                      <p className="hint">
+                        {state.locale === "ru"
+                          ? "Настройки отступов доступны у контейнеров и кнопок."
+                          : "Spacing controls are available for containers and buttons."}
+                      </p>
+                    )}
+                    {designFields(selected, session.manifest).map((name) => (
                       <Design
-                        key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${point}:${name}`}
-                        {...{ name, node: selected, session, editor, disabled, t, point }}
+                        key={`${session.changeset.id}:${session.record.id}:${selected.id}:${session.changeset.seq}:${session.changeset.state}:${point}:${formRevision}:${name}`}
+                        {...{ name, node: selected, session, editor, t, point }}
+                        disabled={
+                          disabled ||
+                          Object.entries(state.dirtyFields).some(
+                            ([key, value]) => value && key !== `design-${name}`,
+                          )
+                        }
                       />
                     ))}
                   </>
@@ -639,7 +752,7 @@ export function Studio({
             {session && (
               <HistoryPanel
                 {...{ session, api, editor }}
-                busy={busy || jsonDirty}
+                busy={navigationLocked}
                 locale={state.locale}
                 revision={state.historyRevision}
                 retry={state.historyRetry}
@@ -659,13 +772,32 @@ export function Studio({
                 <>
                   <span className="connection">{state.connected ? t.connected : t.connecting}</span>
                   <button
-                    disabled={state.status === "saving" || state.status === "loading"}
+                    disabled={
+                      state.status === "saving" ||
+                      state.status === "loading" ||
+                      (dirty && state.status !== "uncertain")
+                    }
                     onClick={() => {
                       void editor.refresh();
                     }}
                   >
                     {t.refresh}
                   </button>
+                  {dirty && (
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        void editor.refresh().then(() => {
+                          if (editor.store.getState().status === "ready")
+                            setFormRevision((revision) => revision + 1);
+                        });
+                      }}
+                    >
+                      {state.locale === "ru"
+                        ? "Сбросить ввод и перечитать"
+                        : "Discard input and reload"}
+                    </button>
+                  )}
                 </>
               )}
               {session && (!session.review.canEdit || session.changeset.state !== "open") && (
@@ -673,10 +805,14 @@ export function Studio({
               )}
               {state.error && (
                 <p role="alert">
-                  {errorText[state.locale][state.error] ?? t.problem} <code>{state.error}</code>
+                  {errorText[state.locale][state.error] ?? t.problem}{" "}
+                  {state.error !== "FIELD_DRAFT_PENDING" && <code>{state.error}</code>}
                 </p>
               )}
             </footer>
+          </div>
+          <div hidden={screen === "pages"}>
+            <WorkItems api={api} editor={editor} />
           </div>
         </section>
       </div>

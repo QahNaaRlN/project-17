@@ -5,6 +5,40 @@ test.beforeEach(async ({ request }) => {
   await request.post(origin + "/control", { data: { mode: "ready" } });
   await request.post(origin + "/studio-control", { data: { reset: true } });
 });
+test("STU-137/138/139/141: вписывание, выбор на холсте и защита несохранённого текста", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await expect(page.locator(".editor-document")).toContainText("/store");
+  await expect(page.locator(".editor-selector")).not.toHaveAttribute("open", "");
+  await expect(page.locator(".frame-wrap")).not.toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  const frame = page.frameLocator(".frame-wrap iframe");
+  await frame.getByRole("heading", { name: "Заголовок черновика", exact: true }).click();
+  await expect(page.locator('[role="treeitem"][title="n_title"]')).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByLabel("text", { exact: true }).fill("Не сохранено");
+  await expect(page.locator(".editor-save-state")).toContainText("Есть несохранённый ввод");
+  await expect(page.getByRole("button", { name: "Страницы", exact: true })).toBeDisabled();
+  await page.locator('[role="treeitem"][title="n_store"]').click();
+  await expect(page.getByLabel("text", { exact: true })).toHaveValue("Не сохранено");
+  await page.getByRole("button", { name: "Сбросить ввод и перечитать", exact: true }).click();
+  await expect(page.getByLabel("text", { exact: true })).toHaveValue("Заголовок черновика");
+  await page.getByLabel("text", { exact: true }).fill("Обновлённый заголовок");
+  await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
+  await expect(
+    frame.getByRole("heading", { name: "Обновлённый заголовок", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Ширина предпросмотра", exact: true })
+    .selectOption("375");
+  await expect(page.locator(".frame-wrap iframe")).toHaveJSProperty("clientWidth", 375);
+  await page.getByRole("button", { name: /^Вписать/ }).click();
+  await expect(page.locator(".frame-wrap")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+});
 test("STU-052: Ctrl+Z после выбора на холсте отменяет действие Studio", async ({ page }) => {
   await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
@@ -148,6 +182,7 @@ test("STU-040/041/042/044/131/133: открытие страницы и ново
     .selectOption({ label: "Studio browser draft" });
   await page.getByRole("button", { name: "Открыть", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
+  await page.locator(".editor-selector > summary").click();
   await page.getByRole("button", { name: "Новый черновик", exact: true }).click();
   await page.getByLabel("Название черновика", { exact: true }).fill("Новая работа");
   await page.getByRole("button", { name: "Создать и открыть", exact: true }).click();
@@ -210,18 +245,14 @@ test("STU-001/003/010/021/026/032/033, SDK-042: Studio сохраняет чер
   await page.getByLabel("text", { exact: true }).fill("Сохранённый текст Studio");
   await page.getByRole("button", { name: "Сохранить text", exact: true }).click();
   await expect(frame.getByRole("heading", { name: "Сохранённый текст Studio" })).toBeVisible();
+  await expect(page.getByLabel("Внутренний отступ", { exact: true })).toHaveCount(0);
+  await page.locator('[role="treeitem"][title="n_store"]').click();
   await page.getByLabel("Внутренний отступ", { exact: true }).fill("12");
   await page.getByRole("button", { name: "Сохранить Внутренний отступ", exact: true }).click();
-  await expect(frame.getByRole("heading", { name: "Сохранённый текст Studio" })).toHaveCSS(
-    "padding-top",
-    "12px",
-  );
+  await expect(frame.locator('[data-cms-node="n_store"]')).toHaveCSS("padding-top", "12px");
   await page.reload();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
-  await expect(frame.getByRole("heading", { name: "Сохранённый текст Studio" })).toHaveCSS(
-    "padding-top",
-    "12px",
-  );
+  await expect(frame.locator('[data-cms-node="n_store"]')).toHaveCSS("padding-top", "12px");
   const favorite = frame.getByRole("button", { name: "В избранное: Ваза «Линия»" });
   await favorite.click();
   await expect(page.getByRole("treeitem", { name: "◇ StoreProduct", exact: true })).toHaveAttribute(
@@ -256,7 +287,7 @@ test("STU-021: отказ, конфликт и потерянный ответ �
 }) => {
   await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
-  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
+  await page.locator('[role="treeitem"][title="n_store"]').click();
   const frame = page.frameLocator(".frame-wrap iframe");
   for (const [fault, code] of [
     ["reject", "FORBIDDEN"],
@@ -266,23 +297,18 @@ test("STU-021: отказ, конфликт и потерянный ответ �
     await page.getByLabel("Внутренний отступ", { exact: true }).fill("24");
     await page.getByRole("button", { name: "Сохранить Внутренний отступ", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: code })).toBeVisible();
-    await expect(frame.getByRole("heading", { name: "Заголовок черновика" })).not.toHaveCSS(
-      "padding-top",
-      "24px",
-    );
+    await expect(frame.locator('[data-cms-node="n_store"]')).not.toHaveCSS("padding-top", "24px");
   }
   await request.post(origin + "/studio-control", { data: { fault: "lost" } });
   await page.getByLabel("Внутренний отступ", { exact: true }).fill("36");
   await page.getByRole("button", { name: "Сохранить Внутренний отступ", exact: true }).click();
-  await expect(frame.getByRole("heading", { name: "Заголовок черновика" })).toHaveCSS(
-    "padding-top",
-    "36px",
-  );
+  await expect(frame.locator('[data-cms-node="n_store"]')).toHaveCSS("padding-top", "36px");
   await expect(page.getByRole("alert").filter({ hasText: "STUDIO_RESPONSE_LOST" })).toBeVisible();
   await request.post(origin + "/studio-control", { data: { state: "in_review" } });
   await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
   await expect(
     page.getByText("Этот черновик доступен только для чтения", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("treeitem", { name: "◇ Heading", exact: true }).click();
   await expect(page.getByRole("button", { name: "Сохранить level", exact: true })).toBeDisabled();
 });

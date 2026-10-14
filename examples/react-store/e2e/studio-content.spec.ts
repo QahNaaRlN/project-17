@@ -194,7 +194,7 @@ test("STU-104: смена OIDC человека уничтожает прежн�
     if (r.url().includes("/commands/apply-operations")) writes++;
   });
   await page.context().request.post(origin + "/studio-control", { data: { user: "bob" } });
-  await button(page, "Перечитать черновик").click();
+  await button(page, "Сбросить ввод и перечитать").click();
   await expect(page.locator(".person-bar")).toContainText("Bob");
   await expect(page.locator(".content-panel")).toHaveCount(0);
   expect(writes).toBe(0);

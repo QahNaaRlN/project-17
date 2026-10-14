@@ -1,6 +1,6 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
 import { Image, preparePage, loadSources, documentHash } from "@cms/runtime";
-import { registry } from "./registry.js";
+import { registry, storeTokens } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
 
@@ -30,6 +30,7 @@ export async function loadStore(
       natives: definitionsFor(catalog),
       scope: { ...scope, data },
       breakpoints: registry.breakpoints,
+      tokens: storeTokens,
       actions: registry.actions,
     });
     if (preview) {

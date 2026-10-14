@@ -25,9 +25,10 @@ const fields = {
 } as const;
 const strings = (values: Record<string, unknown>) =>
   Object.values(values).every((value) => typeof value === "string" && value.length <= 2000);
+export const storeTokens = { spacing: { sm: "8px", md: "16px", lg: "24px", xl: "32px" } };
 export const registry = createRegistry({
   breakpoints: { sm: 640, md: 768, lg: 1024 },
-  tokens: {},
+  tokens: storeTokens,
   actions: [
     defineAction({
       name: "store.favorite",

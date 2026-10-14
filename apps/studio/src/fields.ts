@@ -12,6 +12,17 @@ export interface Field {
 }
 const safe = (key: string) =>
   /^[a-zA-Z][a-zA-Z0-9_]*$/.test(key) && !["constructor", "prototype", "__proto__"].includes(key);
+// Matches policydoc's applicability for the two controls offered by Studio.
+export function designFields(node: Node, manifest: Manifest): ("padding" | "gap")[] {
+  const contract =
+    (builtinCatalogue as unknown as Record<string, { container?: boolean }>)[node.type] ??
+    manifest.components?.[node.type] ??
+    manifest.primitives?.[node.type];
+  return [
+    ...(contract?.container || node.type === "Button" ? ["padding" as const] : []),
+    ...(["Stack", "Flex", "Grid"].includes(node.type) ? ["gap" as const] : []),
+  ];
+}
 export function fields(doc: IrDocument, node: Node, manifest: Manifest, locale = "ru"): Field[] {
   const contract =
     (builtinCatalogue as unknown as Record<string, { props?: Record<string, Type> }>)[node.type] ??
@@ -85,6 +96,15 @@ export function fieldOperations(
         target: documentId,
         payload: { key: localId, type: "text", value: { ...field.translations, [locale]: value } },
       },
+      ...(Object.hasOwn(node.props ?? {}, field.name)
+        ? [
+            {
+              type: "node.setProps" as const,
+              target: documentId,
+              payload: { nodeId: node.id, unset: [field.name] },
+            },
+          ]
+        : []),
       {
         type: "node.setBinding",
         target: documentId,

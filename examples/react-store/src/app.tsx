@@ -4,7 +4,7 @@ import { Menu, RefreshCw, X } from "lucide-react";
 import type { StoreModel } from "./model.js";
 import { CmsPage } from "@cms/react";
 import { StoreRenderContext } from "./sections.js";
-import { storeRegistry, registry } from "./registry.js";
+import { storeRegistry, registry, storeTokens } from "./registry.js";
 import { attachPreviewBridge } from "@cms/react/preview";
 import { preparePage } from "@cms/runtime";
 import { parseCatalog } from "./model.js";
@@ -68,6 +68,7 @@ export function StoreApp({ initialModel }: AppProps) {
           natives: definitionsFor(catalog),
           actions: registry.actions,
           breakpoints: registry.breakpoints,
+          tokens: storeTokens,
           scope: {
             context: { locale: current.locale ?? "ru", store: catalog },
             data: current.bridge!.data,

@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Studio } from "../src/ui.js";
+import { DeferredPanel } from "../src/deferred-panel.js";
 import { createEditor, type Editor } from "../src/editor.js";
 import { mockApi, documentId, changesetId } from "./fixture.js";
 import { StudioError } from "../src/types.js";
@@ -83,6 +84,107 @@ const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent === text,
   )!;
+it("STU-137/139: фактический документ и CS видны; сброс ввода явный и не записывает операции", async () => {
+  const { api, session } = await setup(true);
+  await vi.waitFor(() => expect(layer("n_heading")).not.toBeNull());
+  expect(document.querySelector(".editor-document")!.textContent).toContain(session.record.path);
+  expect(document.querySelector(".editor-document")!.textContent).toContain(
+    session.changeset.title,
+  );
+  expect(document.querySelector<HTMLDetailsElement>(".editor-selector")!.open).toBe(false);
+  await click(layer("n_heading"));
+  await change(input("property-text"), "Unsaved private text");
+  expect(document.querySelector(".editor-save-state")!.textContent).toContain(
+    "Есть несохранённый ввод",
+  );
+  expect(button("Перечитать черновик").disabled).toBe(true);
+  expect(button("Страницы").disabled).toBe(true);
+  await click(layer("n_root"));
+  expect(editor.store.getState().selected).toBe("n_heading");
+  expect(input("property-text").value).toBe("Unsaved private text");
+  expect(button("Сохранить level").disabled).toBe(true);
+  editor.store.getState().session!.history.canUndo = true;
+  await act(async () => {
+    await editor.changeHistory("undo");
+  });
+  expect(api.changeHistory).not.toHaveBeenCalled();
+  const reads = vi.mocked(api.open).mock.calls.length;
+  await act(async () => {
+    await editor.open(documentId, changesetId);
+    editor.viewMode("structure");
+  });
+  expect(api.open).toHaveBeenCalledTimes(reads);
+  expect(editor.store.getState().viewMode).toBe("visual");
+  await click(button("Сбросить ввод и перечитать"));
+  expect(input("property-text").value).not.toBe("Unsaved private text");
+  expect(Object.values(editor.store.getState().dirtyFields).some(Boolean)).toBe(false);
+  expect(api.apply).not.toHaveBeenCalled();
+  expect(button("Страницы").disabled).toBe(false);
+  await act(async () => {
+    editor.formDirty("structureDrag", true);
+  });
+  expect(layer("n_heading").getAttribute("aria-roledescription")).toBe("Перемещаемый элемент");
+  expect(button("Страницы").disabled).toBe(true);
+});
+it("STU-138/141: вписывание меняет масштаб, сохраняя viewport приложения и координаты overlay", async () => {
+  let measure: (() => void) | undefined;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: () => void) {}
+      observe(element: HTMLElement) {
+        if (element.classList.contains("canvas-scroll")) measure = this.callback;
+      }
+      disconnect() {}
+    },
+  );
+  await setup(true);
+  const canvas = document.querySelector<HTMLElement>(".canvas-scroll")!;
+  Object.defineProperty(canvas, "clientWidth", { value: 560 });
+  canvas.style.paddingLeft = "24px";
+  canvas.style.paddingRight = "24px";
+  await act(async () => {
+    measure!();
+  });
+  const frame = document.querySelector<HTMLElement>(".frame-wrap")!;
+  expect(frame.style.width).toBe("1024px");
+  expect(frame.style.transform).toBe("scale(0.5)");
+  expect(document.querySelector<HTMLElement>(".canvas-zoom")!.style.width).toBe("512px");
+  await click(button("Вписать · 50%"));
+  expect(frame.style.transform).toBe("scale(1)");
+  expect(editor.store.getState().width).toBe(1024);
+});
+it("STU-140: отказ панели безопасен; перезагрузка недоступна при несохранённом вводе", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  function Broken(): never {
+    throw new Error("private implementation detail");
+  }
+  document.body.innerHTML = '<div id="test-root"></div>';
+  root = createRoot(document.getElementById("test-root")!);
+  await act(async () => {
+    root.render(
+      <DeferredPanel locale="ru" canReload={false}>
+        <Broken />
+      </DeferredPanel>,
+    );
+  });
+  expect(document.querySelector('[role="alert"]')!.textContent).toContain(
+    "Не удалось загрузить панель",
+  );
+  expect(document.body.textContent).not.toContain("private implementation");
+  expect(button("Перезагрузить Studio").disabled).toBe(true);
+  await act(async () => {
+    root.render(
+      <DeferredPanel locale="en" canReload={true}>
+        <Broken />
+      </DeferredPanel>,
+    );
+  });
+  expect(document.body.textContent).toContain("Could not load the editor panel");
+  expect(button("Reload Studio").disabled).toBe(false);
+  consoleError.mockRestore();
+});
 it("STU-131/133: каталог выбирает страницу явно, не выдаёт head за публикацию и сохраняет сессию при возврате", async () => {
   const { api } = await setup();
   expect(document.querySelector(".pages-table")?.textContent).toContain("Store");
@@ -614,6 +716,7 @@ it("STU-040/044: пагинация обоих списков и страниц�
 });
 it("STU-001/003/010/021/026/033: открывает, выбирает, сохраняет текст/числа/токены, меняет локаль", async () => {
   const { api, session } = await setup();
+  session.record.body.nodes.n_root!.type = "Stack";
   expect(document.body.textContent).toContain("Откройте страницу");
   const ids = document.querySelectorAll<HTMLSelectElement>(".open-bar select");
   await change(ids[0]!, documentId);
@@ -632,14 +735,16 @@ it("STU-001/003/010/021/026/033: открывает, выбирает, сохр�
   expect(Object.values(session.record.body.localContent!)[0]!.value).toEqual({
     ru: "Текст из Studio",
   });
+  expect(input("design-padding")).toBeNull();
+  await click(layer("n_root"));
   await change(input("design-padding"), "12");
   await submit(input("design-padding").closest("form")!);
-  expect(session.record.body.nodes.n_heading!.design).toEqual({ padding: { raw: 12 } });
+  expect(session.record.body.nodes.n_root!.design).toEqual({ padding: { raw: 12 } });
   const point = document.querySelector<HTMLSelectElement>('select[aria-label="Размер экрана"]')!;
   await change(point, "sm");
   await change(input("design-padding"), "16");
   await submit(input("design-padding").closest("form")!);
-  expect(session.record.body.nodes.n_heading!.design).toEqual({
+  expect(session.record.body.nodes.n_root!.design).toEqual({
     padding: { base: { raw: 12 }, sm: { raw: 16 } },
   });
   await change(input("design-gap"), "sm");
@@ -659,9 +764,12 @@ it("STU-001/003/010/021/026/033: открывает, выбирает, сохр�
   await change(input("property-title"), "");
   await submit(input("property-title").closest("form")!);
   expect(document.querySelector("[role=alert]")!.textContent).toContain("FIELD_INVALID");
+  await change(input("property-title"), "Edited");
+  await click(layer("n_root"));
   await change(input("design-gap"), "-1");
   await submit(input("design-gap").closest("form")!);
   expect(editor.store.getState().error).toBe("FIELD_INVALID");
+  await change(input("design-gap"), "sm");
   await change(document.querySelector<HTMLSelectElement>('select[aria-label="Язык"]')!, "en");
   expect(document.documentElement.lang).toBe("en");
   expect(document.body.textContent).toContain("Properties");
