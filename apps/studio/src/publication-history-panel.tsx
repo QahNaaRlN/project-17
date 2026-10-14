@@ -55,7 +55,8 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     queryFn: ({ signal }) => api.publication!(id, preview, signal),
     enabled: !!id && stage === "idle",
     retry: false,
-    refetchInterval: 30000,
+    refetchInterval: dialog ? false : 30000,
+    refetchOnWindowFocus: !dialog,
   });
   const visible = card.isSuccess && !card.isError ? card.data : undefined;
   useEffect(() => {
