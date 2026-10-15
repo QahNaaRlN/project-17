@@ -191,6 +191,7 @@ it("STU-180/185: content-only shell deep link opens card without the page catalo
   expect(api.pages).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain("Selected work");
   expect(document.querySelector("#work-card-title")?.textContent).toContain("Test draft");
+  expect(document.activeElement?.id).toBe("work-card-title");
   expect(document.body.textContent).toContain("All work objects");
 });
 it("STU-181/182: content and workflow reload WorkContext and keep exact uncertain attempts", async () => {
@@ -228,6 +229,21 @@ it("STU-181/182: content and workflow reload WorkContext and keep exact uncertai
   const calls = vi.mocked(api.workflow).mock.calls;
   expect(calls.at(-1)?.slice(0, 4)).toEqual(calls.at(-2)?.slice(0, 4));
   expect(editor!.store.getState()).toMatchObject({ status: "ready", session: null, publication });
+});
+it("STU-180/183: another work never inherits the previously selected content form", async () => {
+  window.history.replaceState({}, "", "/editor#work=" + changesetId);
+  const { api } = await setup("ru", false, true);
+  await click("Открыть контент");
+  expect(document.querySelector(".content-panel")).not.toBeNull();
+  const next = context();
+  next.changeset.id = documentId;
+  next.review.changeset = next.changeset;
+  next.work!.item.id = documentId;
+  vi.mocked(api.openWork!).mockResolvedValue(next);
+  await act(async () => editor!.openWork(documentId));
+  await flush();
+  expect(editor!.store.getState().session?.changeset.id).toBe(documentId);
+  expect(document.querySelector(".content-panel")).toBeNull();
 });
 it("STU-184: loss of access clears card; read outage prevents decisions", async () => {
   const { api } = await setup();

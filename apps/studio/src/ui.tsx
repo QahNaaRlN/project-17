@@ -344,6 +344,10 @@ export function Studio({
     if (openedWork) document.getElementById("work-card-title")?.focus();
   }, [openedWork]);
   useEffect(() => {
+    if (!openedWork && screen === "work" && state.session?.work && state.status === "ready")
+      document.getElementById("work-card-title")?.focus();
+  }, [state.session?.changeset.id]);
+  useEffect(() => {
     if (!diagnosticNode || screen !== "editor") return;
     [...document.querySelectorAll<HTMLElement>('[role="treeitem"]')]
       .find((item) => item.title === diagnosticNode)
@@ -448,6 +452,10 @@ export function Studio({
     return () => window.removeEventListener("keydown", key);
   }, [editor]);
   const work = state.session;
+  const objectNames: Record<string, string> =
+    state.locale === "ru"
+      ? { page: "Страница", component: "Компонент", entity: "Сущность", asset: "Ассет" }
+      : { page: "Page", component: "Component", entity: "Entity", asset: "Asset" };
   const session = work?.record ? { ...work, record: work.record } : null,
     doc = state.document;
   const tree = doc ? layers(doc) : [],
@@ -982,7 +990,7 @@ export function Studio({
               <ul aria-label={state.locale === "ru" ? "Состав работы" : "Work objects"}>
                 {work.work.objects.map((o) => (
                   <li key={o.id}>
-                    <strong>{o.title || o.docKind || o.kind}</strong> ·{" "}
+                    <strong>{o.title || objectNames[o.docKind ?? o.kind] || o.kind}</strong> ·{" "}
                     <code>{o.workingPath ?? o.basePath ?? o.id.slice(-8)}</code>
                     {o.deleted && (state.locale === "ru" ? " · Удалено" : " · Deleted")}
                     {o.kind === "document" &&
@@ -1033,16 +1041,20 @@ export function Studio({
                 )}
               </ul>
             )}
-            {screen === "work" && work && !work.record && showContent && (
-              <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
-                <ContentPanel
-                  key={work.changeset.id + ":" + (contentSelection?.id ?? "")}
-                  api={api}
-                  editor={editor}
-                  {...(contentSelection ? { initialSelection: contentSelection } : {})}
-                />
-              </DeferredPanel>
-            )}
+            {screen === "work" &&
+              work &&
+              !work.record &&
+              showContent &&
+              contentSelection?.changesetId === work.changeset.id && (
+                <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
+                  <ContentPanel
+                    key={work.changeset.id + ":" + (contentSelection?.id ?? "")}
+                    api={api}
+                    editor={editor}
+                    {...(contentSelection ? { initialSelection: contentSelection } : {})}
+                  />
+                </DeferredPanel>
+              )}
             <PublishingPanel
               api={api}
               onContent={(id, kind) => {

@@ -201,7 +201,7 @@ try {
     },
   ]);
   await open(alice, component);
-  await expect(alice.locator(".work-review")).toContainText("component");
+  await expect(alice.locator(".work-review")).toContainText("Компонент");
   expect(
     await alice
       .locator(".work-review")
@@ -265,6 +265,15 @@ try {
     ),
   ).toBe(true);
   await bob.screenshot({ path: resolve(output, "work-queue-mobile.png"), fullPage: true });
+  await alice.setViewportSize({ width: 375, height: 900 });
+  await alice.locator(".work-card-heading").scrollIntoViewIfNeeded();
+  expect(
+    await alice.evaluate(
+      () => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth,
+    ),
+  ).toBe(true);
+  await alice.screenshot({ path: resolve(output, "work-queue-mobile-card.png") });
+  await alice.setViewportSize({ width: 1440, height: 1100 });
   await alice.screenshot({ path: resolve(output, "work-queue-desktop.png"), fullPage: true });
   const contentRole = await admin("create-role", {
     name: "content-only-" + stamp,
@@ -308,6 +317,8 @@ try {
   report.searchBeyondFirstPage = true;
   report.componentWithoutPage = true;
   report.deletionOnly = true;
+  report.deletionWorkId = deleted.cs.id;
+  report.componentWorkId = component.cs.id;
   report.mobile375 = true;
   await writeFile(resolve(output, "work-queue-acceptance.json"), JSON.stringify(report, null, 2));
   const verified = spawnSync(
