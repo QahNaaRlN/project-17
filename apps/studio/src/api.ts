@@ -10,6 +10,7 @@ import {
 } from "./publication-history.js";
 import type { DiffIndex, DiffPage } from "./types.js";
 import { validateQueue, validateQueueCard } from "./work-queue.js";
+import { checkCreatedWork, canRetryWork, workTitle, clearWorkAttempt } from "./work-creation.js";
 import type { WorkQueueItem, WorkQueueCard, WorkContext } from "./types.js";
 import { validateDocument } from "@cms/ir";
 import { jsonValue } from "@cms/runtime";
@@ -125,6 +126,40 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async createWork(attempt) {
+      let config: Config;
+      try {
+        config = await api.config();
+        if (config.authMode === "oidc") {
+          const account = await api.account();
+          if (!account.authenticated || account.user?.id !== attempt.actor)
+            throw new StudioError("SESSION_CHANGED", true);
+        }
+      } catch (cause) {
+        // A preflight failure cannot resolve a previously unconfirmed commit.
+        throw new StudioError(
+          cause instanceof StudioError ? cause.code : "SESSION_UNAVAILABLE",
+          true,
+        );
+      }
+      if (config.project !== attempt.project || config.environment !== attempt.environment)
+        throw new StudioError("SESSION_CHANGED", true);
+      if (
+        !canRetryWork(attempt) ||
+        attempt.body.reason !== "Studio: create content work" ||
+        workTitle(attempt.body.payload.title) !== attempt.body.payload.title ||
+        attempt.body.payload.targets.length !== 1 ||
+        attempt.body.payload.targets[0] !== config.environment
+      )
+        throw new StudioError("WORK_ATTEMPT_INVALID", true);
+      const response = await request<{ result: Changeset }>(
+        "/api/v1/commands/create-changeset",
+        undefined,
+        attempt.body,
+        attempt.key,
+      );
+      return checkCreatedWork(response?.result, config.environment);
+    },
     async workQueue(filters, cursor, signal) {
       const config = await api.config(signal);
       const query = new URLSearchParams({
@@ -511,6 +546,11 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
       await api.account(signal);
       await request("/auth/logout", signal, {}, crypto.randomUUID());
       csrf = undefined;
+      try {
+        clearWorkAttempt();
+      } catch {
+        /* Logout must still revoke the server session. */
+      }
     },
     async workItems(cursor, signal) {
       const config = await api.config(signal);
