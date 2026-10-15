@@ -206,7 +206,7 @@ try {
   const row = alice.locator(".work-catalogue tbody tr").filter({ hasText: cs.title });
   await row.getByRole("button", { name: "Открыть работу", exact: true }).click();
   await expect(alice.locator(".work-card-heading")).toContainText(cs.title);
-  await alice.getByRole("button", { name: "Открыть редактор", exact: true }).click();
+  await alice.getByRole("button", { name: "Открыть страницу /store", exact: true }).click();
   await alice.locator('[role="treeitem"][title="n_title"]').click();
   await alice.getByLabel("text", { exact: true }).fill("Проверено двумя пользователями");
   await alice.getByRole("button", { name: "Сохранить text", exact: true }).click();

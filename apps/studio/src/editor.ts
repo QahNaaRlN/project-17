@@ -7,6 +7,7 @@ import {
   type Operation,
   type Rect,
   type Session,
+  type WorkContext,
   type WorkflowAction,
   type Publication,
   type ReviewDiagnostic,
@@ -23,7 +24,7 @@ export interface EditorState {
   canvasPick: number;
   historyRevision: number;
   historyRetry: boolean;
-  session: Session | null;
+  session: WorkContext | null;
   document: IrDocument | null;
   selected: string | null;
   instance: string | null;
@@ -92,7 +93,7 @@ export function createEditor(
   }
   function invalidate() {
     const session = store.getState().session;
-    if (session) send("invalidate", { seq: ++seq, objectIds: [session.record.id] });
+    if (session?.record) send("invalidate", { seq: ++seq, objectIds: [session.record.id] });
   }
   function watchHandshake() {
     if (handshakeTimer !== undefined) clearTimer(handshakeTimer);
@@ -119,7 +120,8 @@ export function createEditor(
       if (timer !== undefined) clearTimer(timer);
       timer = setTimer(
         () => {
-          void preview(store.getState().session!, stamp);
+          const current = store.getState().session;
+          if (current?.record) void preview({ ...current, record: current.record }, stamp);
         },
         Math.max(1000, remaining - 60_000),
       );
@@ -130,9 +132,9 @@ export function createEditor(
         });
     }
   }
-  let pendingHistory: { session: Session; action: "undo" | "redo"; key: string } | null = null;
+  let pendingHistory: { session: WorkContext; action: "undo" | "redo"; key: string } | null = null;
   let pendingContent: {
-    session: Session;
+    session: WorkContext;
     operations: ContentOperation[];
     key: string;
     result?: string[];
@@ -144,7 +146,7 @@ export function createEditor(
       ([key, dirty]) => dirty && (key.startsWith("property-") || key.startsWith("design-")),
     );
   let pendingWorkflow: {
-    session: Session;
+    session: WorkContext;
     action: WorkflowAction;
     comment: string;
     key: string;
@@ -152,6 +154,60 @@ export function createEditor(
   let remoteReading = false;
   function historyRead() {
     return { historyRevision: store.getState().historyRevision + 1 };
+  }
+  async function readContext(session: WorkContext): Promise<WorkContext> {
+    return session.work && api.openWork
+      ? api.openWork(session.changeset.id, lifecycle.signal)
+      : api.open(session.record!.id, session.changeset.id, lifecycle.signal);
+  }
+  async function openWork(id: string) {
+    const state = store.getState();
+    if (
+      !api.openWork ||
+      ["saving", "loading", "uncertain"].includes(state.status) ||
+      Object.values(state.dirtyFields).some(Boolean)
+    )
+      return;
+    lifecycle.abort();
+    lifecycle = new AbortController();
+    const stamp = ++epoch;
+    if (timer !== undefined) clearTimer(timer);
+    if (handshakeTimer !== undefined) clearTimer(handshakeTimer);
+    pendingHistory = null;
+    pendingWorkflow = null;
+    pendingContent = null;
+    initialized = false;
+    store.setState({
+      status: "loading",
+      session: null,
+      document: null,
+      selected: null,
+      previewSrc: "",
+      connected: false,
+      error: null,
+      publication: null,
+      dirtyFields: {},
+      workflowRetry: false,
+      contentRetry: false,
+      historyRetry: false,
+      workflowDiagnostics: [],
+      remotePending: false,
+      rects: {},
+      instance: null,
+      previewError: null,
+      canvasPick: 0,
+    });
+    try {
+      const session = await api.openWork(id, lifecycle.signal);
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      store.setState({ session, status: "ready", ...historyRead() });
+    } catch (error) {
+      if (stamp === epoch && !lifecycle.signal.aborted)
+        store.setState({
+          status: "error",
+          error: error instanceof StudioError ? error.code : "OPEN_FAILED",
+        });
+    }
   }
   async function open(documentId: string, changesetId: string) {
     if (fieldDirty()) {
@@ -218,7 +274,7 @@ export function createEditor(
     if (!remote) store.setState({ status: "loading", error: null });
     const stamp = epoch;
     try {
-      const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
+      const current = await readContext(session);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       // Input can become dirty while the asynchronous read is in flight.
       if (
@@ -234,16 +290,32 @@ export function createEditor(
       store.setState({
         ...historyRead(),
         session: current,
-        document: structuredClone(current.record.body),
+        document: current.record ? structuredClone(current.record.body) : null,
         status: pendingHistory || pendingWorkflow || pendingContent ? "uncertain" : "ready",
         selected:
-          selected && Object.hasOwn(current.record.body.nodes, selected)
+          selected && !!current.record && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
-            : current.record.body.root,
+            : (current.record?.body.root ?? null),
         instance: null,
       });
       invalidate();
     } catch (error) {
+      if (
+        session.work &&
+        error instanceof StudioError &&
+        ["UNAUTHENTICATED", "FORBIDDEN", "NOT_FOUND", "WORK_QUEUE_ITEM_NOT_FOUND"].includes(
+          error.code,
+        )
+      ) {
+        store.setState({
+          session: null,
+          document: null,
+          status: "idle",
+          error: error.code,
+          dirtyFields: {},
+        });
+        return;
+      }
       if (stamp === epoch && !lifecycle.signal.aborted)
         store.setState({
           status: "uncertain",
@@ -283,6 +355,7 @@ export function createEditor(
     if (
       !session ||
       !state.document ||
+      !session.record ||
       !session.review.canEdit ||
       state.status !== "ready" ||
       session.changeset.state !== "open"
@@ -334,17 +407,22 @@ export function createEditor(
           })),
         });
       }
-      await api.apply(session, operations, crypto.randomUUID(), lifecycle.signal);
-      const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
+      await api.apply(
+        { ...session, record: session.record },
+        operations,
+        crypto.randomUUID(),
+        lifecycle.signal,
+      );
+      const current = await readContext(session);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       store.setState({
         ...historyRead(),
         session: current,
-        document: structuredClone(current.record.body),
+        document: current.record ? structuredClone(current.record.body) : null,
         status: "ready",
-        selected: current.record.body.nodes[selection ?? state.selected ?? ""]
+        selected: current.record?.body.nodes[selection ?? state.selected ?? ""]
           ? (selection ?? state.selected)
-          : current.record.body.root,
+          : (current.record?.body.root ?? null),
         instance: structural ? null : state.instance,
       });
       invalidate();
@@ -360,17 +438,17 @@ export function createEditor(
         instance: structural ? null : state.instance,
       });
       try {
-        const current = await api.open(session.record.id, session.changeset.id, lifecycle.signal);
+        const current = await readContext(session);
         if (stamp !== epoch || lifecycle.signal.aborted) return;
         store.setState({
           ...historyRead(),
           session: current,
-          document: structuredClone(current.record.body),
+          document: current.record ? structuredClone(current.record.body) : null,
           status: "ready",
           error: code,
-          selected: current.record.body.nodes[state.selected ?? ""]
+          selected: current.record?.body.nodes[state.selected ?? ""]
             ? state.selected
-            : current.record.body.root,
+            : (current.record?.body.root ?? null),
           instance: structural ? null : state.instance,
         });
       } catch {
@@ -457,24 +535,24 @@ export function createEditor(
         workflowDiagnostics: cause instanceof StudioError ? cause.diagnostics : [],
       });
     }
+    if (store.getState().publication && attempt.session.work && !pendingWorkflow) {
+      store.setState({ status: "ready", session: null, document: null });
+      return;
+    }
     try {
-      const current = await api.open(
-        attempt.session.record.id,
-        attempt.session.changeset.id,
-        lifecycle.signal,
-      );
+      const current = await readContext(attempt.session);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       const selected = store.getState().selected;
       store.setState({
         ...historyRead(),
         session: current,
-        document: structuredClone(current.record.body),
+        document: current.record ? structuredClone(current.record.body) : null,
         status: pendingWorkflow || pendingContent ? "uncertain" : "ready",
         workflowRetry: !!pendingWorkflow,
         selected:
-          selected && Object.hasOwn(current.record.body.nodes, selected)
+          selected && !!current.record && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
-            : current.record.body.root,
+            : (current.record?.body.root ?? null),
         instance: null,
       });
     } catch {
@@ -537,17 +615,13 @@ export function createEditor(
       store.setState({ error: cause instanceof StudioError ? cause.code : "SAVE_UNCERTAIN" });
     }
     try {
-      const current = await api.open(
-        attempt.session.record.id,
-        attempt.session.changeset.id,
-        lifecycle.signal,
-      );
+      const current = await readContext(attempt.session);
       if (stamp !== epoch || lifecycle.signal.aborted) return null;
       if (result) pendingContent = null;
       store.setState({
         ...historyRead(),
         session: current,
-        document: structuredClone(current.record.body),
+        document: current.record ? structuredClone(current.record.body) : null,
         status: uncertain ? "uncertain" : "ready",
         contentRetry: uncertain,
       });
@@ -579,23 +653,19 @@ export function createEditor(
       store.setState({ error: cause instanceof StudioError ? cause.code : "HISTORY_UNCERTAIN" });
     }
     try {
-      const current = await api.open(
-        attempt.session.record.id,
-        attempt.session.changeset.id,
-        lifecycle.signal,
-      );
+      const current = await readContext(attempt.session);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       const selected = store.getState().selected;
       store.setState({
         ...historyRead(),
         session: current,
-        document: structuredClone(current.record.body),
+        document: current.record ? structuredClone(current.record.body) : null,
         status: uncertain ? "uncertain" : "ready",
         historyRetry: uncertain,
         selected:
-          selected && Object.hasOwn(current.record.body.nodes, selected)
+          selected && !!current.record && Object.hasOwn(current.record.body.nodes, selected)
             ? selected
-            : current.record.body.root,
+            : (current.record?.body.root ?? null),
         instance: null,
       });
     } catch {
@@ -648,7 +718,7 @@ export function createEditor(
         return;
       const p = data.payload;
       if (data.type === "ready") {
-        if (p.documentId !== session.record.id || p.protocolVersion !== 1) {
+        if (p.documentId !== session.record?.id || p.protocolVersion !== 1) {
           store.setState({ previewError: "PREVIEW_DOCUMENT_MISMATCH", connected: false });
           return;
         }
@@ -718,10 +788,32 @@ export function createEditor(
     }
   }
   return {
+    accessLost() {
+      lifecycle.abort();
+      ++epoch;
+      pendingContent = null;
+      pendingWorkflow = null;
+      pendingHistory = null;
+      store.setState({
+        session: null,
+        document: null,
+        selected: null,
+        previewSrc: "",
+        connected: false,
+        publication: null,
+        dirtyFields: {},
+        status: "idle",
+        error: "FORBIDDEN",
+        workflowRetry: false,
+        contentRetry: false,
+        historyRetry: false,
+      });
+    },
     remoteChanged() {
       store.setState({ remotePending: true });
     },
     refreshRemote,
+    openWork,
     formDirty(id: string, dirty: boolean) {
       const current = store.getState().dirtyFields;
       if (!!current[id] !== dirty) store.setState({ dirtyFields: { ...current, [id]: dirty } });
@@ -782,7 +874,7 @@ export function createEditor(
     },
     retryPreview() {
       const session = store.getState().session;
-      if (session) return preview(session, epoch);
+      if (session?.record) return preview({ ...session, record: session.record }, epoch);
       return Promise.resolve();
     },
     error(code: string) {

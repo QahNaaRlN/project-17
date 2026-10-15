@@ -43,7 +43,7 @@ export function ReviewDiff({
   });
   const object =
     index.data?.objects.find((o) => o.id === selected) ??
-    index.data?.objects.find((o) => o.id === session.record.id) ??
+    index.data?.objects.find((o) => o.id === session.record?.id) ??
     index.data?.objects[0];
   const page = useInfiniteQuery({
     queryKey: [
@@ -155,10 +155,10 @@ export function ReviewDiff({
       return;
     }
     if (object.docKind !== "page") return;
-    if (object.id !== session.record.id) {
+    if (object.id !== session.record?.id) {
       await editor.open(object.id, session.changeset.id);
       const s = editor.store.getState();
-      if (s.status !== "ready" || s.session?.record.id !== object.id) return;
+      if (s.status !== "ready" || s.session?.record?.id !== object.id) return;
       window.location.hash = new URLSearchParams({
         document: object.id,
         changeset: session.changeset.id,
@@ -303,7 +303,7 @@ export function ReviewDiff({
                               change.kind !== "remove" &&
                               !object.workingDeleted &&
                               object.summaries[baseline].effect !== "deleted" &&
-                              (object.id !== session.record.id ||
+                              (object.id !== session.record?.id ||
                                 !!state.document?.nodes[change.nodeId]) && (
                                 <Button
                                   disabled={locked}

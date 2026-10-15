@@ -41,6 +41,10 @@ func studioContentRoutes(router chi.Router, d Deps) {
 				return
 			}
 			q := store.New(d.Pool)
+			if err := authorizeWorkRead(r.Context(), q, actor, cs); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
 			change, err := q.GetChangeset(r.Context(), store.GetChangesetParams{ProjectID: actor.ProjectID, ID: cs})
 			if errors.Is(err, pgx.ErrNoRows) {
 				respond(w, r, d, nil, commandbus.NewError(404, "NOT_FOUND", "Черновик не найден", ""))

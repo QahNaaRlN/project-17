@@ -24,6 +24,10 @@ func reviewHandler(d Deps) http.HandlerFunc {
 			return
 		}
 		defer tx.Rollback(r.Context()) //nolint:errcheck
+		if err := authorizeWorkRead(r.Context(), store.New(tx), actorFrom(r.Context()), id); err != nil {
+			writeError(w, r, d.Log, err)
+			return
+		}
 		result, err := workflow.GetStudioReview(r.Context(), store.New(tx), actorFrom(r.Context()), id)
 		if err == nil {
 			err = tx.Commit(r.Context())

@@ -94,7 +94,7 @@ func NewRouter(d Deps) http.Handler {
 		})
 		r.Get("/manifest", func(w http.ResponseWriter, r *http.Request) {
 			actor := actorFrom(r.Context())
-			if err := commandbus.Require(actor, auth.DesignRead); err != nil {
+			if err := commandbus.Require(actor, auth.DesignRead); err != nil && !actor.Rights.Has(auth.ContentRead) {
 				writeError(w, r, d.Log, err)
 				return
 			}
@@ -135,6 +135,9 @@ func NewRouter(d Deps) http.Handler {
 				return
 			}
 			cs, err := changes.GetChangeset(r.Context(), store.New(d.Pool), actorFrom(r.Context()).ProjectID, id)
+			if err == nil && cs.Kind == "standard" {
+				err = authorizeWorkRead(r.Context(), store.New(d.Pool), actorFrom(r.Context()), id)
+			}
 			respond(w, r, d, cs, err)
 		})
 		r.Get("/changesets/{id}/operations", func(w http.ResponseWriter, r *http.Request) {

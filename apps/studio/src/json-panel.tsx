@@ -14,7 +14,7 @@ export default function JsonPanel({ editor }: { editor: Editor }) {
     doc = state.document!;
   const [scope, setScope] = useState<"node" | "document">("node");
   const selected = scope === "node" ? state.selected! : undefined;
-  const context = session.changeset.id + ":" + session.record.id + ":" + (selected ?? "document");
+  const context = session.changeset.id + ":" + session.record!.id + ":" + (selected ?? "document");
   const capture = () => ({
     base: structuredClone(doc),
     seq: session.changeset.seq,
@@ -36,8 +36,8 @@ export default function JsonPanel({ editor }: { editor: Editor }) {
     otherDirty ||
     !!(selected && layers(doc).find((n) => n.id === selected)?.locked);
   const analysis = useMemo(
-    () => analyzeJson(draft.base, draft.text, session.record.id, draft.nodeId),
-    [draft.base, draft.text, session.record.id, draft.nodeId],
+    () => analyzeJson(draft.base, draft.text, session.record!.id, draft.nodeId),
+    [draft.base, draft.text, session.record!.id, draft.nodeId],
   );
   useEffect(() => {
     editor.formDirty("json", dirty);
@@ -65,7 +65,7 @@ export default function JsonPanel({ editor }: { editor: Editor }) {
         base: structuredClone(fresh.document),
         seq: fresh.session.changeset.seq,
         context:
-          fresh.session.changeset.id + ":" + fresh.session.record.id + ":" + (id ?? "document"),
+          fresh.session.changeset.id + ":" + fresh.session.record!.id + ":" + (id ?? "document"),
         nodeId: id,
         text: pretty(id ? fresh.document.nodes[id] : fresh.document),
       });

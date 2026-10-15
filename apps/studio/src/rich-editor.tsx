@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { jsonValue } from "@cms/runtime";
 import type { Type } from "@cms/manifest";
 import type { RichTextNode, RichTextValue } from "@cms/component-registry";
-import type { Api, Session } from "./types.js";
+import type { Api, WorkContext } from "./types.js";
 import { JsonValue, ReferencePicker } from "./content-fields.js";
 const blocks = [
   "paragraph",
@@ -59,7 +59,7 @@ export function RichEditor({
   onChange: (v: unknown) => void;
   onInvalid: (bad: boolean) => void;
   api: Api;
-  session: Session;
+  session: WorkContext;
   ru: boolean;
 }) {
   const [advanced, setAdvanced] = useState(false),

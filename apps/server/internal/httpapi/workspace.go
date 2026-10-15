@@ -18,6 +18,7 @@ import (
 
 // workspaceRoutes serves the current actor's workspace through the public Query API.
 func workspaceRoutes(r chi.Router, d Deps) {
+	workQueueRoutes(r, d)
 	studioContentRoutes(r, d)
 	for _, route := range []string{"/pages", "/working-drafts", "/work-items"} {
 		r.Get(route, func(w http.ResponseWriter, r *http.Request) {

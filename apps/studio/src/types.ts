@@ -21,15 +21,54 @@ export interface DocumentRecord {
   path: string | null;
   body: IrDocument;
 }
-export interface Session {
+export interface WorkContext {
+  work?: WorkQueueCard;
   diffSnapshot?: string;
   review: Review;
   history: History;
   config: Config;
   changeset: Changeset;
-  record: DocumentRecord;
+  record?: DocumentRecord;
   manifest: Manifest;
   manifestHash: string;
+}
+export interface Session extends WorkContext {
+  record: DocumentRecord;
+}
+export interface WorkQueueFilters {
+  q: string;
+  state: string;
+  ownership: string;
+  kind: string;
+}
+export interface WorkQueueItem {
+  id: string;
+  title: string;
+  ownerId: string;
+  ownerName: string;
+  own: boolean;
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+  seq: number;
+  objectCount: number;
+  deletedCount: number;
+  countsByKind: Record<"page" | "component" | "entity" | "asset", number>;
+}
+export interface WorkQueueObject {
+  id: string;
+  kind: string;
+  docKind: string | null;
+  title: string;
+  baseVersionId: string | null;
+  workingVersionId: string;
+  deleted: boolean;
+  basePath: string | null;
+  workingPath: string | null;
+}
+export interface WorkQueueCard {
+  item: WorkQueueItem;
+  objects: WorkQueueObject[];
 }
 export interface Operation {
   type:
@@ -48,6 +87,12 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  workQueue?(
+    filters: WorkQueueFilters,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<List<WorkQueueItem>>;
+  openWork?(id: string, signal: AbortSignal): Promise<WorkContext>;
   publications?(
     cursor?: string,
     signal?: AbortSignal,
@@ -67,9 +112,9 @@ export interface Api {
   rollback?(
     attempt: import("./publication-history.js").RollbackAttempt,
   ): Promise<import("./publication-history.js").PublicationEntry>;
-  diffIndex?(session: Session, signal?: AbortSignal): Promise<DiffIndex>;
+  diffIndex?(session: WorkContext, signal?: AbortSignal): Promise<DiffIndex>;
   diffPage?(
-    session: Session,
+    session: WorkContext,
     index: DiffIndex,
     objectId: string,
     baseline: DiffBaseline,
@@ -86,15 +131,15 @@ export interface Api {
   events?(session: Session, after: string | undefined, signal: AbortSignal): Promise<Response>;
   presence?(session: Session, leaseId: string, leave: boolean, signal: AbortSignal): Promise<void>;
   contentCatalog(
-    session: Session,
+    session: WorkContext,
     kind: ContentRecord["kind"],
     schema?: string,
     cursor?: string,
     signal?: AbortSignal,
   ): Promise<ContentCatalog>;
-  content(session: Session, id: string, signal?: AbortSignal): Promise<ContentRecord>;
+  content(session: WorkContext, id: string, signal?: AbortSignal): Promise<ContentRecord>;
   applyContent(
-    session: Session,
+    session: WorkContext,
     operations: ContentOperation[],
     key: string,
     signal: AbortSignal,
@@ -110,15 +155,15 @@ export interface Api {
   logout(signal?: AbortSignal): Promise<void>;
   workItems(cursor?: string, signal?: AbortSignal): Promise<List<WorkItem>>;
   workflow(
-    session: Session,
+    session: WorkContext,
     action: WorkflowAction,
     comment: string,
     key: string,
     signal: AbortSignal,
   ): Promise<Publication | null>;
-  history(session: Session, beforeSeq?: number, signal?: AbortSignal): Promise<History>;
+  history(session: WorkContext, beforeSeq?: number, signal?: AbortSignal): Promise<History>;
   changeHistory(
-    session: Session,
+    session: WorkContext,
     action: "undo" | "redo",
     key: string,
     signal: AbortSignal,

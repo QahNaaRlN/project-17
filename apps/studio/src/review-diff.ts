@@ -1,6 +1,6 @@
 import {
   StudioError,
-  type Session,
+  type WorkContext,
   type DiffIndex,
   type DiffPage,
   type DiffBaseline,
@@ -10,7 +10,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const snapshotFormat = /^sha256:[a-f0-9]{64}$/;
 const nullableID = (id: unknown) => id === null || (typeof id === "string" && uuid.test(id));
 const count = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0;
-export function validateDiffIndex(v: DiffIndex, session: Session): DiffIndex {
+export function validateDiffIndex(v: DiffIndex, session: WorkContext): DiffIndex {
   if (
     !v ||
     v.changesetId !== session.changeset.id ||

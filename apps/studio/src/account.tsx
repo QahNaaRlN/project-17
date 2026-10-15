@@ -74,6 +74,8 @@ function WorkspaceSession({
       <Studio
         api={api}
         editor={editor}
+        actorId={account?.user?.id ?? "service"}
+        {...(account ? { rights: account.rights } : {})}
         accountControls={account ? <Person {...{ api, account, editor, reset }} /> : null}
       />
     </QueryClientProvider>
@@ -120,8 +122,7 @@ export function StudioApp({
           setStatus(
             user.authenticated
               ? user.hasAccess &&
-                user.rights.includes("design.read") &&
-                user.rights.includes("content.read")
+                (user.rights.includes("design.read") || user.rights.includes("content.read"))
                 ? "ready"
                 : "noAccess"
               : "anonymous",

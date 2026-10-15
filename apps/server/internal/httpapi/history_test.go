@@ -55,7 +55,8 @@ func TestStudioHistoryRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, body = e.do(t, "GET", path, "", e.authed(nil))
-	expectProblem(t, resp, body, 403, "FORBIDDEN")
+	// STU-179: the direct reader hides the entire CS when any kind is inaccessible.
+	expectProblem(t, resp, body, 404, "NOT_FOUND")
 }
 func TestStudioHistoryStorageFailure(t *testing.T) {
 	e := setup(t)

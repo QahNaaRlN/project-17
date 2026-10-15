@@ -137,7 +137,7 @@ type History struct {
 
 // GetHistory reads only metadata; the caller supplies a consistent read-only snapshot.
 func GetHistory(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID, before int32) (History, error) {
-	if err := commandbus.Require(actor, auth.DesignRead); err != nil {
+	if err := commandbus.Require(actor, auth.DesignRead); err != nil && !actor.Rights.Has(auth.ContentRead) {
 		return History{}, err
 	}
 	cs, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: id, ProjectID: actor.ProjectID})
@@ -148,6 +148,22 @@ func GetHistory(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid
 		return History{}, err
 	}
 	result := History{Seq: cs.Seq, Items: []HistoryAction{}}
+	objects, err := q.WorkQueueObjects(ctx, store.WorkQueueObjectsParams{ProjectID: actor.ProjectID, ChangesetID: id})
+	if err != nil {
+		return History{}, err
+	}
+	if len(objects) > 1000 {
+		return History{}, commandbus.NewError(413, "WORK_QUEUE_LIMIT_EXCEEDED", "Слишком много объектов", "")
+	}
+	for _, object := range objects {
+		right := auth.ContentRead
+		if object.Kind == "document" {
+			right = auth.DesignRead
+		}
+		if err := commandbus.Require(actor, right); err != nil {
+			return History{}, err
+		}
+	}
 	heads, err := q.HistoryHeads(ctx, store.HistoryHeadsParams{ChangesetID: id, BeforeSeq: before})
 	if err != nil {
 		return History{}, err

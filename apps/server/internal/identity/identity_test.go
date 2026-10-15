@@ -348,9 +348,9 @@ func TestTwoOIDCHumansReviewAndPublish(t *testing.T) {
 	if status != 200 {
 		t.Fatal(data)
 	}
-	_, data = f.request(t, "GET", "/api/v1/changesets/"+cs+"/review", reviewer, "", "")
-	if data["canEdit"] != false {
-		t.Fatal("foreign reopened work became editable", data)
+	r, data = f.request(t, "GET", "/api/v1/changesets/"+cs+"/review", reviewer, "", "")
+	if r.StatusCode != 404 || data["code"] != "NOT_FOUND" {
+		t.Fatal("foreign reopened work must be hidden", data)
 	}
 	_, data = f.request(t, "GET", "/api/v1/work-items?environment=staging", reviewer, "", "")
 	if len(data["items"].([]any)) != 0 {

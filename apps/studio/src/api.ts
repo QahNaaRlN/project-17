@@ -9,6 +9,8 @@ import {
   type PublicationEntry,
 } from "./publication-history.js";
 import type { DiffIndex, DiffPage } from "./types.js";
+import { validateQueue, validateQueueCard } from "./work-queue.js";
+import type { WorkQueueItem, WorkQueueCard, WorkContext } from "./types.js";
 import { validateDocument } from "@cms/ir";
 import { jsonValue } from "@cms/runtime";
 import { canonicalJson } from "@cms/manifest";
@@ -123,6 +125,56 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async workQueue(filters, cursor, signal) {
+      const config = await api.config(signal);
+      const query = new URLSearchParams({
+        environment: config.environment,
+        ...filters,
+        limit: "50",
+        ...(cursor ? { cursor } : {}),
+      });
+      return validateQueue(
+        await request<List<WorkQueueItem>>("/api/v1/work-queue?" + query, signal),
+      );
+    },
+    async openWork(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      const cardPath =
+        "/api/v1/work-queue/" + id + "?environment=" + encodeURIComponent(config.environment);
+      const work = validateQueueCard(await request<WorkQueueCard>(cardPath, signal), id);
+      const [changeset, active, history, rawReview] = await Promise.all([
+        request<Changeset>("/api/v1/changesets/" + id, signal),
+        request<{ manifest: WorkContext["manifest"]; manifestHash: string }>(
+          "/api/v1/manifest?environment=" + encodeURIComponent(config.environment),
+          signal,
+        ),
+        readHistory(id, work.item.seq, undefined, signal),
+        request<Review>("/api/v1/changesets/" + id + "/review", signal),
+      ]);
+      const review = validateReview(rawReview, id);
+      const after = validateQueueCard(await request<WorkQueueCard>(cardPath, signal), id);
+      if (
+        changeset?.id !== id ||
+        changeset.kind !== "standard" ||
+        !changeset.targets?.includes(config.environment) ||
+        changeset.seq !== work.item.seq ||
+        review.changeset.seq !== changeset.seq ||
+        history.seq !== changeset.seq ||
+        review.changeset.state !== work.item.state ||
+        after.item.seq !== work.item.seq ||
+        after.item.state !== work.item.state
+      )
+        throw new StudioError("CHANGESET_SEQ_CONFLICT");
+      if (
+        !/^sha256:[a-f0-9]{64}$/.test(active?.manifestHash) ||
+        active.manifest?.manifestVersion !== "1.0" ||
+        !active.manifest.tokens ||
+        !active.manifest.breakpoints
+      )
+        throw new StudioError("SESSION_INVALID");
+      return { config, changeset, work, history, review, ...active };
+    },
     async publications(cursor, signal) {
       const config = await api.config(signal);
       const query = new URLSearchParams({
