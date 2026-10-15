@@ -237,7 +237,10 @@ it("STU-180/183: another work never inherits the previously selected content for
   window.history.replaceState({}, "", "/editor#work=" + changesetId);
   const { api } = await setup("ru", false, true);
   await click("Открыть контент");
-  expect(document.querySelector(".content-panel")).not.toBeNull();
+  await vi.waitFor(async () => {
+    await flush();
+    expect(document.querySelector(".content-panel")).not.toBeNull();
+  });
   const next = context();
   next.changeset.id = documentId;
   next.review.changeset = next.changeset;

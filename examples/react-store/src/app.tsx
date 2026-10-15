@@ -105,6 +105,7 @@ export function StoreApp({ initialModel }: AppProps) {
         else {
           bridge = value;
           previewBridge.current = value;
+          value.controller.notify("diagnostics", { items: latest.current.plan?.diagnostics ?? [] });
         }
       })
       .catch(() => {

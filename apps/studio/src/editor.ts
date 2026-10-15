@@ -830,7 +830,14 @@ export function createEditor(
           });
         } else {
           if (handshakeTimer !== undefined) clearTimer(handshakeTimer);
-          store.setState({ connected: true, previewError: null });
+          store.setState({
+            connected: true,
+            previewError: /^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(
+              state.previewError ?? "",
+            )
+              ? state.previewError
+              : null,
+          });
           send("select", { nodeId: state.selected });
           invalidate();
         }

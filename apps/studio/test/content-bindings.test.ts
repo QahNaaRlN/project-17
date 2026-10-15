@@ -191,10 +191,26 @@ it("STU-211/213: выбор локали до первого ready не подт
   };
   editor.receive(ready);
   expect(editor.store.getState().connected).toBe(false);
+  editor.receive({
+    ...ready,
+    data: {
+      cms: "preview",
+      v: 1,
+      type: "diagnostics",
+      payload: { items: [{ code: "BINDING_VALUE_MISSING", message: "private value" }] },
+    },
+  });
   expect(frame.postMessage.mock.calls.find(([m]) => m.type === "init")?.[0].payload.locale).toBe(
     "en",
   );
   editor.receive(ready);
   expect(editor.store.getState().connected).toBe(true);
+  expect(editor.store.getState().previewError).toBe("BINDING_VALUE_MISSING");
+  expect(JSON.stringify(editor.store.getState())).not.toContain("private value");
+  editor.receive({
+    ...ready,
+    data: { cms: "preview", v: 1, type: "diagnostics", payload: { items: [] } },
+  });
+  expect(editor.store.getState().previewError).toBeNull();
   editor.dispose();
 });
