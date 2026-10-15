@@ -484,6 +484,9 @@ try {
   await expect(
     published.getByRole("heading", { name: "Changed " + title, exact: true }),
   ).toBeVisible();
+  const publishedCover = published.getByAltText(alt, { exact: true });
+  await publishedCover.scrollIntoViewIfNeeded();
+  await expect.poll(() => publishedCover.evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
   await published.screenshot({ path: resolve(output, "bindings-published.png"), fullPage: true });
   report.primary = {
     pageId,

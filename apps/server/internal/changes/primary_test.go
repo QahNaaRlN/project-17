@@ -122,6 +122,45 @@ func TestPrimaryRebaseSTU204217(t *testing.T) {
 	}
 }
 
+func TestPrimaryBindingRebaseSTU209217(t *testing.T) {
+	e := cntSetup(t)
+	article := e.ContentFixture("entity", "Article", cntArticle("rebase-binding"), "staging")
+	author := e.ContentFixture("entity", "Author", map[string]any{"name": "Author"}, "staging")
+	initial := cntCS(e)
+	made, err := cntOp(e, initial, "document.create", nil, map[string]any{"kind": "page", "path": "/binding-rebase", "root": map[string]any{"id": "n_root", "type": "Heading"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := made.Operations[0].Target
+	declare := func(cs uuid.UUID, schema string, source uuid.UUID) {
+		t.Helper()
+		if _, err := cntOp(e, cs, "document.setContent", &page, map[string]any{"content": map[string]any{"schema": schema, "resolve": map[string]any{"by": "entity", "entityId": source}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	declare(initial, "Article", article)
+	cntPublish(e, initial)
+	left, right := cntCS(e), cntCS(e)
+	e.Must(e.Admin, "apply-operations", map[string]any{"changesetId": left, "expectedSeq": 0, "group": true, "operations": []any{
+		map[string]any{"type": "node.setBinding", "target": page, "payload": map[string]any{"nodeId": "n_root", "prop": "text", "binding": "$content.title"}},
+	}}, nil)
+	declare(right, "Author", author)
+	cntPublish(e, right)
+	seq := cntSeq(e, left)
+	if err := e.Do(e.Admin, "rebase-changeset", map[string]any{"changesetId": left, "expectedSeq": seq}, nil); err == nil {
+		t.Fatal("rebase silently retained a binding incompatible with the upstream source")
+	}
+	doc, err := changes.GetDocument(context.Background(), e.Q, e.Admin.ProjectID, page, &left)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	_ = json.Unmarshal(doc.Body, &body)
+	if body["content"].(map[string]any)["schema"] != "Article" || cntSeq(e, left) != seq {
+		t.Fatal("failed rebase partially committed", body)
+	}
+}
+
 func TestPrimaryDeliverySTU210211215(t *testing.T) {
 	e := cntSetup(t)
 	cs := cntCS(e)
