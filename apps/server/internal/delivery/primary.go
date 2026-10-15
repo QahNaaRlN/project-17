@@ -33,6 +33,27 @@ func primaryProblem(code, pointer, node string) ir.Diagnostic {
 	return ir.Diagnostic{Code: ir.Code(code), Severity: ir.SeverityWarning, Pointer: pointer, NodeID: node, Message: code}
 }
 
+// Follow the schema rather than interpreting an arbitrary object.assetId as a file.
+func primaryAssetRefs(fields, content map[string]any) map[uuid.UUID]bool {
+	refs := map[uuid.UUID]bool{}
+	for key, value := range content {
+		field := primaryObject(fields[key])
+		switch field["type"] {
+		case "asset":
+			if raw, ok := primaryObject(value)["assetId"].(string); ok {
+				if id, err := uuid.Parse(raw); err == nil {
+					refs[id] = true
+				}
+			}
+		case "object":
+			for id := range primaryAssetRefs(primaryObject(field["fields"]), primaryObject(value)) {
+				refs[id] = true
+			}
+		}
+	}
+	return refs
+}
+
 // projectPrimary never serializes unused fields, reference targets, or other locales.
 func projectPrimary(doc, schema, data map[string]any, locale string) (map[string]any, []ir.Diagnostic, error) {
 	out := map[string]any{}
@@ -240,33 +261,16 @@ func resolvePrimary(ctx context.Context, q *store.Queries, a Access, p *Page, re
 	p.Data["content"] = content
 	p.Diagnostics = append(p.Diagnostics, diagnostics...)
 	p.ContentContext.Versions[id.String()] = v.ID
-	var assets func(any) error
-	assets = func(value any) error {
-		m := primaryObject(value)
-		if m == nil {
-			return nil
+	for assetID := range primaryAssetRefs(primaryObject(schema["fields"]), content) {
+		asset, err := q.ContentVersion(ctx, store.ContentVersionParams{ProjectID: a.ProjectID, ObjectID: assetID, EnvironmentID: a.EnvironmentID, ChangesetID: scopedCS, UseHead: a.Draft})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (asset.Deleted || asset.Kind != "asset")) {
+			return fail("CONTENT_REFERENCE_UNPUBLISHED")
 		}
-		if raw, ok := m["assetId"].(string); ok {
-			assetID, e := uuid.Parse(raw)
-			if e != nil {
-				return nil
-			}
-			asset, e := q.ContentVersion(ctx, store.ContentVersionParams{ProjectID: a.ProjectID, ObjectID: assetID, EnvironmentID: a.EnvironmentID, ChangesetID: scopedCS, UseHead: a.Draft})
-			if errors.Is(e, pgx.ErrNoRows) || (e == nil && (asset.Deleted || asset.Kind != "asset")) {
-				return fail("CONTENT_REFERENCE_UNPUBLISHED")
-			}
-			if e != nil {
-				return e
-			}
-			p.ContentContext.Versions[raw] = asset.ID
+		if err != nil {
+			return err
 		}
-		for _, child := range m {
-			if err := assets(child); err != nil {
-				return err
-			}
-		}
-		return nil
+		p.ContentContext.Versions[assetID.String()] = asset.ID
 	}
-	return assets(content)
+	return nil
 }
 func toPrimaryArray(v any) []any { a, _ := v.([]any); return a }

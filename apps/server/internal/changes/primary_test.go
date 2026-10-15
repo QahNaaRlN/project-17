@@ -7,10 +7,49 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/reviewdiff"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 	"testing"
 )
+
+func TestPrimaryReadBoundarySTU205216217(t *testing.T) {
+	e := cntSetup(t)
+	actor := e.Human("design-only", auth.DesignRead)
+	empty := cntCS(e)
+	if err := changes.RequirePrimaryRead(context.Background(), e.Q, actor, empty); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cntOp(e, empty, "document.create", nil, map[string]any{"kind": "page", "root": map[string]any{"id": "n_root", "type": "Box"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := changes.RequirePrimaryRead(context.Background(), e.Q, actor, empty); err != nil {
+		t.Fatal("unrelated design work blocked", err)
+	}
+	source := e.ContentFixture("entity", "Article", cntArticle("read-boundary"), "staging")
+	cs := cntCS(e)
+	if _, err := cntOp(e, cs, "document.create", nil, map[string]any{"kind": "page", "content": map[string]any{"schema": "Article", "resolve": map[string]any{"by": "entity", "entityId": source}}, "root": map[string]any{"id": "n_root", "type": "Box"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := changes.RequirePrimaryRead(context.Background(), e.Q, actor, cs); cmstest.Code(err) != "FORBIDDEN" {
+		t.Fatal("document.create bypassed primary read", err)
+	}
+	if err := reviewdiff.CheckExpected(context.Background(), e.Q, actor, cs, nil); cmstest.Code(err) != "FORBIDDEN" {
+		t.Fatal("omitted snapshot bypassed read gate", err)
+	}
+}
+
+func TestPrimaryReadFailuresSTU216(t *testing.T) {
+	for _, table := range []string{"operations", "object_versions"} {
+		t.Run(table, func(t *testing.T) {
+			e := cntSetup(t)
+			cs := cntCS(e)
+			actor := e.Human("design-only", auth.DesignRead)
+			e.Break(table, "")
+			cmstest.ExpectDBError(t, changes.RequirePrimaryRead(context.Background(), e.Q, actor, cs))
+		})
+	}
+}
 
 func TestPrimaryCommandSTU204205208209214217(t *testing.T) {
 	e := cntSetup(t)
@@ -26,6 +65,16 @@ func TestPrimaryCommandSTU204205208209214217(t *testing.T) {
 		t.Fatal(err)
 	}
 	seq := cntSeq(e, cs)
+	for _, version := range []any{int32(2), nil} {
+		e.Exec(`UPDATE object_versions SET schema_version=$2 WHERE object_id=$1`, source, version)
+		if _, err := cntOp(e, cs, "document.setContent", &id, map[string]any{"content": declaration}); err == nil {
+			t.Fatal("implicit source upcast accepted")
+		}
+		if cntSeq(e, cs) != seq {
+			t.Fatal("source version failure committed")
+		}
+	}
+	e.Exec(`UPDATE object_versions SET schema_version=1 WHERE object_id=$1`, source)
 	if err := changes.RequirePrimaryRead(context.Background(), e.Q, e.Human("design-viewer", auth.DesignRead), cs); cmstest.Code(err) != "FORBIDDEN" {
 		t.Fatal("primary comparison lost read gate", err)
 	}

@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +52,10 @@ func TestPrimaryETagSTU210211215(t *testing.T) {
 	_, items := e.do(t, "GET", "/api/v1/content-catalog?environment=staging&changesetId="+edit+"&kind=entity&q=After", "", e.authed(nil))
 	if len(items["items"].([]any)) != 1 {
 		t.Fatal(items)
+	}
+	response, invalid := e.do(t, "GET", "/api/v1/content-catalog?environment=staging&kind=entity&q="+strings.Repeat("x", 201), "", e.authed(nil))
+	if response.StatusCode != 400 || invalid["code"] != "PARAM_INVALID" {
+		t.Fatal(response.StatusCode, invalid)
 	}
 	var n int
 	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM operations WHERE changeset_id=$1`, edit).Scan(&n); err != nil || n != 1 {
