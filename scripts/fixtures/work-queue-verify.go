@@ -44,8 +44,12 @@ func main() {
 		work := w.(map[string]any)
 		var state string
 		var count, pages, committed int
+		expectedCount := 1
+		if n, ok := work["expectedCount"].(float64); ok && n >= 1 && n <= 1000 && n == float64(int(n)) {
+			expectedCount = int(n)
+		}
 		err = tx.QueryRow(ctx, `SELECT c.state,count(*)::int,count(*) FILTER(WHERE o.kind='document')::int,count(*) FILTER(WHERE v.state='committed' AND o.head_version_id=v.id AND pp.version_id=v.id)::int FROM changesets c JOIN projects p ON p.id=c.project_id AND p.slug='studio-work-review' JOIN changeset_objects co ON co.changeset_id=c.id JOIN objects o ON o.id=co.object_id JOIN object_versions v ON v.id=co.working_version_id JOIN environments e ON e.project_id=c.project_id AND e.name='staging' LEFT JOIN published_pointers pp ON pp.environment_id=e.id AND pp.object_id=o.id WHERE c.id=$1 GROUP BY c.state`, work["id"]).Scan(&state, &count, &pages, &committed)
-		if err != nil || state != "merged" || count != 1 || committed != 1 || work["kind"] != "document" && pages != 0 {
+		if err != nil || state != "merged" || count != expectedCount || committed != expectedCount || work["kind"] != "document" && pages != 0 {
 			panic("committed/published/page-count invariant failed")
 		}
 		work["committedAndPublished"] = true

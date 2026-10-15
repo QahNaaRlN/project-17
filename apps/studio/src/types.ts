@@ -87,6 +87,7 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  createWork?(attempt: import("./work-creation.js").WorkCreationAttempt): Promise<Changeset>;
   workQueue?(
     filters: WorkQueueFilters,
     cursor?: string,

@@ -6,17 +6,19 @@ import { StudioError } from "./types.js";
 import type { Editor } from "./editor.js";
 import { Button, Notice } from "./components.js";
 import { LegacyWorkItems } from "./legacy-work-items.js";
+import { NewWork } from "./new-work.js";
 type Props = {
   api: Api;
   editor: Editor;
   compact?: boolean;
   onOpened?: () => void;
   actorId?: string;
+  rights?: string[] | undefined;
 };
 export function WorkItems(props: Props) {
   return props.api.workQueue ? <Queue {...props} /> : <LegacyWorkItems {...props} />;
 }
-function Queue({ api, editor, compact = true, onOpened, actorId = "service" }: Props) {
+function Queue({ api, editor, compact = true, onOpened, actorId = "service", rights }: Props) {
   const state = useStore(editor.store),
     ru = state.locale === "ru",
     client = useQueryClient();
@@ -97,7 +99,11 @@ function Queue({ api, editor, compact = true, onOpened, actorId = "service" }: P
     if (editor.store.getState().session?.changeset.id === id) {
       window.history.replaceState({}, "", "/editor#" + new URLSearchParams({ work: id }));
       onOpened?.();
-    } else setOpenError(true);
+      return true;
+    } else {
+      setOpenError(true);
+      return false;
+    }
   }
   const content = (
     <>
@@ -111,6 +117,29 @@ function Queue({ api, editor, compact = true, onOpened, actorId = "service" }: P
               : "All accessible active work in this environment."}
           </p>
         </div>
+        {!compact &&
+          api.createWork &&
+          config.data &&
+          !scopeLost &&
+          (!rights ||
+            (rights.includes("content.read") &&
+              (rights.includes("content.write") || rights.includes("asset.write")))) && (
+            <NewWork
+              key={[actorId, config.data.project, config.data.environment].join(":")}
+              api={api}
+              scope={{
+                actor: actorId,
+                project: config.data.project,
+                environment: config.data.environment,
+              }}
+              ru={ru}
+              disabled={busy}
+              onCreated={async (id) => {
+                void client.invalidateQueries({ queryKey: ["studio-work-items"] });
+                return open(id);
+              }}
+            />
+          )}
         <Button
           disabled={busy || list.isFetching}
           onClick={() => {

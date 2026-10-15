@@ -89,7 +89,10 @@ async function setup(locale: "ru" | "en" = "ru", compact = false, studio = false
       </QueryClientProvider>,
     ),
   );
-  await flush();
+  await vi.waitFor(async () => {
+    await flush();
+    expect(document.querySelectorAll(".work-table tbody tr").length).toBeGreaterThan(0);
+  });
   return { api, work, opened };
 }
 const button = (text: string) =>

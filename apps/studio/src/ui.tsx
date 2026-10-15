@@ -301,6 +301,7 @@ export function Studio({
   actorId?: string;
 }) {
   const [showContent, setShowContent] = useState(false);
+  const [contentRevision, setContentRevision] = useState(0);
   const [contentSelection, setContentSelection] = useState<
     { id: string; kind: "entity" | "asset"; changesetId: string } | undefined
   >();
@@ -914,6 +915,7 @@ export function Studio({
               api={api}
               editor={editor}
               actorId={actorId}
+              rights={rights}
               onOpened={() => setScreen("editor")}
             />
           </div>
@@ -923,6 +925,7 @@ export function Studio({
                 api={api}
                 editor={editor}
                 actorId={actorId}
+                rights={rights}
                 compact={false}
                 onOpened={() => setOpenedWork((value) => value + 1)}
               />
@@ -1042,15 +1045,60 @@ export function Studio({
               </ul>
             )}
             {screen === "work" &&
+              work?.work &&
+              !work.record &&
+              work.review.canEdit &&
+              work.changeset.state === "open" && (
+                <div className="work-card-actions">
+                  {!work.work.objects.length && (
+                    <p>
+                      {state.locale === "ru"
+                        ? "В работе пока нет изменений"
+                        : "This work has no changes yet"}
+                    </p>
+                  )}
+                  {(["entity", "asset"] as const).map((kind) => {
+                    const right = kind === "entity" ? "content" : "asset";
+                    if (
+                      rights &&
+                      (!rights.includes("content.read") || !rights.includes(right + ".write"))
+                    )
+                      return null;
+                    return (
+                      <Button
+                        key={kind}
+                        disabled={navigationLocked}
+                        onClick={() => {
+                          setContentRevision((value) => value + 1);
+                          setContentSelection({ id: "", kind, changesetId: work.changeset.id });
+                          setShowContent(true);
+                        }}
+                      >
+                        {kind === "entity"
+                          ? state.locale === "ru"
+                            ? "Создать сущность"
+                            : "Create entity"
+                          : state.locale === "ru"
+                            ? "Загрузить файл"
+                            : "Upload file"}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+            {screen === "work" &&
               work &&
               !work.record &&
               showContent &&
               contentSelection?.changesetId === work.changeset.id && (
                 <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
                   <ContentPanel
-                    key={work.changeset.id + ":" + (contentSelection?.id ?? "")}
+                    key={
+                      work.changeset.id + ":" + contentRevision + ":" + (contentSelection?.id ?? "")
+                    }
                     api={api}
                     editor={editor}
+                    rights={rights}
                     {...(contentSelection ? { initialSelection: contentSelection } : {})}
                   />
                 </DeferredPanel>

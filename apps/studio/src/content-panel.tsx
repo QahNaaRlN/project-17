@@ -17,15 +17,20 @@ export default function ContentPanel({
   api,
   editor,
   initialSelection,
+  rights,
 }: {
   api: Api;
   editor: Editor;
   initialSelection?: { id: string; kind: "entity" | "asset" } | undefined;
+  rights?: string[] | undefined;
 }) {
   const state = useStore(editor.store),
     session = state.session!,
     ru = state.locale === "ru";
-  const [kind, setKind] = useState<"entity" | "asset">(initialSelection?.kind ?? "entity"),
+  const canRead = (_kind: "entity" | "asset") => !rights || rights.includes("content.read");
+  const [kind, setKind] = useState<"entity" | "asset">(
+      initialSelection?.kind ?? (canRead("entity") ? "entity" : "asset"),
+    ),
     [filter, setFilter] = useState(""),
     [id, setId] = useState(initialSelection?.id ?? ""),
     [draft, setDraft] = useState<Draft | null>(null),
@@ -40,6 +45,7 @@ export default function ContentPanel({
     !!draft && (!equal(draft.data, draft.base?.data ?? {}) || Object.values(errors).some(Boolean));
   const uploadDirty = !!state.dirtyFields.contentUpload;
   const blocked =
+    (!!rights && !rights.includes((kind === "entity" ? "content" : "asset") + ".write")) ||
     state.status !== "ready" ||
     !session.review.canEdit ||
     session.changeset.state !== "open" ||
@@ -204,8 +210,8 @@ export default function ContentPanel({
             setDraft(null);
           }}
         >
-          <option value="entity">{ru ? "Сущности" : "Entities"}</option>
-          <option value="asset">{ru ? "Ассеты" : "Assets"}</option>
+          {canRead("entity") && <option value="entity">{ru ? "Сущности" : "Entities"}</option>}
+          {canRead("asset") && <option value="asset">{ru ? "Ассеты" : "Assets"}</option>}
         </select>
         {kind === "entity" && (
           <select
@@ -257,6 +263,13 @@ export default function ContentPanel({
           </button>
         )}
       </div>
+      {kind === "entity" && !Object.keys(schemas).length && (
+        <p role="status">
+          {ru
+            ? "В manifest этого окружения нет схем сущностей. Обновите контент после регистрации схем."
+            : "This environment's manifest has no entity schemas. Refresh content after registering schemas."}
+        </p>
+      )}
       {list.isPending && <p role="status">{ru ? "Загрузка…" : "Loading…"}</p>}
       {list.isError && (
         <p role="alert">{(list.error as StudioError).code ?? "CONTENT_READ_FAILED"}</p>
