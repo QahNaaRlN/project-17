@@ -1,0 +1,439 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Studio Work Queue Query API",
+    "version": "1.0.0",
+    "description": "STU-176 through STU-189. Authenticated project identity; one row per accessible active standard CS. Unknown or repeated query parameters are rejected. Legacy work-items unchanged."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    },
+    {
+      "humanSession": []
+    }
+  ],
+  "paths": {
+    "/work-queue": {
+      "get": {
+        "operationId": "listWorkQueue",
+        "parameters": [
+          {
+            "name": "environment",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Configured standard target environment of the authenticated project."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Trimmed, literal case-insensitive substring of work title, owner display name, or any base/working page route; no NUL."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "open", "failed", "changes_requested", "in_review", "approved"],
+              "default": "all"
+            }
+          },
+          {
+            "name": "ownership",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "mine", "others"],
+              "default": "all"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "page", "component", "entity", "asset"],
+              "default": "all"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "description": "HMAC cursor bound to actor, project, environment, filters and limit; order createdAt DESC, id DESC."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete bounded result; no hidden-work totals. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkQueueList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PARAM_INVALID or WORK_QUEUE_CURSOR_INVALID",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: no appropriate read access or forbidden actor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND or WORK_QUEUE_ITEM_NOT_FOUND: invisible work/environment",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "WORK_QUEUE_LIMIT_EXCEEDED: response >4 MiB or detail >1000 objects",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/work-queue/{changesetId}": {
+      "get": {
+        "operationId": "getWorkQueueCard",
+        "parameters": [
+          {
+            "name": "changesetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Configured standard target environment of the authenticated project."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete bounded result; no hidden-work totals. Cache-Control: no-store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkQueueCard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PARAM_INVALID or WORK_QUEUE_CURSOR_INVALID",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: no appropriate read access or forbidden actor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND or WORK_QUEUE_ITEM_NOT_FOUND: invisible work/environment",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "WORK_QUEUE_LIMIT_EXCEEDED: response >4 MiB or detail >1000 objects",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "humanSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "cms_session"
+      }
+    },
+    "schemas": {
+      "WorkQueueItem": {
+        "type": "object",
+        "required": [
+          "title",
+          "ownerName",
+          "id",
+          "ownerId",
+          "own",
+          "state",
+          "createdAt",
+          "updatedAt",
+          "seq",
+          "objectCount",
+          "deletedCount",
+          "countsByKind"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "own": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["open", "failed", "changes_requested", "in_review", "approved"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "objectCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "countsByKind": {
+            "type": "object",
+            "required": ["page", "component", "entity", "asset"],
+            "additionalProperties": false,
+            "properties": {
+              "page": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "component": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "entity": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "asset": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "WorkQueueObject": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "docKind",
+          "title",
+          "baseVersionId",
+          "workingVersionId",
+          "deleted",
+          "basePath",
+          "workingPath"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["document", "entity", "asset"]
+          },
+          "docKind": {
+            "type": ["string", "null"],
+            "enum": ["page", "component", null]
+          },
+          "title": {
+            "type": "string"
+          },
+          "baseVersionId": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "workingVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "basePath": {
+            "type": ["string", "null"]
+          },
+          "workingPath": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "WorkQueueList": {
+        "type": "object",
+        "required": ["items", "nextCursor"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/WorkQueueItem"
+            }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "maxLength": 2048
+          }
+        }
+      },
+      "WorkQueueCard": {
+        "type": "object",
+        "required": ["item", "objects"],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/WorkQueueItem"
+          },
+          "objects": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/WorkQueueObject"
+            }
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": ["status", "code", "title"],
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

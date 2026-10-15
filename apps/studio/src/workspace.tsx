@@ -163,7 +163,7 @@ export function Workspace({
     const state = editor.store.getState();
     if (
       state.status !== "ready" ||
-      state.session?.record.id !== doc ||
+      state.session?.record?.id !== doc ||
       state.session.changeset.id !== cs
     )
       throw new StudioError("OPEN_FAILED");

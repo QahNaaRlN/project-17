@@ -199,7 +199,18 @@ export function PublishingPanel({
   useEffect(() => {
     if (choice) confirmation.current?.focus();
   }, [choice]);
-  if (!session) return null;
+  if (!session)
+    return state.publication ? (
+      <section className="publishing-panel" aria-label={t.panel}>
+        <p role="status">
+          {t.published}: {state.publication.environment} ·{" "}
+          <time dateTime={state.publication.createdAt}>
+            {new Date(state.publication.createdAt).toLocaleString(state.locale)}
+          </time>{" "}
+          · <code>{state.publication.id}</code>
+        </p>
+      </section>
+    ) : null;
   const review = session.review,
     busy =
       state.status !== "ready" ||
@@ -431,13 +442,15 @@ export function PublishingPanel({
             {new Date(state.publication.createdAt).toLocaleString(state.locale)}
           </time>{" "}
           · <code>{state.publication.id}</code>{" "}
-          <a
-            href={new URL(session.record.path!, session.config.appOrigin).href}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t.visit}
-          </a>
+          {session.record?.path && (
+            <a
+              href={new URL(session.record.path, session.config.appOrigin).href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t.visit}
+            </a>
+          )}
         </p>
       )}
       <h3 className="review-section-title">{t.checks}</h3>
@@ -477,7 +490,7 @@ export function PublishingPanel({
           <h3>{t.diagnostics}</h3>
           <ul>
             {diagnostics.map((d, i) => {
-              const node = diagnosticNode(d, session.record.id),
+              const node = session.record ? diagnosticNode(d, session.record.id) : null,
                 available = node && !!state.document?.nodes[node];
               return (
                 <li key={i}>

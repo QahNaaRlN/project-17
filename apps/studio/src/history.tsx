@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type { Api, Session, HistoryAction } from "./types.js";
+import type { Api, WorkContext, HistoryAction } from "./types.js";
 import type { Editor } from "./editor.js";
 
 const copy = {
@@ -96,7 +96,7 @@ export function HistoryPanel({
   busy,
   retry,
 }: {
-  session: Session;
+  session: WorkContext;
   api: Api;
   editor: Editor;
   locale: "ru" | "en";
@@ -169,7 +169,7 @@ export function HistoryPanel({
               {" "}
               · {new Date(action.createdAt).toLocaleString(locale)}
             </time>
-            {action.operations.some((o) => o.target !== session.record.id) && (
+            {action.operations.some((o) => o.target !== session.record?.id) && (
               <small>{t.other}</small>
             )}
             {action.operations.some((o) => o.status === "conflict") && <small>{t.conflict}</small>}

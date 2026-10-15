@@ -291,10 +291,14 @@ export function Studio({
   editor,
   api,
   accountControls,
+  rights,
+  actorId = "service",
 }: {
   editor: Editor;
   api: Api;
   accountControls?: ReactNode;
+  rights?: string[];
+  actorId?: string;
 }) {
   const [showContent, setShowContent] = useState(false);
   const [contentSelection, setContentSelection] = useState<
@@ -311,14 +315,38 @@ export function Studio({
   );
   const documentId = saved.get("document") ?? "",
     changesetId = saved.get("changeset") ?? "";
-  const [screen, setScreen] = useState<"pages" | "editor" | "work" | "publications">(
-    saved.has("publication") ? "publications" : documentId && changesetId ? "editor" : "pages",
+  const [screen, setScreenValue] = useState<"pages" | "editor" | "work" | "publications">(
+    saved.has("publication")
+      ? "publications"
+      : saved.has("work") || (rights && !rights.includes("design.read"))
+        ? "work"
+        : documentId && changesetId
+          ? "editor"
+          : "pages",
   );
+  const workView = useRef<{ y: number; id: string } | null>(null);
+  function setScreen(next: typeof screen) {
+    const id = editor.store.getState().session?.changeset.id;
+    if (screen === "work" && next !== "work" && id) workView.current = { y: window.scrollY, id };
+    setScreenValue(next);
+  }
+  useEffect(() => {
+    if (screen !== "work" || !workView.current) return;
+    const { y, id } = workView.current;
+    document
+      .querySelector<HTMLElement>('[data-work-id="' + id + '"]')
+      ?.focus({ preventScroll: true });
+    if (window.scrollY !== y) window.scrollTo({ top: y });
+  }, [screen]);
   const [openedWork, setOpenedWork] = useState(0);
   const [diagnosticNode, setDiagnosticNode] = useState<string | null>(null);
   useEffect(() => {
     if (openedWork) document.getElementById("work-card-title")?.focus();
   }, [openedWork]);
+  useEffect(() => {
+    if (!openedWork && screen === "work" && state.session?.work && state.status === "ready")
+      document.getElementById("work-card-title")?.focus();
+  }, [state.session?.changeset.id]);
   useEffect(() => {
     if (!diagnosticNode || screen !== "editor") return;
     [...document.querySelectorAll<HTMLElement>('[role="treeitem"]')]
@@ -326,6 +354,25 @@ export function Studio({
       ?.focus();
     setDiagnosticNode(null);
   }, [diagnosticNode, screen]);
+  useEffect(() => {
+    const refresh = () => {
+      const current = editor.store.getState();
+      if (
+        !current.session?.work ||
+        current.status !== "ready" ||
+        document.visibilityState === "hidden"
+      )
+        return;
+      editor.remoteChanged();
+      void editor.refreshRemote();
+    };
+    const timer = setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [editor]);
   const [point, setPoint] = useState("base");
   const frame = useRef<HTMLIFrameElement>(null);
   const config = useQuery({
@@ -336,7 +383,9 @@ export function Studio({
   useEffect(() => {
     const message = (event: MessageEvent) => editor.receive(event);
     window.addEventListener("message", message);
-    if (documentId && changesetId) void editor.open(documentId, changesetId);
+    if (saved.has("work")) void editor.openWork(saved.get("work")!);
+    else if (documentId && changesetId && (!rights || rights.includes("design.read")))
+      void editor.open(documentId, changesetId);
     return () => {
       window.removeEventListener("message", message);
       editor.dispose();
@@ -402,7 +451,12 @@ export function Studio({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [editor]);
-  const session = state.session,
+  const work = state.session;
+  const objectNames: Record<string, string> =
+    state.locale === "ru"
+      ? { page: "Страница", component: "Компонент", entity: "Сущность", asset: "Ассет" }
+      : { page: "Page", component: "Component", entity: "Entity", asset: "Asset" };
+  const session = work?.record ? { ...work, record: work.record } : null,
     doc = state.document;
   const tree = doc ? layers(doc) : [],
     selected = doc && state.selected ? doc.nodes[state.selected] : undefined;
@@ -466,7 +520,7 @@ export function Studio({
           <Button
             variant="ghost"
             aria-current={screen === "pages" ? "page" : undefined}
-            disabled={navigationLocked}
+            disabled={navigationLocked || (!!rights && !rights.includes("design.read"))}
             onClick={() => setScreen("pages")}
           >
             {state.locale === "ru" ? "Страницы" : "Pages"}
@@ -520,16 +574,18 @@ export function Studio({
               {state.locale === "ru" ? "Открыть публикацию" : "Open publication"}
             </Button>
           )}
-          <details className="editor-selector" open={screen === "pages"}>
-            <summary>{state.locale === "ru" ? "Страница и черновик" : "Page and draft"}</summary>
-            <Workspace
-              {...{ api, editor }}
-              busy={navigationLocked}
-              locale={state.locale}
-              compact={screen !== "pages"}
-              onOpened={() => setScreen("editor")}
-            />
-          </details>
+          {(!rights || rights.includes("design.read")) && (
+            <details className="editor-selector" open={screen === "pages"}>
+              <summary>{state.locale === "ru" ? "Страница и черновик" : "Page and draft"}</summary>
+              <Workspace
+                {...{ api, editor }}
+                busy={navigationLocked}
+                locale={state.locale}
+                compact={screen !== "pages"}
+                onOpened={() => setScreen("editor")}
+              />
+            </details>
+          )}
           {config.isError && <p role="alert">STUDIO_CONFIG_UNAVAILABLE</p>}
           <div className="editor-surface" hidden={screen !== "editor"}>
             <div className="editor-heading">
@@ -854,35 +910,59 @@ export function Studio({
             </footer>
           </div>
           <div hidden={screen !== "editor"}>
-            <WorkItems api={api} editor={editor} onOpened={() => setScreen("editor")} />
-          </div>
-          {screen === "work" && (
             <WorkItems
               api={api}
               editor={editor}
-              compact={false}
-              onOpened={() => setOpenedWork((value) => value + 1)}
+              actorId={actorId}
+              onOpened={() => setScreen("editor")}
             />
-          )}
+          </div>
+          {
+            <div hidden={screen !== "work"}>
+              <WorkItems
+                api={api}
+                editor={editor}
+                actorId={actorId}
+                compact={false}
+                onOpened={() => setOpenedWork((value) => value + 1)}
+              />
+            </div>
+          }
           <div className="work-review" hidden={screen === "pages" || screen === "publications"}>
             {screen === "work" &&
-              (session ? (
+              (work ? (
                 <div className="work-card-heading">
                   <div>
                     <p className="studio-eyebrow">
                       {state.locale === "ru" ? "Выбранная работа" : "Selected work"}
                     </p>
                     <h2 id="work-card-title" tabIndex={-1}>
-                      {session.changeset.title}
+                      {work.changeset.title}
                     </h2>
                     <p>
-                      <code>{session.record.path}</code> · #{session.changeset.seq}
+                      <code>
+                        {work.record?.path ??
+                          (state.locale === "ru" ? "Весь состав работы" : "All work objects")}
+                      </code>{" "}
+                      · #{work.changeset.seq}
                     </p>
+                    {work.work && (
+                      <p>
+                        {work.work.item.ownerName} ·{" "}
+                        <time dateTime={work.work.item.updatedAt}>
+                          {new Date(work.work.item.updatedAt).toLocaleString(state.locale, {
+                            timeZoneName: "short",
+                          })}
+                        </time>
+                      </p>
+                    )}
                   </div>
                   <div className="work-card-actions">
-                    <Button disabled={navigationLocked} onClick={() => setScreen("editor")}>
-                      {state.locale === "ru" ? "Открыть редактор" : "Open editor"}
-                    </Button>
+                    {session && (
+                      <Button disabled={navigationLocked} onClick={() => setScreen("editor")}>
+                        {state.locale === "ru" ? "Открыть редактор" : "Open editor"}
+                      </Button>
+                    )}
                     <Button
                       disabled={state.status === "saving" || state.status === "loading" || dirty}
                       onClick={() => {
@@ -895,18 +975,93 @@ export function Studio({
                 </div>
               ) : (
                 <p className="studio-notice" role="status">
+                  {["FORBIDDEN", "NOT_FOUND", "WORK_QUEUE_ITEM_NOT_FOUND"].includes(
+                    state.error ?? "",
+                  ) &&
+                    (state.locale === "ru"
+                      ? "Работа больше недоступна. "
+                      : "The work is no longer accessible. ")}
                   {state.locale === "ru"
                     ? "Откройте работу из очереди, чтобы увидеть изменения, проверки и решения."
                     : "Open a work item to see changes, checks and decisions."}
                 </p>
               ))}
+            {screen === "work" && work?.work && (
+              <ul aria-label={state.locale === "ru" ? "Состав работы" : "Work objects"}>
+                {work.work.objects.map((o) => (
+                  <li key={o.id}>
+                    <strong>{o.title || objectNames[o.docKind ?? o.kind] || o.kind}</strong> ·{" "}
+                    <code>{o.workingPath ?? o.basePath ?? o.id.slice(-8)}</code>
+                    {o.deleted && (state.locale === "ru" ? " · Удалено" : " · Deleted")}
+                    {o.kind === "document" &&
+                      o.docKind === "page" &&
+                      !o.deleted &&
+                      o.workingPath && (
+                        <Button
+                          disabled={navigationLocked}
+                          onClick={async () => {
+                            await editor.open(o.id, work.changeset.id);
+                            if (editor.store.getState().session?.record?.id === o.id) {
+                              window.history.replaceState(
+                                {},
+                                "",
+                                "/editor#" +
+                                  new URLSearchParams({
+                                    document: o.id,
+                                    changeset: work.changeset.id,
+                                  }),
+                              );
+                              setScreen("editor");
+                            }
+                          }}
+                        >
+                          {(state.locale === "ru" ? "Открыть страницу " : "Open page ") +
+                            o.workingPath}
+                        </Button>
+                      )}
+                    {(o.kind === "entity" || o.kind === "asset") && !o.deleted && (
+                      <Button
+                        disabled={navigationLocked}
+                        onClick={() => {
+                          setContentSelection({
+                            id: o.id,
+                            kind: o.kind as "entity" | "asset",
+                            changesetId: work.changeset.id,
+                          });
+                          setShowContent(true);
+                        }}
+                      >
+                        {state.locale === "ru" ? "Открыть контент" : "Open content"}
+                      </Button>
+                    )}
+                  </li>
+                ))}
+                {!work.work.objects.length && (
+                  <li>{state.locale === "ru" ? "Нет изменений" : "No changes"}</li>
+                )}
+              </ul>
+            )}
+            {screen === "work" &&
+              work &&
+              !work.record &&
+              showContent &&
+              contentSelection?.changesetId === work.changeset.id && (
+                <DeferredPanel locale={state.locale} canReload={!navigationLocked}>
+                  <ContentPanel
+                    key={work.changeset.id + ":" + (contentSelection?.id ?? "")}
+                    api={api}
+                    editor={editor}
+                    {...(contentSelection ? { initialSelection: contentSelection } : {})}
+                  />
+                </DeferredPanel>
+              )}
             <PublishingPanel
               api={api}
               onContent={(id, kind) => {
-                if (navigationLocked || !session) return;
-                setContentSelection({ id, kind, changesetId: session.changeset.id });
+                if (navigationLocked || !work) return;
+                setContentSelection({ id, kind, changesetId: work.changeset.id });
                 setShowContent(true);
-                setScreen("editor");
+                if (work.record) setScreen("editor");
               }}
               editor={editor}
               onSelectDiagnostic={(node) => {
@@ -914,9 +1069,11 @@ export function Studio({
                 setScreen("editor");
               }}
             />
-            {session && (
+            {work && (
               <HistoryPanel
-                {...{ session, api, editor }}
+                session={work}
+                api={api}
+                editor={editor}
                 busy={navigationLocked}
                 locale={state.locale}
                 revision={state.historyRevision}

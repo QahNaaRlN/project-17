@@ -610,7 +610,7 @@ it("STU-040/041/044: выбор без ID, смена страницы сбра�
   await flush();
   expect(picker.value).toBe("");
   expect(button("Открыть").disabled).toBe(true);
-  expect(editor.store.getState().session?.record.id).toBe(session.record.id);
+  expect(editor.store.getState().session?.record?.id).toBe(session.record.id);
 });
 it("STU-042/043: потерянный ответ создания повторяет тот же запрос, затем открывает созданный CS", async () => {
   const { api } = await setup();

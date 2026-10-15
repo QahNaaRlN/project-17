@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { Type } from "@cms/manifest";
-import type { Api, Session } from "./types.js";
+import type { Api, WorkContext } from "./types.js";
 import { RichEditor } from "./rich-editor.js";
 export function JsonValue({
   value,
@@ -46,7 +46,7 @@ export function ReferencePicker({
   ru,
 }: {
   api: Api;
-  session: Session;
+  session: WorkContext;
   schema: Extract<Type, { type: "reference" | "asset" }>;
   value: unknown;
   label: string;
@@ -130,7 +130,7 @@ export function ContentValue({
   onChange: (v: unknown) => void;
   onInvalid: (bad: boolean) => void;
   api: Api;
-  session: Session;
+  session: WorkContext;
   ru: boolean;
 }) {
   if (schema.type === "richText")

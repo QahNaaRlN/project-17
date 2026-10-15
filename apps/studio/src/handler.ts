@@ -107,7 +107,9 @@ export function createStudioHandler(
         const publicationRoute = new RegExp(
           `^/api/v1/publication-history(?:/${uuid}(?:/diff|/rollback-preview(?:/diff)?)?)?$`,
         ).test(path);
+        const queueRoute = new RegExp(`^/api/v1/work-queue(?:/${uuid})?$`).test(path);
         const allowedGet =
+          queueRoute ||
           publicationRoute ||
           diffRoute ||
           path === "/api/v1/agent-config" ||
@@ -220,6 +222,22 @@ export function createStudioHandler(
             )
               return error(400, "PARAM_INVALID");
             if (params.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (queueRoute) {
+            const allowed = path.endsWith("work-queue")
+              ? ["environment", "q", "state", "ownership", "kind", "limit", "cursor"]
+              : ["environment"];
+            if (
+              [...url.searchParams.keys()].some(
+                (k) => !allowed.includes(k) || url.searchParams.getAll(k).length !== 1,
+              ) ||
+              (url.searchParams.has("q") &&
+                ([...url.searchParams.get("q")!.trim()].length > 200 ||
+                  url.searchParams.get("q")!.includes("\0")))
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
               return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
             upstream.search = url.search;
           } else if (path === "/api/v1/content-catalog" || path.startsWith("/api/v1/content/")) {

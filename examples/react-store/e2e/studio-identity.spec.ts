@@ -9,7 +9,7 @@ async function login(page: Page, name: string) {
 async function openWork(page: Page) {
   await page.getByRole("button", { name: "Работы", exact: true }).click();
   await page.getByRole("button", { name: "Открыть работу", exact: true }).click();
-  await page.getByRole("button", { name: "Открыть редактор", exact: true }).click();
+  await page.getByRole("button", { name: "Открыть страницу /store", exact: true }).click();
   await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
 }
 test.beforeEach(async ({ request }) => {

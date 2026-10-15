@@ -10,27 +10,31 @@ export function PresencePanel({ api, editor }: { api: Api; editor: Editor }) {
     client = useQueryClient();
   const [items, setItems] = useState<Presence[]>([]),
     [status, setStatus] = useState<"connecting" | "live" | "offline">("connecting");
-  const documentId = state.session?.record.id,
+  const documentId = state.session?.record?.id,
     changesetId = state.session?.changeset.id;
   useEffect(() => {
     const session = editor.store.getState().session;
-    if (!session) return;
+    if (!session?.record) return;
     setItems([]);
-    return startRealtime(api, session, {
-      presence: setItems,
-      status: setStatus,
-      agent() {
-        void client.invalidateQueries({ queryKey: ["agent-runs"] });
+    return startRealtime(
+      api,
+      { ...session, record: session.record },
+      {
+        presence: setItems,
+        status: setStatus,
+        agent() {
+          void client.invalidateQueries({ queryKey: ["agent-runs"] });
+        },
+        invalidate() {
+          void client.invalidateQueries({
+            predicate: (query) =>
+              query.queryKey[0] !== "studio-config" && query.queryKey[0] !== "studio-account",
+          });
+          editor.remoteChanged();
+          void editor.refreshRemote();
+        },
       },
-      invalidate() {
-        void client.invalidateQueries({
-          predicate: (query) =>
-            query.queryKey[0] !== "studio-config" && query.queryKey[0] !== "studio-account",
-        });
-        editor.remoteChanged();
-        void editor.refreshRemote();
-      },
-    });
+    );
   }, [api, editor, client, documentId, changesetId]);
   useEffect(() => {
     void editor.refreshRemote();

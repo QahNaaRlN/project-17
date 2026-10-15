@@ -18,6 +18,10 @@ func reviewDiffRoutes(router chi.Router, d Deps) {
 			if !ok {
 				return
 			}
+			if err := authorizeWorkRead(r.Context(), store.New(d.Pool), actorFrom(r.Context()), id); err != nil {
+				writeError(w, r, d.Log, err)
+				return
+			}
 			params := r.URL.Query()
 			detail := route != "/changesets/{id}/diff"
 			allowed := []string{"environment"}

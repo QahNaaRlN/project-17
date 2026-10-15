@@ -424,6 +424,63 @@ export async function studioFixture(id: string, previewToken: string) {
         res.end(JSON.stringify(upload));
         return true;
       }
+      if (path === "/api/v1/work-queue" || path.startsWith("/api/v1/work-queue/")) {
+        const params = new URL(req.url!, "http://localhost").searchParams;
+        const item = {
+          id,
+          title: draftTitles.get(id) ?? "Draft",
+          ownerId: id,
+          ownerName: "Alice",
+          own: owner,
+          state,
+          createdAt: "2026-10-15T00:00:00Z",
+          updatedAt: "2026-10-15T00:00:00Z",
+          seq,
+          objectCount: 1,
+          deletedCount: 0,
+          countsByKind: { page: 1, component: 0, entity: 0, asset: 0 },
+        };
+        const active = ["open", "failed", "changes_requested", "in_review", "approved"].includes(
+          state,
+        );
+        const visible = active && (owner || ["in_review", "approved"].includes(state));
+        if (path !== "/api/v1/work-queue") {
+          if (!visible || path.split("/").at(-1) !== id) {
+            fail(404, "WORK_QUEUE_ITEM_NOT_FOUND");
+            return true;
+          }
+          res.end(
+            JSON.stringify({
+              item,
+              objects: [
+                {
+                  id,
+                  kind: "document",
+                  docKind: "page",
+                  title: "Store",
+                  baseVersionId: id,
+                  workingVersionId: id,
+                  deleted: false,
+                  basePath: "/store",
+                  workingPath: "/store",
+                },
+              ],
+            }),
+          );
+        } else {
+          const q = (params.get("q") ?? "").trim().toLowerCase(),
+            filter = params.get("state") ?? "all",
+            kind = params.get("kind") ?? "all",
+            ownership = params.get("ownership") ?? "all";
+          const matches =
+            (!q || (item.title + " /store Alice").toLowerCase().includes(q)) &&
+            (filter === "all" || filter === state) &&
+            ["all", "page"].includes(kind) &&
+            (ownership === "all" || (ownership === "mine" ? owner : !owner));
+          res.end(JSON.stringify({ items: visible && matches ? [item] : [], nextCursor: null }));
+        }
+        return true;
+      }
       if (path === "/api/v1/work-items") {
         res.end(
           JSON.stringify({

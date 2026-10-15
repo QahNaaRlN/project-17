@@ -206,7 +206,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
     const allowed = destinations(doc, session.manifest, subtree(doc, nodeId), nodeId);
     if (!allowed.some((p) => placeKey(p) === placeKey(place))) return;
     void editor.apply(
-      [{ type: "node.move", target: session.record.id, payload: { ...place, nodeId } }],
+      [{ type: "node.move", target: session.record!.id, payload: { ...place, nodeId } }],
       nodeId,
     );
   }
@@ -214,7 +214,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
     if (!enabled || !removable || !state.selected || !doc || !session) return;
     const parent = location(doc, state.selected)!.parentId;
     void editor.apply(
-      [{ type: "node.remove", target: session.record.id, payload: { nodeId: state.selected } }],
+      [{ type: "node.remove", target: session.record!.id, payload: { nodeId: state.selected } }],
       parent,
     );
   }
@@ -226,7 +226,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
       place = { ...from, index: from.index + 1 };
     if (!destinations(doc, session.manifest, tree).some((p) => placeKey(p) === placeKey(place)))
       return;
-    void editor.apply([insertion(session.record.id, place, tree)], tree.id);
+    void editor.apply([insertion(session.record!.id, place, tree)], tree.id);
   }
   const duplicable = useMemo(() => {
     if (!doc || !session || !state.selected) return false;
@@ -479,7 +479,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
                   const block = createBlock(
                     type,
                     session.manifest,
-                    session.record.id,
+                    session.record!.id,
                     state.locale,
                     values,
                     new Set(Object.keys(doc.nodes)),
@@ -491,7 +491,7 @@ export function StructurePanel({ editor }: { editor: Editor }) {
                   )
                     throw new StudioError("STRUCTURE_INVALID");
                   void editor.apply(
-                    [...block.operations, insertion(session.record.id, addTarget, block.tree)],
+                    [...block.operations, insertion(session.record!.id, addTarget, block.tree)],
                     block.tree.id,
                   );
                 })

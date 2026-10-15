@@ -68,9 +68,9 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
     retry: false,
   });
   const runs = useQuery({
-    queryKey: ["agent-runs", session?.record.id, session?.changeset.id],
-    queryFn: ({ signal }) => api.agentRuns!(session!, signal),
-    enabled: !!session && !!api.agentRuns,
+    queryKey: ["agent-runs", session?.record?.id, session?.changeset.id],
+    queryFn: ({ signal }) => api.agentRuns!({ ...session!, record: session!.record! }, signal),
+    enabled: !!session?.record && !!api.agentRuns,
     retry: false,
     refetchInterval: 5000,
   });
@@ -152,7 +152,7 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
           e.preventDefault();
           if (canStart && prompt.trim())
             void send("start-agent-run", {
-              documentId: session.record.id,
+              documentId: session.record!.id,
               changesetId: session.changeset.id,
               environment: session.config.environment,
               expectedSeq: session.changeset.seq,

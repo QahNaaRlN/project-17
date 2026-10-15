@@ -38,6 +38,10 @@ func historyHandler(d Deps) http.HandlerFunc {
 			return
 		}
 		defer tx.Rollback(r.Context()) //nolint:errcheck
+		if err := authorizeWorkRead(r.Context(), store.New(tx), actorFrom(r.Context()), id); err != nil {
+			writeError(w, r, d.Log, err)
+			return
+		}
 		result, err := changes.GetHistory(r.Context(), store.New(tx), actorFrom(r.Context()), id, before)
 		if err == nil {
 			err = tx.Commit(r.Context())
