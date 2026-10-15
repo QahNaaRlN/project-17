@@ -23,6 +23,7 @@ import (
 )
 
 type Document struct {
+	Deleted   bool
 	ObjectID  uuid.UUID
 	VersionID uuid.UUID
 	Certified bool
@@ -41,10 +42,11 @@ type Context struct {
 	app          any
 	project      map[string]any
 	// Overrides is the prospective publication, including promotion's exact versions.
-	Overrides    map[uuid.UUID]Document
-	PreserveHead bool // promotion moves published pointers only
-	Draft        bool
-	UseHead      bool
+	Overrides     map[uuid.UUID]Document
+	PreserveHead  bool // promotion moves published pointers only
+	PublishedOnly bool // rollback preview must not depend on the unchanged head
+	Draft         bool
+	UseHead       bool
 }
 
 // LockProjectEnvironments keeps the environment -> CS -> object lock order for workflow
@@ -166,7 +168,7 @@ func (c *Context) resolve(ctx context.Context, ref map[string]any) (Document, bo
 	}
 	if number == 0 {
 		if d, ok := c.Overrides[id]; ok {
-			return d, true, nil
+			return d, !d.Deleted, nil
 		}
 	}
 	row, err := c.q.ValidationComponent(ctx, store.ValidationComponentParams{ProjectID: c.ProjectID, ObjectID: id, Number: number, ChangesetID: c.ChangesetID, UseHead: c.UseHead, EnvironmentID: c.Environment.ID})
@@ -267,6 +269,9 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 					return nil, false
 				}
 				if page, ok := c.Overrides[id]; ok {
+					if page.Deleted {
+						return nil, false
+					}
 					body, err := decode(page.Body)
 					return page.Path, err == nil && body["kind"] == "page"
 				}
@@ -378,11 +383,19 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 	}
 	all := map[uuid.UUID]Document{}
 	for _, r := range rows {
-		all[r.ObjectID] = Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path, Certified: r.Certified}
+		d := Document{ObjectID: r.ObjectID, VersionID: r.VersionID, Body: r.Body, Path: r.Path, Certified: r.Certified, Deleted: r.Deleted}
+		if r.Deleted {
+			c.Overrides[r.ObjectID] = d
+		} else {
+			all[r.ObjectID] = d
+		}
 	}
 	for _, d := range docs {
 		all[d.ObjectID] = d
 		c.Overrides[d.ObjectID] = d
+		if d.Deleted {
+			delete(all, d.ObjectID)
+		}
 	}
 	ids := make([]uuid.UUID, 0, len(all))
 	for id := range all {
@@ -393,9 +406,21 @@ func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[st
 	if c.PreserveHead {
 		headDocs = nil
 	}
-	out, err := c.HeadConstraints(ctx, headDocs)
-	if err != nil {
-		return nil, err
+	out := map[string][]ir.Diagnostic{}
+	if !c.PublishedOnly {
+		out, err = c.HeadConstraints(ctx, headDocs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if c.PublishedOnly {
+		problems, err := c.PublishedConstraints(ctx, all)
+		if err != nil {
+			return nil, err
+		}
+		for id, ds := range problems {
+			out[id] = append(out[id], ds...)
+		}
 	}
 	for _, id := range ids {
 		r, err := c.Validate(ctx, all[id])

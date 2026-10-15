@@ -16,6 +16,7 @@ import { Workspace } from "./workspace.js";
 import { HistoryPanel } from "./history.js";
 import { PublishingPanel } from "./publishing.js";
 import { WorkItems } from "./work-items.js";
+import { PublicationHistory } from "./publication-history-panel.js";
 import { PresencePanel } from "./presence.js";
 import { DeferredPanel } from "./deferred-panel.js";
 const AgentPanel = lazy(() =>
@@ -310,8 +311,8 @@ export function Studio({
   );
   const documentId = saved.get("document") ?? "",
     changesetId = saved.get("changeset") ?? "";
-  const [screen, setScreen] = useState<"pages" | "editor" | "work">(
-    documentId && changesetId ? "editor" : "pages",
+  const [screen, setScreen] = useState<"pages" | "editor" | "work" | "publications">(
+    saved.has("publication") ? "publications" : documentId && changesetId ? "editor" : "pages",
   );
   const [openedWork, setOpenedWork] = useState(0);
   const [diagnosticNode, setDiagnosticNode] = useState<string | null>(null);
@@ -486,6 +487,14 @@ export function Studio({
           >
             {state.locale === "ru" ? "Работы" : "Work"}
           </Button>
+          <Button
+            variant="ghost"
+            aria-current={screen === "publications" ? "page" : undefined}
+            disabled={navigationLocked}
+            onClick={() => setScreen("publications")}
+          >
+            {state.locale === "ru" ? "Публикации" : "Publications"}
+          </Button>
           {session && navigationLocked && (
             <p className="hint">
               {state.locale === "ru"
@@ -495,6 +504,22 @@ export function Studio({
           )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
+          {screen === "publications" && api.publications && (
+            <PublicationHistory api={api} editor={editor} />
+          )}
+          {state.publication && screen !== "publications" && (
+            <Button
+              disabled={navigationLocked}
+              onClick={() => {
+                const hash = new URLSearchParams(window.location.hash.slice(1));
+                hash.set("publication", state.publication!.id);
+                window.history.replaceState({}, "", "/editor#" + hash);
+                setScreen("publications");
+              }}
+            >
+              {state.locale === "ru" ? "Открыть публикацию" : "Open publication"}
+            </Button>
+          )}
           <details className="editor-selector" open={screen === "pages"}>
             <summary>{state.locale === "ru" ? "Страница и черновик" : "Page and draft"}</summary>
             <Workspace
@@ -839,7 +864,7 @@ export function Studio({
               onOpened={() => setOpenedWork((value) => value + 1)}
             />
           )}
-          <div className="work-review" hidden={screen === "pages"}>
+          <div className="work-review" hidden={screen === "pages" || screen === "publications"}>
             {screen === "work" &&
               (session ? (
                 <div className="work-card-heading">

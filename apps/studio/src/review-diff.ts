@@ -48,7 +48,7 @@ export function validateDiffIndex(v: DiffIndex, session: Session): DiffIndex {
   if (v.seq !== session.changeset.seq) throw new StudioError("DIFF_SNAPSHOT_STALE");
   return v;
 }
-function validValue(v: DiffValue): boolean {
+export function validValue(v: DiffValue): boolean {
   if (!v || typeof v.present !== "boolean") return false;
   if (!v.present) return !("value" in v) && !("rawJson" in v) && !("redacted" in v);
   return (

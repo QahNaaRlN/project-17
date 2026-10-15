@@ -48,6 +48,25 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  publications?(
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<import("./publication-history.js").PublicationList>;
+  publication?(
+    id: string,
+    preview: boolean,
+    signal?: AbortSignal,
+  ): Promise<import("./publication-history.js").PublicationCard>;
+  publicationDiff?(
+    card: import("./publication-history.js").PublicationCard,
+    objectId: string,
+    preview: boolean,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<import("./publication-history.js").PublicationPage>;
+  rollback?(
+    attempt: import("./publication-history.js").RollbackAttempt,
+  ): Promise<import("./publication-history.js").PublicationEntry>;
   diffIndex?(session: Session, signal?: AbortSignal): Promise<DiffIndex>;
   diffPage?(
     session: Session,

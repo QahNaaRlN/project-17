@@ -19,7 +19,7 @@ AND ((sqlc.arg(number)::int > 0 AND v.state = 'committed' AND v.number = sqlc.ar
     WHERE pp.object_id = o.id AND e.id = sqlc.arg(environment_id) AND e.project_id = o.project_id) END)));
 
 -- name: ValidationPublishedVersions :many
-SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified, v.deleted
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
 JOIN objects o ON o.id = pp.object_id
 JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id

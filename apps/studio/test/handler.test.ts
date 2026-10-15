@@ -14,6 +14,52 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-167/170: publication proxy enforces environment and guarded rollback", async () => {
+  const { origin, post, fetcher } = await setup();
+  const root = "/api/studio/api/v1/publication-history";
+  const hash = "sha256:" + "a".repeat(64);
+  for (const route of [
+    root + "?environment=staging&limit=50",
+    root + "/" + documentId + "?environment=staging",
+    root +
+      "/" +
+      documentId +
+      "/rollback-preview/diff?environment=staging&objectId=" +
+      changesetId +
+      "&snapshot=" +
+      hash,
+  ])
+    expect((await fetch(origin + route)).status).toBe(200);
+  for (const query of [
+    "environment=staging&limit=0",
+    "environment=staging&limit=101",
+    "environment=staging&cursor=" + "x".repeat(2049),
+    "environment=staging&other=1",
+  ])
+    expect((await fetch(origin + root + "?" + query)).status).toBe(400);
+  expect((await fetch(origin + root + "?environment=production")).status).toBe(403);
+  const route = "/api/studio/api/v1/commands/rollback",
+    payload = { publicationId: documentId, resetHead: false, expectedRollbackSnapshot: hash };
+  fetcher.mockImplementation(async (input) =>
+    String(input).includes("publication-history")
+      ? Response.json({ publication: { environment: "staging" } })
+      : Response.json({ result: { id: changesetId } }),
+  );
+  expect((await post(route, { payload, reason: "Test" })).status).toBe(200);
+  for (const bad of [
+    { payload, reason: "" },
+    { payload: { ...payload, resetHead: true }, reason: "Test" },
+    { payload: { ...payload, expectedRollbackSnapshot: undefined }, reason: "Test" },
+    { payload: { ...payload, environment: "production" }, reason: "Test" },
+  ])
+    expect((await post(route, bad)).status).toBe(400);
+  fetcher.mockImplementation(async () =>
+    Response.json({ publication: { environment: "production" } }),
+  );
+  expect((await post(route, { payload, reason: "Test" })).status).toBe(403);
+  fetcher.mockImplementation(async () => Response.json({ code: "FORBIDDEN" }, { status: 403 }));
+  expect((await post(route, { payload, reason: "Test" })).status).toBe(403);
+});
 it("STU-124/125: Agent proxy scopes reads and writes and excludes provider/session secrets", async () => {
   const { origin, post, fetcher } = await setup();
   const path = `/api/studio/api/v1/agent-runs?environment=staging&documentId=${documentId}&changesetId=${changesetId}`;

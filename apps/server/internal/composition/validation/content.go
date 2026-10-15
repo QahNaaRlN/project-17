@@ -130,6 +130,9 @@ func (c *Context) Fields(schema, data map[string]any, draft bool) ir.Result {
 
 func (c *Context) contentVersion(ctx context.Context, id uuid.UUID) (store.ContentVersionRow, error) {
 	if d, ok := c.Overrides[id]; ok {
+		if d.Deleted {
+			return store.ContentVersionRow{}, pgx.ErrNoRows
+		}
 		o, err := c.q.ContentIdentity(ctx, store.ContentIdentityParams{ProjectID: c.ProjectID, ID: id})
 		if err != nil {
 			return store.ContentVersionRow{}, err

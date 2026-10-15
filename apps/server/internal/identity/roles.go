@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -54,6 +55,9 @@ func Register(bus *commandbus.Bus) {
 		}
 		commandbus.Register(bus, commandbus.Command[binding, map[string]bool]{Name: name, Right: auth.ProjectAdmin, Handle: func(ctx context.Context, tx pgx.Tx, a auth.Actor, p binding) (map[string]bool, error) {
 			q := store.New(tx)
+			if err := validation.LockProjectEnvironments(ctx, q, a.ProjectID); err != nil {
+				return nil, err
+			}
 			if _, err := q.GetActiveHuman(ctx, p.ActorID); err != nil {
 				if !errors.Is(err, pgx.ErrNoRows) {
 					return nil, err
