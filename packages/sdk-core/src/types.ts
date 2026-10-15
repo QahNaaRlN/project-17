@@ -1,17 +1,24 @@
 import type { IrDocument } from "@cms/ir";
 
 export interface DeliveryDiagnostic {
+  nodeId?: string;
+  params?: Record<string, unknown>;
   code: string;
   severity: "error" | "warning";
   pointer: string;
   message: string;
 }
+export type ContentValueDiagnostic = DeliveryDiagnostic & {
+  code: "BINDING_VALUE_MISSING";
+  params: { path: string };
+};
 
 export interface Preview {
   token: string;
   changesetId?: string;
 }
 export interface ReadOptions {
+  locale?: string;
   preview?: Preview;
   signal?: AbortSignal;
 }
@@ -40,6 +47,7 @@ export interface DocumentResponse {
   diagnostics?: DeliveryDiagnostic[];
 }
 export interface PageResponse {
+  contentContext?: { locale: string; versions: Record<string, string> };
   page: { objectId: string; versionId: string; path: string; params: Record<string, string> };
   document: IrDocument;
   components: Record<string, { versionId: string; document: IrDocument }>;

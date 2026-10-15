@@ -65,7 +65,7 @@ describe("STORE-001/005/006/007: чтение CMS", () => {
     const result = await loadStore(c, "/store");
     expect(result.catalog).toEqual(catalog);
     expect(result.preview).toBe(false);
-    expect(c.getPage).toHaveBeenCalledWith("/store", {});
+    expect(c.getPage).toHaveBeenCalledWith("/store", { locale: "ru" });
   });
   it("передаёт preview и signal для страницы и изображений, возвращает только публичную модель", async () => {
     vi.spyOn(Date, "now").mockReturnValue(now);

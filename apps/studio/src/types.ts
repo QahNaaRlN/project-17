@@ -72,6 +72,7 @@ export interface WorkQueueCard {
 }
 export interface Operation {
   type:
+    | "document.setContent"
     | "node.setProps"
     | "node.setDesign"
     | "node.setBinding"
@@ -137,6 +138,7 @@ export interface Api {
     schema?: string,
     cursor?: string,
     signal?: AbortSignal,
+    search?: string,
   ): Promise<ContentCatalog>;
   content(session: WorkContext, id: string, signal?: AbortSignal): Promise<ContentRecord>;
   applyContent(

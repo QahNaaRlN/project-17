@@ -59,7 +59,7 @@ func review(e *cmstest.Env, owner auth.Actor, id uuid.UUID) workflow.Review {
 	return r
 }
 func approve(e *cmstest.Env, id uuid.UUID) auth.Actor {
-	a := e.Human("reviewer", auth.ContentPublish)
+	a := e.Human("reviewer", auth.ContentPublish, auth.ContentRead)
 	e.Must(a, "approve-changeset", map[string]any{"changesetId": id}, nil)
 	return a
 }
@@ -362,7 +362,7 @@ func TestAtomicWriteFailures(t *testing.T) {
 // CNT-022/MF-027/PUB-033: broken published bindings must be repaired under the candidate in the same CS.
 func TestSchemaAndBindingRepairTogether(t *testing.T) {
 	e := setup(t)
-	owner := e.Human("repair", auth.SchemaApply, auth.DesignCompose, auth.ContentWrite, auth.ContentPublish, auth.SchemaRead, auth.DesignRead)
+	owner := e.Human("repair", auth.SchemaApply, auth.DesignCompose, auth.ContentWrite, auth.ContentRead, auth.ContentPublish, auth.SchemaRead, auth.DesignRead)
 	r := register(e, manifest("1", "text"), "staging")
 	claim(e, owner, *r.ChangesetID)
 	review(e, owner, *r.ChangesetID)

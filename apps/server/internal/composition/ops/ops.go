@@ -72,6 +72,7 @@ type spec struct {
 }
 
 var registry = map[string]spec{
+	DocumentSetContent: {auth.DesignCompose, setContent},
 	NodeInsert:         {auth.DesignCompose, applyInsert},
 	NodeRemove:         {auth.DesignCompose, applyRemove},
 	NodeMove:           {auth.DesignCompose, applyMove},

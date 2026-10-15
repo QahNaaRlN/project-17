@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
@@ -49,9 +50,25 @@ func deliveryRoutes(d Deps) func(chi.Router) {
 				path = strings.TrimSuffix(path, "/")
 			}
 			a := accessFrom(r.Context())
-			page, err := delivery.GetPage(r.Context(), store.New(d.Pool), a, path)
+			tx, err := d.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+			if err != nil {
+				deliver(w, r, d, nil, err)
+				return
+			}
+			defer tx.Rollback(r.Context())
+			page, err := delivery.GetPage(r.Context(), store.New(tx), a, path, r.URL.Query().Get("locale"))
+			if err == nil {
+				err = tx.Commit(r.Context())
+			}
 			// Страница зависит и от объекта, и от таблицы маршрутов (смена маршрута меняет ответ).
-			deliver(w, r, d, page, err, surrogate(a, page.Page.ObjectID.String()), surrogate(a, "routes"))
+			keys := []string{surrogate(a, page.Page.ObjectID.String()), surrogate(a, "routes")}
+			if page.ContentContext != nil {
+				keys = append(keys, surrogate(a, "manifest"))
+				for id := range page.ContentContext.Versions {
+					keys = append(keys, surrogate(a, id))
+				}
+			}
+			deliver(w, r, d, page, err, keys...)
 		})
 		r.Get("/document/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id, ok := uuidParam(w, r, d, "id")

@@ -3,6 +3,7 @@ import type { IrDocument } from "@cms/ir";
 import { atom, designDeclarations, responsive, type DesignOptions } from "./design.js";
 import { planEvents, type PlannedEvents, type RuntimeAction } from "./actions.js";
 import { fieldValue, jsonValue } from "./values.js";
+import type { Image } from "./image.js";
 
 export interface PlanNode {
   id: string;
@@ -18,6 +19,7 @@ export interface PlanDiagnostic {
   nodeId: string;
 }
 export interface RenderPlan {
+  images?: Record<string, ReturnType<typeof Image>["props"]>;
   roots: PlanNode[];
   css: string;
   diagnostics: PlanDiagnostic[];
@@ -46,6 +48,7 @@ const primitiveProps: Record<string, string[]> = {
   Heading: ["level", "text"],
   Text: ["as", "text"],
   RichText: ["value"],
+  Image: ["src", "alt", "fit", "loading", "decorative"],
   Label: ["text"],
   Divider: ["orientation"],
   Link: ["to", "newTab", "label"],
@@ -212,6 +215,19 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           ? Object.keys(native.props)
           : undefined;
       if (!allowed) return reject("CMS_NODE_UNKNOWN", id);
+      if (node.type === "Image") {
+        const ref = props.src as Record<string, unknown> | undefined;
+        if (
+          !ref ||
+          typeof ref !== "object" ||
+          typeof ref.assetId !== "string" ||
+          !/^[0-9a-f-]{36}$/i.test(ref.assetId) ||
+          (props.alt !== undefined && typeof props.alt !== "string") ||
+          (props.fit !== undefined && !["contain", "cover"].includes(String(props.fit))) ||
+          (props.loading !== undefined && !["lazy", "eager"].includes(String(props.loading)))
+        )
+          return reject("CMS_IMAGE_INVALID", id);
+      }
       if (Object.keys(props).some((name) => !allowed.includes(name)))
         return reject("CMS_PROP_INVALID", id);
       if (native) {

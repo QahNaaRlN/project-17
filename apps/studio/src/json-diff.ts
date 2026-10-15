@@ -108,7 +108,7 @@ export function documentDiff(
     after = semanticDocument(candidate);
   for (const key of keys(before, after))
     if (
-      !["nodes", "localContent"].includes(key) &&
+      !["nodes", "localContent", "content"].includes(key) &&
       !same(
         (before as unknown as Record<string, unknown>)[key],
         (after as unknown as Record<string, unknown>)[key],
@@ -242,6 +242,8 @@ export function documentDiff(
           [field]: b[field] ?? null,
         });
   }
+  if (!same(before.content, after.content))
+    add("document.setContent", { content: after.content ?? null });
   for (const key of keys(before.localContent, after.localContent)) {
     const a = before.localContent?.[key],
       b = after.localContent?.[key];

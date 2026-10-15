@@ -19,6 +19,7 @@ import { WorkItems } from "./work-items.js";
 import { PublicationHistory } from "./publication-history-panel.js";
 import { PresencePanel } from "./presence.js";
 import { DeferredPanel } from "./deferred-panel.js";
+import { ContentBindingsPanel } from "./content-bindings-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -113,6 +114,11 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
       "Сохраните или сбросьте введённое значение перед выбором другого элемента.",
     CONTENT_DRAFT_PENDING: "Сохраните контент или сбросьте ввод перед другой правкой.",
     CONTENT_TARGET_MISMATCH: "Первым target CS должно быть окружение Studio.",
+    BINDING_VALUE_MISSING: "Значение контента отсутствует в выбранной локали.",
+    BINDING_PATH_UNRESOLVED: "Путь контента не поддерживается или недоступен.",
+    CMS_IMAGE_UNAVAILABLE: "Изображение недоступно или ещё не готово.",
+    CONTENT_REFERENCE_UNPUBLISHED: "Источник или ассет недоступен в этом окружении.",
+    SCHEMA_UPCAST_REQUIRED: "Версия источника не соответствует схеме окружения.",
     JSON_DRAFT_PENDING: "Сохраните JSON или сбросьте ввод перед переходом к другой правке.",
     FORBIDDEN: "У вашей учётной записи нет права на эту правку.",
     CHANGESET_NOT_OWNER: "Этот черновик принадлежит другому пользователю.",
@@ -127,6 +133,11 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
   },
   en: {
     FIELD_DRAFT_PENDING: "Save or discard the field input before selecting another element.",
+    BINDING_VALUE_MISSING: "The content value is missing in the selected locale.",
+    BINDING_PATH_UNRESOLVED: "The content path is unsupported or unavailable.",
+    CMS_IMAGE_UNAVAILABLE: "The image is unavailable or not ready yet.",
+    CONTENT_REFERENCE_UNPUBLISHED: "The source or asset is unavailable in this environment.",
+    SCHEMA_UPCAST_REQUIRED: "The source version does not match the environment schema.",
     CONTENT_DRAFT_PENDING: "Save content or discard input before another edit.",
     CONTENT_TARGET_MISMATCH: "The first CS target must match the Studio environment.",
     JSON_DRAFT_PENDING: "Save JSON or discard the input before starting another change.",
@@ -788,6 +799,7 @@ export function Studio({
                 )}
               </section>
               <aside className="properties">
+                <ContentBindingsPanel {...{ api, editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (
                   <>

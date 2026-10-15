@@ -60,6 +60,9 @@ type opPlan struct {
 // а у Change Set ставится hasConflicts. Вызывающий держит блокировку Change Set.
 func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutions map[uuid.UUID]string, actor auth.Actor) (RebaseResult, error) {
 	res := RebaseResult{Rebased: []uuid.UUID{}, Removed: []uuid.UUID{}, Conflicts: []Conflict{}}
+	if err := RequirePrimaryRead(ctx, q, actor, cs.ID); err != nil {
+		return res, err
+	}
 	if err := q.ClearRedo(ctx, cs.ID); err != nil {
 		return res, err
 	}
@@ -253,6 +256,27 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
 	if err != nil {
 		return res, err
+	}
+	primaryTargets := map[uuid.UUID]bool{}
+	for _, plan := range plans {
+		for _, step := range plan.ops {
+			if step.status == "applied" && step.op.Type == ops.DocumentSetContent {
+				primaryTargets[plan.id] = true
+			}
+		}
+	}
+	if len(primaryTargets) > 0 {
+		s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
+		for _, v := range versions {
+			d, err := s.load(v.ObjectID)
+			if err != nil {
+				return res, err
+			}
+			d.primaryChanged = primaryTargets[v.ObjectID]
+		}
+		if err := s.validatePrimaryEdits(); err != nil {
+			return res, err
+		}
 	}
 	docs := make([]validation.Document, 0, len(versions))
 	for _, v := range versions {

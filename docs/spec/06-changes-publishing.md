@@ -74,6 +74,7 @@ Draft из архитектуры v0.1 — это рабочие версии в
 | `document.create` | `kind`, `path?`, `content?`, `policy?`, `root` | `design.compose` |
 | `document.delete` | — | `design.compose` + `content.delete` |
 | `document.setMeta` / `document.setRoute` | `meta` / `path` | `design.compose` |
+| `document.setContent` | `content \| null` (только page; null удаляет поле IR) | `design.compose` + `content.read` |
 | `document.setDataSource` | `key`, `def \| null` | `design.compose` |
 | `node.insert` | `parentId`, `slot?`, `index`, `subtree` (вложенная форма; сервер назначает ID, если не заданы) | `design.compose` |
 | `node.remove` | `nodeId` | `design.compose` |

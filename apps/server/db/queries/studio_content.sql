@@ -10,6 +10,7 @@ LEFT JOIN changeset_objects co ON co.object_id=o.id AND co.changeset_id=sqlc.arg
 JOIN object_versions v ON v.id=COALESCE(co.working_version_id,o.head_version_id)
 WHERE o.project_id=sqlc.arg(project_id) AND o.kind=sqlc.arg(kind)::text
  AND (sqlc.arg(schema_name)::text='' OR o.schema_name=sqlc.arg(schema_name))
+ AND (sqlc.arg(search)::text='' OR strpos(lower((v.body->'title')::text),lower(sqlc.arg(search)::text))>0)
  AND (NOT v.deleted OR co.object_id IS NOT NULL)
  AND o.id>sqlc.arg(after_id)::uuid
 ORDER BY o.id LIMIT 51;

@@ -15,6 +15,7 @@ import {
 import { applyOperations } from "./operations.js";
 import type { ContentOperation } from "./types.js";
 export interface EditorState {
+  bindingRetry: boolean;
   remotePending: boolean;
   contentRetry: boolean;
   dirtyFields: Record<string, boolean>;
@@ -48,6 +49,7 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    bindingRetry: false,
     remotePending: false,
     contentRetry: false,
     dirtyFields: {},
@@ -133,6 +135,13 @@ export function createEditor(
     }
   }
   let pendingHistory: { session: WorkContext; action: "undo" | "redo"; key: string } | null = null;
+  let pendingBinding: {
+    session: Session;
+    operations: Operation[];
+    key: string;
+    selection?: string | undefined;
+    confirmed: boolean;
+  } | null = null;
   let pendingContent: {
     session: WorkContext;
     operations: ContentOperation[];
@@ -176,6 +185,7 @@ export function createEditor(
     pendingHistory = null;
     pendingWorkflow = null;
     pendingContent = null;
+    pendingBinding = null;
     initialized = false;
     store.setState({
       status: "loading",
@@ -342,6 +352,17 @@ export function createEditor(
     if (store.getState().remotePending) void refreshRemote();
   }
   async function apply(operations: Operation[], selection?: string, source?: "json") {
+    if (
+      operations.some(
+        (op) =>
+          op.type === "document.setContent" ||
+          (op.type === "node.setBinding" &&
+            (store.getState().document?.content ||
+              String(op.payload.binding).startsWith("$content"))),
+      )
+    ) {
+      return applyBindings(operations, selection, source);
+    }
     if (contentDirty()) {
       store.setState({ error: "CONTENT_DRAFT_PENDING" });
       return;
@@ -392,6 +413,8 @@ export function createEditor(
             "node.insert",
             "node.remove",
             "node.move",
+            "document.setContent",
+            "node.setBinding",
           ].includes(operation.type),
         )
       ) {
@@ -637,6 +660,81 @@ export function createEditor(
     invalidate();
     return result ?? null;
   }
+  async function applyBindings(operations: Operation[], selection?: string, source?: "json") {
+    const state = store.getState(),
+      session = state.session;
+    if (
+      !session?.record ||
+      !state.document ||
+      state.status !== "ready" ||
+      !session.review.canEdit ||
+      session.changeset.state !== "open"
+    )
+      return;
+    if (
+      Object.entries(state.dirtyFields).some(
+        ([key, dirty]) =>
+          dirty && key !== "property-contentBinding" && !(key === "json" && source === "json"),
+      )
+    ) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
+      return;
+    }
+    pendingBinding = {
+      session: structuredClone({ ...session, record: session.record }),
+      operations: structuredClone(operations),
+      key: crypto.randomUUID(),
+      selection,
+      confirmed: false,
+    };
+    await sendBinding();
+  }
+  async function sendBinding() {
+    const attempt = pendingBinding;
+    if (!attempt || store.getState().status === "saving") return;
+    const stamp = epoch;
+    store.setState({ status: "saving", error: null, bindingRetry: false });
+    let uncertain = false;
+    try {
+      if (!attempt.confirmed)
+        await api.apply(attempt.session, attempt.operations, attempt.key, lifecycle.signal);
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      attempt.confirmed = true;
+    } catch (cause) {
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      uncertain = !(cause instanceof StudioError) || cause.uncertain;
+      if (!uncertain) pendingBinding = null;
+      store.setState({ error: cause instanceof StudioError ? cause.code : "SAVE_UNCERTAIN" });
+    }
+    try {
+      const current = await readContext(attempt.session);
+      if (stamp !== epoch || lifecycle.signal.aborted) return;
+      if (attempt.confirmed) pendingBinding = null;
+      const selected = attempt.selection ?? store.getState().selected;
+      store.setState({
+        ...historyRead(),
+        session: current,
+        document: current.record ? structuredClone(current.record.body) : null,
+        status: uncertain ? "uncertain" : "ready",
+        bindingRetry: uncertain,
+        selected:
+          selected && current.record?.body.nodes[selected]
+            ? selected
+            : (current.record?.body.root ?? null),
+      });
+    } catch {
+      if (stamp === epoch && !lifecycle.signal.aborted)
+        store.setState({
+          status: "uncertain",
+          bindingRetry: !!pendingBinding,
+          error: store.getState().error ?? "CONTENT_READ_FAILED",
+        });
+    }
+    invalidate();
+    const currentState = store.getState();
+    if (attempt.confirmed && !currentState.connected && currentState.session?.record)
+      await preview({ ...currentState.session, record: currentState.session.record }, stamp);
+  }
   async function sendHistory() {
     const attempt = pendingHistory;
     if (!attempt || store.getState().status === "saving") return;
@@ -776,6 +874,15 @@ export function createEditor(
           rects[id] = valid;
         }
         store.setState({ rects });
+      } else if (initialized && data.type === "diagnostics" && Array.isArray(p.items)) {
+        const item = p.items.find(
+          (item: unknown) =>
+            item &&
+            typeof item === "object" &&
+            typeof (item as { code?: unknown }).code === "string" &&
+            /^[A-Z0-9_]{1,80}$/.test(String((item as { code?: unknown }).code)),
+        ) as { code: string } | undefined;
+        store.setState({ previewError: item?.code ?? null });
       } else if (initialized && data.type === "error")
         store.setState({
           previewError:
@@ -792,6 +899,7 @@ export function createEditor(
       lifecycle.abort();
       ++epoch;
       pendingContent = null;
+      pendingBinding = null;
       pendingWorkflow = null;
       pendingHistory = null;
       store.setState({
@@ -827,6 +935,7 @@ export function createEditor(
     apply,
     applyContent,
     retryContent: sendContent,
+    retryBinding: sendBinding,
     refresh,
     select,
     receive,
@@ -858,15 +967,13 @@ export function createEditor(
     },
     locale(locale: EditorState["locale"]) {
       store.setState({ locale });
-      if (store.getState().session) {
-        initialized = false;
+      if (store.getState().session && initialized) {
         send("init", {
           sessionId: "studio-" + epoch,
           changesetId: store.getState().session!.changeset.id,
           locale,
           mode: store.getState().mode,
         });
-        initialized = true;
       }
     },
     width(width: number) {

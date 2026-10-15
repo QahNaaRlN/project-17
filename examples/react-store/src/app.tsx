@@ -72,11 +72,23 @@ export function StoreApp({ initialModel }: AppProps) {
           scope: {
             context: { locale: current.locale ?? "ru", store: catalog },
             data: current.bridge!.data,
+            content: current.bridge!.data.content as Record<string, unknown> | undefined,
           },
         });
+        plan.diagnostics.push(
+          ...(current.plan?.diagnostics.filter((d) =>
+            /^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(d.code),
+          ) ?? []),
+        );
         bridge?.controller.notify("diagnostics", { items: plan.diagnostics });
-        if (plan.diagnostics.length) throw new Error("STORE_PREVIEW_INVALID");
+        if (
+          plan.diagnostics.some(
+            (d) => !/^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(d.code),
+          )
+        )
+          throw new Error("STORE_PREVIEW_INVALID");
         plan.preview = true;
+        if (current.plan?.images) plan.images = current.plan.images;
         plan.interactionMode = "design";
         if (!stopped) {
           const next = { ...current, catalog, plan, bridge: { ...current.bridge!, ...snapshot } };

@@ -100,10 +100,20 @@ export function CmsPage({
         )
       : undefined;
     switch (node.type) {
+      case "Image": {
+        const image = plan.images?.[node.key];
+        return image
+          ? createElement("img", { ...common, ...image })
+          : createElement("span", {
+              ...common,
+              role: "img",
+              "aria-label": String(props.alt ?? ""),
+            });
+      }
       case "Heading":
-        return createElement(`h${props.level ?? 2}`, common, String(props.text));
+        return createElement(`h${props.level ?? 2}`, common, String(props.text ?? ""));
       case "Text":
-        return createElement(String(props.as ?? "p"), common, String(props.text));
+        return createElement(String(props.as ?? "p"), common, String(props.text ?? ""));
       case "RichText":
         return createElement(
           "div",
@@ -115,7 +125,7 @@ export function CmsPage({
           }),
         );
       case "Label":
-        return createElement("span", common, String(props.text));
+        return createElement("span", common, String(props.text ?? ""));
       case "Divider":
         return createElement("hr", common);
       case "Box":

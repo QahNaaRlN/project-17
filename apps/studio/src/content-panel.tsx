@@ -343,6 +343,7 @@ export default function ContentPanel({
             {ru ? "Локаль контента" : "Content locale"}
             <select
               value={locale}
+              aria-label={ru ? "Локаль контента" : "Content locale"}
               disabled={Object.values(errors).some(Boolean)}
               onChange={(e) => setLocale(e.target.value as typeof locale)}
             >
