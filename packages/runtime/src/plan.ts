@@ -167,6 +167,7 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
             source &&
             typeof source === "object" &&
             Object.hasOwn(source, "error") &&
+            Object.keys(source).length === 1 &&
             !/^error(?:\.|$)/.test(match?.[2] ?? "")
           ) {
             const code = (source as { error?: { code?: unknown } }).error?.code;

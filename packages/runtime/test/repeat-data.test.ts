@@ -80,4 +80,14 @@ it("STU-224/232: a direct data binding reports the source failure without losing
   const missing = preparePage(direct, { scope: { data: { featured: { title: null } } } });
   expect(missing.roots[0]!.children[0]!.props.text).toBe("Independent");
   expect(missing.diagnostics).toEqual([{ nodeId: "title", code: "CMS_DATA_VALUE_INVALID" }]);
+  const businessResult = preparePage(direct, {
+    scope: { data: { featured: { error: null, title: "Available" } } },
+  });
+  expect(businessResult.diagnostics).toEqual([]);
+  expect(businessResult.roots[0]!.children[1]!.props.text).toBe("Available");
+  const businessList = preparePage(doc, {
+    scope: { data: { featured: { error: null, items: [{ id: "one", title: "One" }] } } },
+  });
+  expect(businessList.diagnostics).toEqual([]);
+  expect(businessList.roots[0]!.children[1]!.props.text).toBe("One");
 });
