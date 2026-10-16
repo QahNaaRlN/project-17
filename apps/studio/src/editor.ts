@@ -885,7 +885,10 @@ export function createEditor(
               : null,
           });
           send("select", { nodeId: state.selected });
-          invalidate();
+          // The first handshake needs an authoritative reload. Later ready
+          // messages acknowledge an init (including locale) that already loaded
+          // its context; invalidating again would discard the fresh plan.
+          if (!state.connected) invalidate();
         }
       } else if (initialized && data.type === "node.click" && typeof p.nodeId === "string") {
         select(
