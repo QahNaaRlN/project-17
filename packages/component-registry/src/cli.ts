@@ -5,7 +5,13 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { register } from "tsx/esm/api";
-import { canonicalJson, manifestHash, validateManifest, type Manifest } from "@cms/manifest";
+import {
+  canonicalJson,
+  manifestHash,
+  validateManifest,
+  validateCodeIndex,
+  type Manifest,
+} from "@cms/manifest";
 import { buildManifest } from "./manifest.js";
 import { createRegistry, type RegistryOptions } from "./registry.js";
 import { projectProgram, sourceIndex, type CodeIndex } from "./source-index.js";
@@ -81,6 +87,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     for (const definition of registry.dataSources)
       manifest.dataSources![definition.name]!.sourceRef =
         sources.refs["dataSource:" + definition.name]!;
+    if (!validateCodeIndex(sources.index)) throw new Error("CMS_CODE_INDEX_INVALID");
     manifest.codeIndex = { hash: await manifestHash(sources.index), uploaded: false };
     if (!validateManifest(manifest).valid) throw new Error("CMS_MANIFEST_INVALID");
     const hash = await manifestHash(manifest);
@@ -138,6 +145,7 @@ export async function pushManifest(options: PushOptions): Promise<unknown> {
   ) as unknown;
   if (manifest.codeIndex?.hash !== (await manifestHash(index)))
     throw new Error("CMS_CODE_INDEX_HASH_MISMATCH");
+  if (!validateCodeIndex(index)) throw new Error("CMS_CODE_INDEX_INVALID");
   const token = (await readFile(options.tokenFile, "utf8")).trim();
   if (!/^cms_svc_[A-Za-z0-9_-]+$/.test(token)) throw new Error("CMS_SERVICE_TOKEN_INVALID");
   const base = endpoint(options.baseUrl);
@@ -168,6 +176,34 @@ export async function pushManifest(options: PushOptions): Promise<unknown> {
     }
     if (!matched) throw new Error("CMS_DEPLOYMENT_HASH_TIMEOUT");
   }
+  const upload = await fetch(new URL("/api/v1/commands/upload-code-index", base), {
+    method: "POST",
+    redirect: "error",
+    signal: AbortSignal.timeout(timeout),
+    headers: {
+      Authorization: "Bearer " + token,
+      "X-CMS-Project": options.project,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "cms-index:" + hash.slice(7) + ":" + manifest.codeIndex.hash.slice(7),
+    },
+    body: JSON.stringify({
+      payload: { manifestHash: hash, indexHash: manifest.codeIndex.hash, index },
+      reason: "Code index from cms CLI",
+    }),
+  });
+  if (!upload.ok) throw new Error("CMS_CODE_INDEX_UPLOAD_FAILED: HTTP " + upload.status);
+  const uploaded = (await upload.json()) as {
+    result?: { uploadId?: unknown; hash?: unknown; ready?: unknown };
+  };
+  const uploadId = uploaded?.result?.uploadId;
+  if (
+    typeof uploadId !== "string" ||
+    !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(uploadId) ||
+    uploaded.result?.hash !== manifest.codeIndex.hash ||
+    uploaded.result?.ready !== true
+  )
+    throw new Error("CMS_CODE_INDEX_UPLOAD_INVALID");
+  const key = await manifestHash({ environment: options.environment, hash, uploadId });
   const url = new URL("/api/v1/commands/register-manifest", base);
   const response = await fetch(url, {
     method: "POST",
@@ -177,10 +213,10 @@ export async function pushManifest(options: PushOptions): Promise<unknown> {
       Authorization: "Bearer " + token,
       "X-CMS-Project": options.project,
       "Content-Type": "application/json",
-      "Idempotency-Key": randomUUID(),
+      "Idempotency-Key": "cms-register:" + key.slice(7),
     },
     body: JSON.stringify({
-      payload: { environment: options.environment, manifest },
+      payload: { environment: options.environment, manifest, codeIndexUploadId: uploadId },
       reason: "Application manifest from cms CLI",
     }),
   });

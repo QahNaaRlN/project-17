@@ -192,3 +192,13 @@ claim-schema-changeset. После исправлений и согласова�
 Внешний MCP использует отдельный `cms_agt_` токен с TTL ≤8 часов, квотой и CS scope.
 Каталог и ограничения: [Studio Agent](../../docs/studio-agent.md),
 [stdio proxy](../../packages/mcp/README.md).
+
+## Missing Capability
+
+Миграция 00020 добавляет action-запросы, версии context pack, аудит и загрузки
+индекса кода. `upload-code-index` доступна сервисному актору с manifest.register;
+`register-manifest` связывает upload с точным hash в одной транзакции.
+Запросы создаёт capability.request; разработчик с code.propose видит отправленные
+карточки и ограниченный pack. Применение действия выполняет владелец CS отдельно
+после его появления в активном manifest. Автоматической доставки/проверки PR нет.
+[Команды, Query API, права и приёмка](../../docs/studio-missing-capability.md).

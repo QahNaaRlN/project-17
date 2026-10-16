@@ -323,12 +323,13 @@ func validateApply(p applyPayload) error {
 
 // session — рабочие версии документов, затронутых командой, в пределах одной транзакции.
 type session struct {
-	batchID *uuid.UUID
-	ctx     context.Context
-	q       *store.Queries
-	actor   auth.Actor
-	cs      store.Changeset
-	docs    map[uuid.UUID]*workingDoc
+	historical bool // set only after protected historyAction/inverseAction validation
+	batchID    *uuid.UUID
+	ctx        context.Context
+	q          *store.Queries
+	actor      auth.Actor
+	cs         store.Changeset
+	docs       map[uuid.UUID]*workingDoc
 }
 
 type workingDoc struct {
@@ -613,6 +614,9 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 	if r := policydoc.CheckEdit(d.body, next, s.actor.Rights.Has(auth.DesignZonesManage)); !r.Valid {
 		return recordInput{}, &ops.Error{Code: "POLICY_ZONES_MANAGE_REQUIRED", Message: "Недостаточно прав на защищённую зону", Diagnostics: r.Diagnostics}
 	}
+	if err := s.validatePending(target, d.body, next); err != nil {
+		return recordInput{}, err
+	}
 	if d.body["kind"] == "component" && !sameJSON(d.body, mustJSON(next)) {
 		d.certified = false
 	}
@@ -676,6 +680,9 @@ func (s *session) createDocument(in OperationInput) (recordInput, error) {
 	}
 	id := uuid.Must(uuid.NewV7())
 	if err := s.checkRoute(id, doc, p.Path); err != nil {
+		return recordInput{}, err
+	}
+	if err := s.validatePending(id, map[string]any{}, doc); err != nil {
 		return recordInput{}, err
 	}
 	obj, err := s.q.CreateObject(s.ctx, store.CreateObjectParams{ID: id, ProjectID: s.actor.ProjectID, DocKind: &p.Kind})

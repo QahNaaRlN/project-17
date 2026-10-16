@@ -36,8 +36,19 @@ func TestDraftBindingWarningsAndUndo(t *testing.T) {
 	cs := newCS(e)
 	e.Exec(`UPDATE projects SET settings=settings || '{"defaultMode":"CODE","maxMode":"CODE"}' WHERE id=$1`, e.Admin.ProjectID)
 	var result changes.ApplyResult
-	e.Must(e.Admin, "apply-operations", map[string]any{"changesetId": cs, "expectedSeq": 0, "operations": []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "root": map[string]any{"id": "n_root", "type": "Button", "bindings": map[string]any{"label": "$item.title"}, "on": map[string]any{"click": map[string]any{"action": "pending:0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11"}}}}}}}, &result)
+	e.Must(e.Admin, "apply-operations", map[string]any{"changesetId": cs, "expectedSeq": 0, "operations": []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "root": map[string]any{"id": "n_root", "type": "Button", "bindings": map[string]any{"label": "$item.title"}}}}}}, &result)
 	id := result.Operations[0].Target
+	// Imported legacy IR remains readable/removable, but cannot be newly inserted
+	// through apply-operations without an active anchored request (STU-273).
+	e.Exec(`UPDATE object_versions SET body=jsonb_set(body,'{nodes,n_root,on}','{"click":{"action":"pending:0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11"}}') WHERE object_id=$1 AND changeset_id=$2`, id, cs)
+	document, err := changes.GetDocument(context.Background(), e.Q, e.Admin.ProjectID, id, &cs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result.Warnings, err = validation.DraftWarnings(context.Background(), e.Q, e.Admin.ProjectID, cs, []string{"staging", "production"}, []validation.Document{{ObjectID: id, VersionID: document.VersionID, Body: document.Body, Path: document.Path}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, env := range []string{"staging", "production"} {
 		ds := result.Warnings[env][id.String()]
 		if !has(ir.Result{Diagnostics: ds}, "BINDING_SCOPE_UNAVAILABLE") || !has(ir.Result{Diagnostics: ds}, "ACTION_PENDING_CAPABILITY") {

@@ -13,3 +13,9 @@ export { validateManifest, type ValidationResult } from "./validate.js";
 export { builtinCatalogue } from "./generated/builtins.js";
 export { compilePattern } from "./pattern.js";
 export { canonicalJson, manifestHash } from "./canonical.js";
+export {
+  validateCodeIndex,
+  codeIndexPath,
+  type CodeIndex,
+  type CodeElement,
+} from "./code-index.js";

@@ -4,6 +4,7 @@ import { resolve, sep } from "node:path";
 import type { Config } from "./types.js";
 import { problemDiagnostics } from "./review.js";
 import { identityCookies, proxyIdentity } from "./identity-proxy.js";
+import { capabilityCommands } from "./capabilities.js";
 export interface ServerConfig extends Config {
   baseUrl: string;
   studioOrigin: string;
@@ -108,8 +109,12 @@ export function createStudioHandler(
           `^/api/v1/publication-history(?:/${uuid}(?:/diff|/rollback-preview(?:/diff)?)?)?$`,
         ).test(path);
         const queueRoute = new RegExp(`^/api/v1/work-queue(?:/${uuid})?$`).test(path);
+        const capabilityRoute = new RegExp(
+          `^/api/v1/capability-requests(?:/${uuid}(?:/context-preview|/context-pack)?)?$`,
+        ).test(path);
         const allowedGet =
           queueRoute ||
+          capabilityRoute ||
           publicationRoute ||
           diffRoute ||
           path === "/api/v1/agent-config" ||
@@ -125,6 +130,7 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
           "/api/v1/commands/start-agent-run",
           "/api/v1/commands/cancel-agent-run",
@@ -159,7 +165,23 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (publicationRoute) {
+          if (capabilityRoute) {
+            const allowed = path.endsWith("capability-requests")
+              ? ["environment", "status", "kind", "key", "cursor", "limit"]
+              : path.endsWith("/context-pack")
+                ? ["environment", "version"]
+                : ["environment"];
+            if (
+              [...url.searchParams.keys()].some(
+                (k) => !allowed.includes(k) || url.searchParams.getAll(k).length !== 1,
+              ) ||
+              [...url.searchParams.values()].some((v) => v.length > 4096)
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (publicationRoute) {
             const p = url.searchParams;
             const detail = path.endsWith("/diff"),
               list = path === "/api/v1/publication-history";
@@ -328,6 +350,29 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (capabilityCommands.some((name) => path.endsWith("/" + name))) {
+            const p = envelope.payload;
+            if (path.endsWith("/create-capability-request")) {
+              if (p.environment !== config.environment)
+                return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            } else {
+              if (!new RegExp(`^${uuid}$`).test(String(p.id))) return error(400, "PAYLOAD_INVALID");
+              const check = await fetcher(
+                new URL(
+                  "/api/v1/capability-requests/" +
+                    p.id +
+                    "?environment=" +
+                    encodeURIComponent(config.environment),
+                  config.baseUrl,
+                ),
+                { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+              );
+              if (!check.ok) return error(check.status, "CAPABILITY_REQUEST_UNAVAILABLE");
+              const card = await check.json();
+              if (card.environment !== config.environment)
+                return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            }
+          }
           if (path.endsWith("/commands/rollback")) {
             const p = envelope.payload;
             if (

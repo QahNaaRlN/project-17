@@ -84,7 +84,7 @@ func handleHistory(ctx context.Context, tx pgx.Tx, actor auth.Actor, p seqPayloa
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
+	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}, historical: true}
 	if rows[0].BatchID != nil {
 		id := uuid.Must(uuid.NewV7())
 		s.batchID = &id

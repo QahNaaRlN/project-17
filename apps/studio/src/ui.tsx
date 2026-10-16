@@ -22,6 +22,7 @@ import { DeferredPanel } from "./deferred-panel.js";
 import { ContentBindingsPanel } from "./content-bindings-panel.js";
 import { DataSourcesPanel } from "./data-sources-panel.js";
 import { BehaviorPanel } from "./behavior-panel.js";
+import { CapabilityComposer, CapabilityQueue } from "./capability-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -351,7 +352,9 @@ export function Studio({
   );
   const documentId = saved.get("document") ?? "",
     changesetId = saved.get("changeset") ?? "";
-  const [screen, setScreenValue] = useState<"pages" | "editor" | "work" | "publications">(
+  const [screen, setScreenValue] = useState<
+    "pages" | "editor" | "work" | "publications" | "capabilities"
+  >(
     saved.has("publication")
       ? "publications"
       : saved.has("work") || (rights && !rights.includes("design.read"))
@@ -593,8 +596,22 @@ export function Studio({
                 : "Finish or discard your current input before navigating."}
             </p>
           )}
+          {api.capabilities &&
+            (!rights ||
+              rights.includes("capability.request") ||
+              rights.includes("code.propose")) && (
+              <Button
+                variant="ghost"
+                aria-current={screen === "capabilities" ? "page" : undefined}
+                disabled={navigationLocked}
+                onClick={() => setScreen("capabilities")}
+              >
+                {state.locale === "ru" ? "Запросы возможностей" : "Capability requests"}
+              </Button>
+            )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
+          {screen === "capabilities" && <CapabilityQueue {...{ api, editor }} />}
           {screen === "publications" && api.publications && (
             <PublicationHistory api={api} editor={editor} />
           )}
@@ -827,6 +844,7 @@ export function Studio({
                 <ContentBindingsPanel {...{ api, editor, rights }} />
                 <DataSourcesPanel {...{ editor, rights }} />
                 <BehaviorPanel {...{ editor, rights }} />
+                <CapabilityComposer {...{ api, editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (
                   <>

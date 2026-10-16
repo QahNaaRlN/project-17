@@ -86,6 +86,41 @@ func TestStudioReviewActionsAndObjects(t *testing.T) {
 	}
 }
 
+// STU-255: capability entry points require current owner rights and an open CS.
+func TestStudioCapabilityPolicyRequiresCurrentOwnerRights(t *testing.T) {
+	e := setup(t)
+	owner := e.Human("capability owner", auth.ContentWrite, auth.DesignCompose, auth.DesignRead, auth.CapabilityRequest)
+	cs, _ := e.Draft(owner, "v1")
+	read := func(actor auth.Actor) workflow.StudioReview {
+		t.Helper()
+		view, err := workflow.GetStudioReview(context.Background(), e.Q, actor, cs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return view
+	}
+	if p := read(owner).CapabilityPolicy; p["defaultMode"] != "SYSTEM" || p["maxMode"] != "SYSTEM" {
+		t.Fatal(p)
+	}
+	e.Exec(`UPDATE projects SET settings=settings || '{"defaultMode":"DESIGN","maxMode":"CODE"}' WHERE id=$1`, owner.ProjectID)
+	if p := read(owner).CapabilityPolicy; p["defaultMode"] != "DESIGN" || p["maxMode"] != "CODE" {
+		t.Fatal(p)
+	}
+	revoked := owner
+	revoked.Rights = auth.RightSet{auth.DesignRead: true}
+	if read(revoked).CapabilityPolicy != nil {
+		t.Fatal("revoked capability right exposed policy")
+	}
+	outsider := e.Human("capability outsider", auth.DesignRead, auth.CapabilityRequest)
+	if read(outsider).CapabilityPolicy != nil {
+		t.Fatal("another owner's policy exposed")
+	}
+	e.Exec(`UPDATE changesets SET state='in_review' WHERE id=$1`, cs)
+	if read(owner).CapabilityPolicy != nil {
+		t.Fatal("closed editor exposed capability controls")
+	}
+}
+
 // STU-074: decisions based on an old editor seq cannot mutate the review or approvals.
 func TestStudioReviewRejectsStaleDecisionSeq(t *testing.T) {
 	e := setup(t)

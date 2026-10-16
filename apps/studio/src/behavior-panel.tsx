@@ -20,7 +20,7 @@ import {
   scalarCondition,
 } from "./behavior.js";
 
-function Argument({
+export function Argument({
   name,
   schema,
   value,

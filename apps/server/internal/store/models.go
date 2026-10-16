@@ -143,6 +143,60 @@ type AssetUpload struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type CapabilityContextPack struct {
+	ProjectID    uuid.UUID `json:"projectId"`
+	RequestID    uuid.UUID `json:"requestId"`
+	Revision     int64     `json:"revision"`
+	ManifestID   uuid.UUID `json:"manifestId"`
+	IndexID      uuid.UUID `json:"indexId"`
+	ChangesetSeq int32     `json:"changesetSeq"`
+	PageHash     string    `json:"pageHash"`
+	Hash         string    `json:"hash"`
+	Body         []byte    `json:"body"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type CapabilityRequest struct {
+	ID                  uuid.UUID  `json:"id"`
+	ProjectID           uuid.UUID  `json:"projectId"`
+	Kind                string     `json:"kind"`
+	EnvironmentID       uuid.UUID  `json:"environmentId"`
+	Environment         string     `json:"environment"`
+	SourceManifestID    uuid.UUID  `json:"sourceManifestId"`
+	Key                 string     `json:"key"`
+	Title               string     `json:"title"`
+	Description         string     `json:"description"`
+	ProposedContract    []byte     `json:"proposedContract"`
+	Acceptance          []byte     `json:"acceptance"`
+	ChangesetID         uuid.UUID  `json:"changesetId"`
+	DocumentID          uuid.UUID  `json:"documentId"`
+	NodeID              string     `json:"nodeId"`
+	Event               string     `json:"event"`
+	CreatorID           uuid.UUID  `json:"creatorId"`
+	OwnerID             uuid.UUID  `json:"ownerId"`
+	AgentSessionID      *uuid.UUID `json:"agentSessionId"`
+	Status              string     `json:"status"`
+	Revision            int64      `json:"revision"`
+	ExternalRefs        []byte     `json:"externalRefs"`
+	FulfilledManifestID *uuid.UUID `json:"fulfilledManifestId"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+}
+
+type CapabilityRequestAudit struct {
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	RequestID      uuid.UUID  `json:"requestId"`
+	Revision       int64      `json:"revision"`
+	ActorID        uuid.UUID  `json:"actorId"`
+	OnBehalfOf     *uuid.UUID `json:"onBehalfOf"`
+	AgentSessionID *uuid.UUID `json:"agentSessionId"`
+	Event          string     `json:"event"`
+	Reason         string     `json:"reason"`
+	Data           []byte     `json:"data"`
+	CreatedAt      time.Time  `json:"createdAt"`
+}
+
 type Changeset struct {
 	ID             uuid.UUID  `json:"id"`
 	ProjectID      uuid.UUID  `json:"projectId"`
@@ -201,6 +255,18 @@ type Check struct {
 	Artifacts   []byte     `json:"artifacts"`
 	StartedAt   *time.Time `json:"startedAt"`
 	FinishedAt  *time.Time `json:"finishedAt"`
+}
+
+type CodeIndexUpload struct {
+	ID           uuid.UUID `json:"id"`
+	ProjectID    uuid.UUID `json:"projectId"`
+	ManifestHash string    `json:"manifestHash"`
+	IndexHash    string    `json:"indexHash"`
+	RepoCommit   string    `json:"repoCommit"`
+	Body         []byte    `json:"body"`
+	Linked       bool      `json:"linked"`
+	CreatedBy    uuid.UUID `json:"createdBy"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type DeliveryKey struct {

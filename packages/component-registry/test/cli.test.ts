@@ -197,7 +197,15 @@ async function bundle() {
     }),
     { app: options.app },
   );
-  const index = { repo: { root: ".", commit }, elements: {} };
+  const index = {
+    repo: { root: ".", commit },
+    elements: {},
+    conventions: {
+      registry: "registry.ts",
+      testCommand: "pnpm test",
+      manifestCommand: "cms manifest build",
+    },
+  };
   manifest.codeIndex = { hash: await manifestHash(index), uploaded: false };
   // A directory independent of the build tests; fake service token only.
   for (const [name, value] of [
@@ -230,9 +238,24 @@ it("MF-004/MF-005: waits for the deployed hash, then registers exactly the valid
     expect(req.method).toBe("POST");
     expect(req.headers.authorization).toBe("Bearer cms_svc_TEST_ONLY");
     expect(req.headers["x-cms-project"]).toBe("fixture");
-    expect(req.headers["idempotency-key"]).toMatch(/^[a-f0-9-]{36}$/);
-    for await (const chunk of req) body += chunk;
+    expect(req.headers["idempotency-key"]).toMatch(/^cms-(index|register):/);
+    let current = "";
+    for await (const chunk of req) current += chunk;
     res.setHeader("Content-Type", "application/json");
+    if (req.url === "/api/v1/commands/upload-code-index") {
+      expect(JSON.parse(current).payload.manifestHash).toBe(hash);
+      res.end(
+        JSON.stringify({
+          result: {
+            uploadId: "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
+            hash: JSON.parse(current).payload.indexHash,
+            ready: true,
+          },
+        }),
+      );
+      return;
+    }
+    body = current;
     res.end('{"activation":"active"}');
   });
   server.listen(0, "127.0.0.1");
@@ -245,11 +268,13 @@ it("MF-004/MF-005: waits for the deployed hash, then registers exactly the valid
     expect(requests).toEqual([
       "/.well-known/cms-manifest-hash",
       "/.well-known/cms-manifest-hash",
+      "/api/v1/commands/upload-code-index",
       "/api/v1/commands/register-manifest",
     ]);
     expect(JSON.parse(body).payload).toEqual({
       environment: "staging",
       manifest: JSON.parse(await readFile(join(options.directory, "manifest.json"), "utf8")),
+      codeIndexUploadId: "0192f1c7-4b1e-7c2b-9d10-3b5f2a9e4c11",
     });
     vi.stubEnv("CMS_SERVICE_TOKEN_FILE", options.tokenFile);
     await runCli([
@@ -315,7 +340,7 @@ it("MF-004: HTTP failure reports status without the server's private response", 
         ...options,
         baseUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
       }),
-    ).rejects.toThrow("CMS_MANIFEST_REGISTER_FAILED: HTTP 403");
+    ).rejects.toThrow("CMS_CODE_INDEX_UPLOAD_FAILED: HTTP 403");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));

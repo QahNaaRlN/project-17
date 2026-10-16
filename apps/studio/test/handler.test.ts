@@ -14,6 +14,50 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-266: capability proxy pins environment and checks request scope before writes", async () => {
+  const { origin, post, fetcher } = await setup();
+  const root = "/api/studio/api/v1/capability-requests";
+  expect(
+    (await fetch(origin + root + "?environment=staging&status=submitted&limit=25")).status,
+  ).toBe(200);
+  expect((await fetch(origin + root + "?environment=production")).status).toBe(403);
+  expect((await fetch(origin + root + "?environment=staging&unknown=x")).status).toBe(400);
+  expect(
+    (await fetch(origin + root + "/" + documentId + "/context-pack?environment=staging&version=2"))
+      .status,
+  ).toBe(200);
+  fetcher.mockImplementation(async () => Response.json({ environment: "staging" }));
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/submit-capability-request", {
+        payload: { id: documentId },
+        reason: "Explicit submit",
+      })
+    ).status,
+  ).toBe(200);
+  fetcher.mockImplementation(async () => Response.json({ environment: "production" }));
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/submit-capability-request", {
+        payload: { id: documentId },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/create-capability-request", {
+        payload: { environment: "production" },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/resolve-capability-request", {
+        payload: { id: "invalid" },
+      })
+    ).status,
+  ).toBe(400);
+});
 it("STU-167/170: publication proxy enforces environment and guarded rollback", async () => {
   const { origin, post, fetcher } = await setup();
   const root = "/api/studio/api/v1/publication-history";

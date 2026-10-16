@@ -315,3 +315,14 @@ Gateway проверяет всю capability, текущую версию, фа�
 Статусы: 403 ASSET_URL_INVALID, 404 ASSET_IMAGE_NOT_FOUND, 503
 ASSET_IMAGES_UNAVAILABLE, 502 ASSET_IMAGE_UPSTREAM; любые ошибки `no-store`.
 Параметры и CDN политика: [пакет выдачи](../asset-delivery-images.md).
+
+### Missing Capability v1
+
+Подключены команды create/update/submit-capability-request,
+refresh-capability-context, resolve-capability-request и сервисная upload-code-index.
+Query `/api/v1/capability-requests` поддерживает фильтры и стабильный cursor;
+`/{id}`, `/{id}/context-preview`, `/{id}/context-pack?version=N` возвращают
+доступную актору проекцию, предварительный контекст и неизменяемый JSON export.
+Ответы no-store; скачивание — attachment с X-Context-Hash. Права проверяются
+по текущей сессии; code.propose не открывает живые страницы/CS.
+Точные payload, ошибки и состояния: [контракт пакета](../studio-missing-capability.md).
