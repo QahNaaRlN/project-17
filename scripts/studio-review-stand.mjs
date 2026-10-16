@@ -151,6 +151,7 @@ const author = await command("create-role", {
     "design.read",
     "content.read",
     "design.compose",
+    ...(process.env.CMS_REVIEW_BEHAVIOR === "true" ? ["behavior.use"] : []),
     "content.write",
     "asset.write",
     "content.publish",

@@ -21,6 +21,7 @@ import { PresencePanel } from "./presence.js";
 import { DeferredPanel } from "./deferred-panel.js";
 import { ContentBindingsPanel } from "./content-bindings-panel.js";
 import { DataSourcesPanel } from "./data-sources-panel.js";
+import { BehaviorPanel } from "./behavior-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -504,6 +505,7 @@ export function Studio({
   const disabled =
     busy ||
     jsonDirty ||
+    !!state.dirtyFields["property-behavior"] ||
     !session?.review.canEdit ||
     session?.changeset.state !== "open" ||
     tree.find((item) => item.id === state.selected)?.locked === true;
@@ -824,6 +826,7 @@ export function Studio({
               <aside className="properties">
                 <ContentBindingsPanel {...{ api, editor, rights }} />
                 <DataSourcesPanel {...{ editor, rights }} />
+                <BehaviorPanel {...{ editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (
                   <>
@@ -935,9 +938,13 @@ export function Studio({
                   )}
                 </>
               )}
-              {session && (!session.review.canEdit || session.changeset.state !== "open") && (
-                <p>{t.readOnly}</p>
-              )}
+              {session &&
+                (!(
+                  session.review.canEdit ||
+                  session.review.canEditBehavior ||
+                  session.review.canEditCondition
+                ) ||
+                  session.changeset.state !== "open") && <p>{t.readOnly}</p>}
               {state.error && (
                 <p role="alert">
                   {errorText[state.locale][state.error] ?? t.problem}{" "}

@@ -358,6 +358,8 @@ export function createEditor(
         (op) =>
           op.type === "document.setContent" ||
           op.type === "document.setDataSource" ||
+          op.type === "node.setBehavior" ||
+          op.type === "node.setCondition" ||
           (op.type === "node.setBinding" &&
             /^\$(data|item)(\.|$)/.test(String(op.payload.binding))) ||
           (op.type === "node.setBinding" &&
@@ -373,6 +375,10 @@ export function createEditor(
     }
     if (store.getState().dirtyFields.json && source !== "json") {
       store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
+    if (store.getState().dirtyFields["property-behavior"]) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
       return;
     }
     const state = store.getState(),
@@ -673,19 +679,27 @@ export function createEditor(
       !session?.record ||
       !document ||
       state.status !== "ready" ||
-      !session.review.canEdit ||
+      !operations.every((op) =>
+        op.type === "node.setBehavior"
+          ? session.review.canEditBehavior === true
+          : op.type === "node.setCondition"
+            ? session.review.canEditCondition === true
+            : session.review.canEdit,
+      ) ||
       session.changeset.state !== "open"
     )
       return;
     const submittingFields = new Set(
       operations.flatMap((op) =>
-        op.payload.nodeId === state.selected && op.type === "node.setBinding"
-          ? ["property-" + String(op.payload.prop)]
-          : op.payload.nodeId === state.selected &&
-              op.type === "node.setProps" &&
-              document.nodes[state.selected!]?.type === "Repeat"
-            ? ["property-repeatSettings"]
-            : [],
+        op.type === "node.setBehavior" || op.type === "node.setCondition"
+          ? ["property-behavior"]
+          : op.payload.nodeId === state.selected && op.type === "node.setBinding"
+            ? ["property-" + String(op.payload.prop)]
+            : op.payload.nodeId === state.selected &&
+                op.type === "node.setProps" &&
+                document.nodes[state.selected!]?.type === "Repeat"
+              ? ["property-repeatSettings"]
+              : [],
       ),
     );
     if (
@@ -982,6 +996,10 @@ export function createEditor(
       watchHandshake();
     },
     mode(mode: EditorState["mode"]) {
+      if (fieldDirty() || contentDirty() || store.getState().dirtyFields.json) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return;
+      }
       store.setState({ mode });
       send("mode", { mode });
     },
@@ -1001,6 +1019,10 @@ export function createEditor(
       store.setState({ viewMode });
     },
     locale(locale: EditorState["locale"]) {
+      if (fieldDirty() || contentDirty() || store.getState().dirtyFields.json) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return;
+      }
       store.setState({ locale });
       if (store.getState().session && initialized) {
         send("init", {

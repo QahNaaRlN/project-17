@@ -29,6 +29,14 @@ func TestStudioReviewActionsAndObjects(t *testing.T) {
 		return r
 	}
 	r := get(e.Admin)
+	if !r.CanEditBehavior || !r.CanEditCondition {
+		t.Fatal("missing operation flags", r)
+	}
+	behaviorOnly := e.Admin
+	behaviorOnly.Rights = auth.RightSet{auth.DesignRead: true, auth.BehaviorUse: true}
+	if r := get(behaviorOnly); r.CanEdit || !r.CanEditBehavior || r.CanEditCondition {
+		t.Fatal("behavior-only flags", r)
+	}
 	if r.Actions["submit"] != nil || r.Actions["publish"] == nil || len(r.Objects) != 1 || r.Objects[0].ID != doc || r.Objects[0].Kind != "page" {
 		t.Fatal(r)
 	}
@@ -37,10 +45,16 @@ func TestStudioReviewActionsAndObjects(t *testing.T) {
 		t.Fatal(string(raw))
 	}
 	outsider := e.Human("outsider", auth.ContentPublish)
+	if r := get(outsider); r.CanEditBehavior || r.CanEditCondition {
+		t.Fatal("non-owner flags", r)
+	}
 	if reason := get(outsider).Actions["submit"]; reason == nil || *reason != "CHANGESET_NOT_OWNER" {
 		t.Fatal(reason)
 	}
 	e.Must(e.Admin, "submit-changeset", map[string]any{"changesetId": cs, "expectedSeq": 1}, nil)
+	if r := get(e.Admin); r.CanEditBehavior || r.CanEditCondition {
+		t.Fatal("submitted edit flags", r)
+	}
 	if reason := get(e.Admin).Actions["approve"]; reason == nil || *reason != "APPROVAL_FORBIDDEN_ACTOR" {
 		t.Fatal(reason)
 	}

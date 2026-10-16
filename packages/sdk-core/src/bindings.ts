@@ -8,6 +8,8 @@ export interface BindingScope {
   index?: number;
   each?: unknown;
   data?: unknown;
+  /** Application-owned loader failures, separate from fields named "error". */
+  sourceErrors?: Record<string, string>;
   context?: { locale?: string; [key: string]: unknown };
 }
 const pathPattern =

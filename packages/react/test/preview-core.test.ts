@@ -371,3 +371,58 @@ it("STU-231/230: a foreign or invalid init cannot cancel an authorized source lo
   expect(f.controller.snapshot.document.nodes.text!.props).toEqual({ text: "valid" });
   expect(f.errors()).toContain("CMS_PREVIEW_INIT_INVALID");
 });
+
+it("STU-249: actions are blocked synchronously across loading, failure, recovery and disposal", async () => {
+  const onReady = vi.fn(),
+    f = await fixture({ onReady });
+  await f.receive("init", { sessionId: "session", locale: "ru", mode: "interact" });
+  expect(f.controller.interactive).toBe(true);
+  await f.receive("invalidate", { seq: -1, objectIds: [] });
+  expect(f.controller.interactive).toBe(true);
+  let finish!: (value: PreviewSnapshot) => void;
+  f.reload.mockImplementationOnce(
+    () =>
+      new Promise<PreviewSnapshot>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const load = f.receive("invalidate", { seq: 1, objectIds: ["document"] });
+  expect(f.controller.interactive).toBe(false);
+  expect(onReady).toHaveBeenLastCalledWith(false);
+  await vi.waitFor(() => expect(f.reload).toHaveBeenCalledTimes(1));
+  finish(await snapshot("fresh"));
+  await load;
+  expect(f.controller.interactive).toBe(true);
+  await f.receive("invalidate", { seq: 1, objectIds: ["document"] });
+  expect(f.controller.interactive).toBe(true);
+  f.reload.mockRejectedValueOnce(new Error("private failure"));
+  await f.controller.refresh();
+  expect(f.controller.interactive).toBe(false);
+  expect(f.controller.snapshot.document.nodes.text!.props).toEqual({ text: "fresh" });
+  await f.controller.refresh();
+  expect(f.controller.interactive).toBe(true);
+  f.controller.dispose();
+  expect(f.controller.interactive).toBe(false);
+});
+it("STU-249: a newer document invalidation cannot reactivate handlers from an older in-flight plan", async () => {
+  const f = await fixture();
+  await f.receive("init", { sessionId: "session", locale: "ru", mode: "interact" });
+  let finish!: (value: PreviewSnapshot) => void, signal!: AbortSignal;
+  f.reload.mockImplementationOnce((s: AbortSignal) => {
+    signal = s;
+    return new Promise<PreviewSnapshot>((resolve) => {
+      finish = resolve;
+    });
+  });
+  const old = f.receive("invalidate", { seq: 1, objectIds: ["document"] });
+  await vi.waitFor(() => expect(f.reload).toHaveBeenCalledTimes(1));
+  const next = f.receive("invalidate", { seq: 2, objectIds: ["document"] });
+  expect(signal.aborted).toBe(true);
+  expect(f.controller.interactive).toBe(false);
+  f.reload.mockResolvedValueOnce(await snapshot("latest"));
+  finish(await snapshot("stale"));
+  await Promise.all([old, next]);
+  expect(f.render).toHaveBeenCalledTimes(1);
+  expect(f.controller.snapshot.document.nodes.text!.props).toEqual({ text: "latest" });
+  expect(f.controller.interactive).toBe(true);
+});

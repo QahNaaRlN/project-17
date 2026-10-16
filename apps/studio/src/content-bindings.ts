@@ -2,6 +2,7 @@ import type { IrDocument, Node } from "@cms/ir";
 import type { Manifest, Type } from "@cms/manifest";
 import { contract } from "./structure.js";
 import { StudioError, type Operation } from "./types.js";
+import { behaviorDependencies } from "./behavior.js";
 
 export const simpleContentPath = /^\$content(?:\.[A-Za-z][A-Za-z0-9_]*){1,8}$/;
 const safe = (key: string) =>
@@ -134,6 +135,8 @@ export function sourceChange(
     blocked: string[] = [];
   const esc = (k: string) => k.replace(/~/g, "~0").replace(/\//g, "~1");
   const schemaChanged = doc.content?.schema !== content?.schema;
+  const after = { ...doc, content: content ?? undefined } as IrDocument;
+  const behaviorOps: Operation[] = [];
   function scan(v: unknown, pointer: string) {
     if (typeof v === "string" && v.startsWith("$content") && schemaChanged) blocked.push(pointer);
     else if (v && typeof v === "object")
@@ -155,8 +158,14 @@ export function sourceChange(
         affected.push({ pointer, nodeId: node.id, prop });
       } else scan(binding, pointer);
     }
-    scan(node.when, `/nodes/${esc(node.id)}/when`);
-    scan(node.on, `/nodes/${esc(node.id)}/on`);
+    if (schemaChanged) {
+      const change = behaviorDependencies(doc, after, manifest, target, node.id, ["$content"]);
+      blocked.push(...change.blocked);
+      behaviorOps.push(...change.operations);
+      affected.push(
+        ...change.affected.map((pointer) => ({ pointer, nodeId: node.id, prop: "on/when" })),
+      );
+    }
   }
   scan(doc.dataSources, "/dataSources");
   const operations: Operation[] = affected.map((item) => ({
@@ -164,6 +173,12 @@ export function sourceChange(
     target,
     payload: { nodeId: item.nodeId, prop: item.prop, binding: null },
   }));
+  operations.splice(
+    0,
+    operations.length,
+    ...operations.filter((op) => op.payload.prop !== "on/when"),
+    ...behaviorOps,
+  );
   operations.push({ type: "document.setContent", target, payload: { content } });
   if (operations.length > 200) blocked.push("/content");
   return { affected, blocked, operations };

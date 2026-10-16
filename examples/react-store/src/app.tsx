@@ -20,8 +20,12 @@ export function StoreApp({ initialModel }: AppProps) {
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const [interact, setInteract] = useState(!initialModel.preview);
+  const interaction = useRef(interact);
+  interaction.current = interact;
   const [favorites, setFavorites] = useState<string[]>([]);
   const [actionNotice, setActionNotice] = useState("");
+  const [previewFresh, setPreviewFresh] = useState(true);
+  const actionsReady = useRef(true);
   const request = useRef<AbortController | null>(null);
   const alive = useRef(true);
   const latest = useRef(model);
@@ -37,6 +41,9 @@ export function StoreApp({ initialModel }: AppProps) {
       bridge: Awaited<ReturnType<typeof attachPreviewBridge>> | undefined,
       fresh: StoreModel | undefined;
     setInteract(false);
+    interaction.current = false;
+    actionsReady.current = false;
+    setPreviewFresh(false);
     void attachPreviewBridge({
       root,
       studioOrigin: initial.studioOrigin,
@@ -45,7 +52,16 @@ export function StoreApp({ initialModel }: AppProps) {
       locale: latest.current.locale ?? "ru",
       ...(initial.changesetId ? { changesetId: initial.changesetId } : {}),
       onMode: (mode) => {
-        if (!stopped) setInteract(mode === "interact");
+        if (!stopped) {
+          interaction.current = mode === "interact";
+          setInteract(mode === "interact");
+        }
+      },
+      onReady: (ready) => {
+        if (!stopped) {
+          actionsReady.current = ready;
+          setPreviewFresh(ready);
+        }
       },
       reload: async (signal, locale) => {
         const response = await fetch("/api/store?locale=" + encodeURIComponent(locale), {
@@ -70,8 +86,14 @@ export function StoreApp({ initialModel }: AppProps) {
           breakpoints: registry.breakpoints,
           tokens: storeTokens,
           scope: {
-            context: { locale: current.locale ?? "ru", store: catalog },
+            context: {
+              locale: current.locale ?? "ru",
+              store: catalog,
+              route: { path: snapshot.path, params: {} },
+              viewer: { authenticated: false },
+            },
             data: current.bridge!.data,
+            ...(current.bridge!.sourceErrors ? { sourceErrors: current.bridge!.sourceErrors } : {}),
             content: current.bridge!.data.content as Record<string, unknown> | undefined,
           },
         });
@@ -84,7 +106,7 @@ export function StoreApp({ initialModel }: AppProps) {
         if (
           plan.diagnostics.some(
             (d) =>
-              !/^(BINDING_|CONTENT_|SCHEMA_|CMS_(IMAGE_UNAVAILABLE$|SOURCE_|REPEAT_|DATA_VALUE_INVALID$))/.test(
+              !/^(BINDING_|CONTENT_|SCHEMA_|CMS_(IMAGE_UNAVAILABLE$|SOURCE_|REPEAT_|DATA_VALUE_INVALID$|ACTION_|EVENT_|VALUE_))/.test(
                 d.code,
               ),
           )
@@ -195,6 +217,9 @@ export function StoreApp({ initialModel }: AppProps) {
           </Button>
         </div>
       </div>
+      {model.preview && !previewFresh && (
+        <p role="status">Предпросмотр обновляется. Действия временно недоступны.</p>
+      )}
       <header className="site-header">
         <a className="brand" href="#home">
           {c?.brand ?? "Тихая форма"}
@@ -250,6 +275,7 @@ export function StoreApp({ initialModel }: AppProps) {
                 actions={registry.actions}
                 preview={model.preview}
                 mode={interact ? "interact" : "design"}
+                canInteract={() => actionsReady.current && interaction.current}
                 app={{
                   favorite(id: string, title: string) {
                     const already = favorites.includes(id);

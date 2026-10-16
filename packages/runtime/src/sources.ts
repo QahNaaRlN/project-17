@@ -2,6 +2,7 @@ import type { Fields, Type } from "@cms/manifest";
 import type { DataSourceUse } from "@cms/ir";
 import type { BindingScope } from "@cms/core";
 import { operands } from "./actions.js";
+import { sourceFailure } from "./source-error.js";
 import { fieldValue, fieldValues, jsonValue, object, type ReadonlyContract } from "./values.js";
 
 export interface PageItems<Item = unknown> {
@@ -119,7 +120,7 @@ export async function loadSource(
         : error instanceof Error && error.message === "CMS_VALUE_INVALID"
           ? "CMS_SOURCE_PARAMS_INVALID"
           : "CMS_SOURCE_FAILED";
-    return { error: { code } };
+    return sourceFailure(code);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (cancel) options.signal?.removeEventListener("abort", cancel);
@@ -138,7 +139,7 @@ export async function loadSources(
       entries.map(async ([key, use]) => [
         key,
         ["content", "constructor", "prototype", "__proto__"].includes(key)
-          ? { error: { code: "CMS_SOURCE_KEY_INVALID" } }
+          ? sourceFailure("CMS_SOURCE_KEY_INVALID")
           : await loadSource(use, sources, scope, options),
       ]),
     ),

@@ -476,7 +476,7 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID, changesetID u
 		if oa.Type == "document.setContent" && !set.Has(auth.ContentRead) {
 			violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(auth.ContentRead)})
 		}
-		if oa.Type == "document.setDataSource" && !set.Has(auth.ContentRead) {
+		if (oa.Type == "document.setDataSource" || oa.Type == "node.setBinding" || oa.Type == "node.setBehavior" || oa.Type == "node.setCondition") && !set.Has(auth.ContentRead) {
 			if err := changes.RequirePrimaryRead(ctx, q, auth.Actor{Rights: set}, changesetID); err != nil {
 				var domain *commandbus.Error
 				if !errors.As(err, &domain) || domain.Code != "FORBIDDEN" {

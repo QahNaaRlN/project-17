@@ -79,6 +79,13 @@ func checkDataEdits(before, after map[string]any, fail func(string, string)) {
 			childSources := inherited
 			if node["type"] == "Repeat" {
 				childSources = used
+			} else {
+				childSources = map[string]bool{}
+				for key := range inherited {
+					childSources[key] = true
+				}
+				// Ancestor visibility affects every locked descendant.
+				refs(node["when"], childSources)
 			}
 			for _, child := range array(node["children"]) {
 				walk(child.(string), locked, childSources)

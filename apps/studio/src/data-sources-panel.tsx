@@ -25,7 +25,7 @@ import {
 import { StudioError } from "./types.js";
 
 type ParamMode = "omit" | "literal" | "path" | "null" | "legacy";
-function Parameter({
+export function Parameter({
   name,
   schema,
   value,

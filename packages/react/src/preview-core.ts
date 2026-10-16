@@ -26,6 +26,8 @@ export interface PreviewControllerOptions {
   reload: (signal: AbortSignal, locale: string) => Promise<PreviewSnapshot>;
   render: (snapshot: PreviewSnapshot) => Promise<void>;
   onMode?: (mode: PreviewMode) => void;
+  /** Synchronous gate for application-owned native events during plan transitions. */
+  onReady?: (ready: boolean) => void;
   onSelect?: (node: string | null) => void;
   onHover?: (node: string | null) => void;
   onZones?: (enabled: boolean) => void;
@@ -107,10 +109,16 @@ export async function createPreviewController(options: PreviewControllerOptions)
     revision = 0,
     contextReloadNeeded = false,
     sequence = -1,
+    requestedSequence = -1,
     pending = 0,
     serial = Promise.resolve(),
     counter = 0;
   let activeReload: AbortController | undefined;
+  let fresh = true;
+  function freshness(value: boolean) {
+    fresh = value;
+    options.onReady?.(value);
+  }
   const lifecycle = new AbortController(),
     now = options.now ?? Date.now;
   function emit(type: string, payload: Record<string, unknown>) {
@@ -133,9 +141,11 @@ export async function createPreviewController(options: PreviewControllerOptions)
     await options.render(value);
     if (disposed || expectedRevision !== revision) return;
     snapshot = value;
+    freshness(true);
     emit("rendered", { hash: snapshot.hash, durationMs: Math.max(0, now() - started) });
   }
   async function reload() {
+    freshness(false);
     const controller = new AbortController(),
       expectedRevision = revision;
     activeReload = controller;
@@ -277,6 +287,7 @@ export async function createPreviewController(options: PreviewControllerOptions)
       emit("error", { code });
     }
   }
+  freshness(true);
   ready();
   emit("rendered", { hash: snapshot.hash, durationMs: 0 });
   return {
@@ -286,6 +297,9 @@ export async function createPreviewController(options: PreviewControllerOptions)
     get mode() {
       return mode;
     },
+    get interactive() {
+      return !disposed && fresh && initialized && mode === "interact";
+    },
     receive(event: { origin: string; source: unknown; data: unknown }): Promise<void> {
       if (disposed || event.origin !== origin || event.source !== options.parent || pending >= 32)
         return Promise.resolve();
@@ -293,6 +307,42 @@ export async function createPreviewController(options: PreviewControllerOptions)
       // Invalid/foreign messages cannot interrupt a legitimate load.
       try {
         const data = safeJson(event.data);
+        if (
+          initialized &&
+          record(data) &&
+          data.cms === "preview" &&
+          data.v === 1 &&
+          text(data.id) &&
+          record(data.payload)
+        ) {
+          const p = data.payload;
+          const invalidation =
+            data.type === "invalidate" &&
+            Number.isSafeInteger(p.seq) &&
+            Number(p.seq) > Math.max(sequence, requestedSequence) &&
+            Array.isArray(p.objectIds) &&
+            p.objectIds.length <= 5000 &&
+            p.objectIds.every((id) => text(id));
+          const patch =
+            data.type === "document.patch" &&
+            p.documentId === snapshot.documentId &&
+            hash(p.baseHash) &&
+            hash(p.hash);
+          if (
+            invalidation ||
+            patch ||
+            (data.type === "token.refresh" && options.refreshToken) ||
+            (data.type === "navigate" &&
+              options.navigate &&
+              typeof p.path === "string" &&
+              previewPath(p.path) === p.path)
+          ) {
+            if (invalidation) requestedSequence = Number(p.seq);
+            revision++;
+            activeReload?.abort();
+            freshness(false);
+          }
+        }
         if (
           record(data) &&
           data.cms === "preview" &&
@@ -312,6 +362,7 @@ export async function createPreviewController(options: PreviewControllerOptions)
             requestedLocale = payload.locale;
             revision++;
             contextReloadNeeded = true;
+            freshness(false);
             activeReload?.abort();
           }
         }
@@ -335,6 +386,9 @@ export async function createPreviewController(options: PreviewControllerOptions)
     notify: emit,
     refresh(): Promise<void> {
       if (disposed) return Promise.resolve();
+      revision++;
+      activeReload?.abort();
+      freshness(false);
       const expectedRevision = revision;
       serial = serial
         .then(async () => {
@@ -347,6 +401,7 @@ export async function createPreviewController(options: PreviewControllerOptions)
     },
     dispose() {
       disposed = true;
+      freshness(false);
       lifecycle.abort();
       activeReload?.abort();
     },

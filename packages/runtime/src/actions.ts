@@ -3,6 +3,7 @@ import { readPath, type BindingScope } from "@cms/core";
 import type { Node, Operand, ActionArg } from "@cms/ir";
 import { fieldValues, jsonValue, object, type ReadonlyContract } from "./values.js";
 import { linkHref } from "./plan.js";
+import { sourceError } from "./source-error.js";
 
 export interface ActionContext<App = unknown> {
   app: App;
@@ -25,6 +26,46 @@ export interface PlannedAction {
   args: Record<string, unknown>;
 }
 export type PlannedEvents = Record<string, PlannedAction[]>;
+export function actionTarget(
+  node: string,
+  target: string,
+  nodes: Record<string, Node>,
+  prefix: string,
+): string {
+  if (!Object.hasOwn(nodes, target)) throw new Error("CMS_ACTION_TARGET_INVALID");
+  // Preserve external/composed prefixes. Repeat segments belong only to targets
+  // in that same template; an outer target has no current-item prefix.
+  const parents = new Map<string, string>();
+  for (const n of Object.values(nodes))
+    for (const child of [...(n.children ?? []), ...Object.values(n.slots ?? {}).flat()])
+      parents.set(child, n.id);
+  const ancestors = new Set<string>();
+  let at = target;
+  while (parents.has(at)) {
+    const parent = parents.get(at)!;
+    if (ancestors.has(parent)) break;
+    ancestors.add(parent);
+    at = parent;
+  }
+  const segments = prefix.split("/");
+  if (Object.hasOwn(nodes, node)) {
+    for (const id of ancestors) {
+      if (
+        nodes[id]?.type === "Repeat" &&
+        !segments.some((part) => part.startsWith(id + ":") || part === id)
+      )
+        throw new Error("CMS_ACTION_TARGET_INVALID");
+    }
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const id = segments[i]!.split(":")[0]!;
+      if (nodes[id]?.type === "Repeat" && !ancestors.has(id)) {
+        if (segments[i + 1] === "empty") segments.splice(i, 2);
+        else segments.splice(i, 1);
+      }
+    }
+  }
+  return segments.join("/") + target;
+}
 export interface ActionError {
   code: string;
   action: string;
@@ -103,11 +144,15 @@ export function planEvents(
     const chain = Array.isArray(value) ? value : [value];
     if (!chain.length || chain.length > 8) throw new Error("CMS_ACTION_CHAIN_INVALID");
     result[event] = chain.map((item) => {
+      if (sourceError(item.args, scope)) throw new Error("CMS_ACTION_SOURCE_UNAVAILABLE");
       const args = operationArgs(item.action, operands(item.args ?? {}, scope), actions);
       if (item.action === "navigate" && object(args.to) && args.to.kind === "anchor") {
         const target = String(args.to.node);
         if (!Object.hasOwn(nodes, target)) throw new Error("CMS_ACTION_TARGET_INVALID");
-        args.to = { kind: "url", url: `#${encodeURIComponent(prefix + target)}` };
+        args.to = {
+          kind: "url",
+          url: `#${encodeURIComponent(actionTarget(node.id, target, nodes, prefix))}`,
+        };
       }
       if (["openModal", "closeModal", "scrollTo"].includes(item.action)) {
         const target = String(args.target);
@@ -116,7 +161,7 @@ export function planEvents(
           (item.action !== "scrollTo" && nodes[target]!.type !== "Modal")
         )
           throw new Error("CMS_ACTION_TARGET_INVALID");
-        args.target = prefix + target;
+        args.target = actionTarget(node.id, target, nodes, prefix);
       }
       if (item.action === "data.loadMore" && !sourceKeys.includes(String(args.source)))
         throw new Error("CMS_ACTION_TARGET_INVALID");
@@ -130,10 +175,15 @@ export async function executeActions(
   chain: readonly PlannedAction[],
   actions: readonly RuntimeAction[],
   context: ActionContext,
-  options: { mode?: "design" | "interact"; onError?: (error: ActionError) => void } = {},
+  options: {
+    mode?: "design" | "interact";
+    isActive?: () => boolean;
+    onError?: (error: ActionError) => void;
+  } = {},
 ): Promise<boolean> {
   if (options.mode === "design") return false;
   for (const item of chain) {
+    if (options.isActive && !options.isActive()) return false;
     try {
       // Scoped DOM IDs can contain Repeat/Composed prefixes; they were checked in planEvents.
       const targetAction = ["openModal", "closeModal", "scrollTo"].includes(item.action);

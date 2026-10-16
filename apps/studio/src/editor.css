@@ -218,10 +218,39 @@
   }
   .editor-save-state {
     flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .editor-save-state .studio-badge {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
   }
   .editor-surface .canvas-scroll {
     padding: 16px;
     min-height: 450px;
     max-height: 650px;
   }
+}
+/* Nested condition forms stay usable at the editor's 375px breakpoint. */
+.behavior-panel,
+.behavior-panel fieldset,
+.behavior-panel li {
+  min-width: 0;
+}
+.behavior-panel fieldset {
+  margin: 8px 0;
+  padding: 8px;
+}
+.behavior-panel pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.behavior-panel select,
+.behavior-panel input {
+  max-width: 100%;
+}
+.behavior-panel ol {
+  padding-left: 20px;
 }

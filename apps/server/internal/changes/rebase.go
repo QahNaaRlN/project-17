@@ -260,7 +260,7 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 	primaryTargets := map[uuid.UUID]bool{}
 	for _, plan := range plans {
 		for _, step := range plan.ops {
-			if step.status == "applied" && (step.op.Type == ops.DocumentSetContent || step.op.Type == ops.NodeSetBinding || step.op.Type == ops.DocumentSetDataSource) {
+			if step.status == "applied" && (step.op.Type == ops.DocumentSetContent || step.op.Type == ops.NodeSetBinding || step.op.Type == ops.DocumentSetDataSource || step.op.Type == ops.NodeSetBehavior || step.op.Type == ops.NodeSetCondition) {
 				primaryTargets[plan.id] = true
 			}
 		}

@@ -75,6 +75,8 @@ export function fixture(): Session {
     ...session,
     review: {
       canEdit: true,
+      canEditBehavior: true,
+      canEditCondition: true,
       needsAttention: false,
       changeset: session.changeset,
       risk: null,

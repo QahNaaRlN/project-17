@@ -2,6 +2,7 @@ import type { IrDocument } from "@cms/ir";
 import type { BindingScope } from "@cms/core";
 import { preparePage, type PlanOptions, type RenderPlan } from "./plan.js";
 import { loadSources, type RuntimeSource, type SourceOptions } from "./sources.js";
+import { sourceFailures } from "./source-error.js";
 
 export interface DataPlanOptions extends PlanOptions {
   sources?: readonly RuntimeSource[];
@@ -24,6 +25,18 @@ export async function preparePageWithData(
           pending.set(instance, { doc, scope: appScope });
         return {
           ...appScope,
+          ...(data.has(instance)
+            ? {
+                sourceErrors: {
+                  ...Object.fromEntries(
+                    Object.entries(appScope.sourceErrors ?? {}).filter(
+                      ([key]) => !Object.hasOwn(data.get(instance)!, key),
+                    ),
+                  ),
+                  ...sourceFailures(data.get(instance)!),
+                },
+              }
+            : {}),
           data: {
             ...(appScope.data as Record<string, unknown>),
             ...Object.fromEntries(

@@ -1,8 +1,8 @@
 import { t } from "@cms/component-registry";
 const string = t.string().required().max(2000);
 export const productField = t.object({
-  id: string,
-  title: string,
+  id: t.string().required().max(64),
+  title: t.string().required().max(200),
   description: string,
   material: string,
   category: string,

@@ -11,6 +11,7 @@ import { contract, location, destinations, insertion, type Place } from "./struc
 import { applyOperations } from "./operations.js";
 import { layers } from "./fields.js";
 import { StudioError, type Operation } from "./types.js";
+import { behaviorDependencies } from "./behavior.js";
 
 export const safeKey = (key: string) =>
   /^[A-Za-z][A-Za-z0-9_]*$/.test(key) &&
@@ -164,6 +165,16 @@ export function parameterFields(doc: IrDocument, manifest: Manifest): DataField[
   ];
 }
 export function literal(schema: Type, raw: string): unknown {
+  if (schema.type === "date" || schema.type === "datetime") {
+    if (
+      !Number.isFinite(Date.parse(raw)) ||
+      (schema.type === "date"
+        ? !/^\d{4}-\d{2}-\d{2}$/.test(raw) || new Date(raw).toISOString().slice(0, 10) !== raw
+        : !/^\d{4}-\d{2}-\d{2}T/.test(raw))
+    )
+      throw new StudioError("FIELD_INVALID");
+    return raw;
+  }
   if (schema.type === "number") {
     const value = raw.trim() ? Number(raw) : NaN;
     if (
@@ -196,7 +207,7 @@ export function literal(schema: Type, raw: string): unknown {
   throw new StudioError("FIELD_INVALID");
 }
 export const supportsLiteral = (schema: Type) =>
-  ["string", "text", "number", "boolean", "enum"].includes(schema.type);
+  ["string", "text", "number", "boolean", "enum", "date", "datetime"].includes(schema.type);
 export function sourceSupported(source: NonNullable<Manifest["dataSources"]>[string]): boolean {
   return Object.values(source.params ?? {}).every(
     (type) => !type.required || "default" in type || supportsLiteral(type),
@@ -284,8 +295,10 @@ export function sourceChange(
       if (!next || !compatible(next.schema, receiver))
         removals.push(...dataBinding(target, node, prop, null));
     }
-    references(node.when, `/nodes/${escape(node.id)}/when`, prefixes, blocked);
-    references(node.on, `/nodes/${escape(node.id)}/on`, prefixes, blocked);
+    const behavior = behaviorDependencies(doc, after, manifest, target, node.id, prefixes);
+    affected.push(...behavior.affected);
+    blocked.push(...behavior.blocked);
+    removals.push(...behavior.operations);
     if (node.type === "Repeat" && descendants.has(node.id) && !repeats.has(node.id))
       blocked.push(`/nodes/${escape(node.id)}`);
   }
@@ -355,6 +368,14 @@ export function insertRepeat(target: string, place: Place, tree: NestedNode): Op
 export function scopeProblems(before: IrDocument, after: IrDocument, manifest: Manifest): string[] {
   const problems: string[] = [];
   for (const node of Object.values(after.nodes)) {
+    if (before.nodes[node.id]) {
+      const change = behaviorDependencies(before, after, manifest, "", node.id, ["$data", "$item"]);
+      problems.push(
+        ...change.operations.map(
+          (op) => `/nodes/${escape(node.id)}/${op.type === "node.setBehavior" ? "on" : "when"}`,
+        ),
+      );
+    }
     for (const [prop, value] of Object.entries(node.bindings ?? {})) {
       if (typeof value !== "string" || !directPath.test(value)) continue;
       const old = bindingFields(before, manifest, node.id).fields.find((f) => f.path === value);

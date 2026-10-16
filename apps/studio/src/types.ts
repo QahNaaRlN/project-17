@@ -322,6 +322,8 @@ export const workflowActions = [
 export type WorkflowAction = (typeof workflowActions)[number];
 export interface Review {
   canEdit: boolean;
+  canEditBehavior?: boolean;
+  canEditCondition?: boolean;
   needsAttention: boolean;
   changeset: Changeset;
   risk: "low" | "medium" | "high" | null;

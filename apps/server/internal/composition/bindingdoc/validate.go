@@ -414,6 +414,18 @@ func (c *checker) action(a object, p, id string, s scopes) {
 		}
 	}
 	c.arguments(values, contracts, p+"/args", id, s, "ACTION_ARGS_INVALID")
+	// Direct action operands carry typed values without formatter coercion.
+	for _, key := range keys(values) {
+		if path, ok := values[key].(string); ok {
+			target := obj(contracts[key])
+			if target != nil {
+				source := c.path(path, p+ir.Pointer("args", key), id, s)
+				if source != nil && !SimpleContentCompatible(source, target) {
+					c.add("ACTION_ARGS_INVALID", p+ir.Pointer("args", key), id, nil)
+				}
+			}
+		}
+	}
 	if name == "data.loadMore" {
 		source := stringValue(obj(args["source"])["lit"])
 		d := obj(obj(c.doc["dataSources"])[source])

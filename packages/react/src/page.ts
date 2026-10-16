@@ -28,6 +28,7 @@ export interface CmsPageProps {
   services?: Omit<ActionContext, "app" | "node" | "instance">;
   mode?: "design" | "interact";
   onActionError?: (error: ActionError) => void;
+  canInteract?: () => boolean;
   preview?: boolean;
 }
 
@@ -41,6 +42,7 @@ export function CmsPage({
   services = {},
   mode = plan.interactionMode ?? "interact",
   onActionError,
+  canInteract,
   preview = plan.preview ?? false,
 }: CmsPageProps): ReactNode {
   function render(node: PlanNode): ReactNode {
@@ -94,7 +96,11 @@ export function CmsPage({
                   },
                   ...services,
                 },
-                { mode, ...(onActionError ? { onError: onActionError } : {}) },
+                {
+                  mode,
+                  ...(canInteract ? { isActive: canInteract } : {}),
+                  ...(onActionError ? { onError: onActionError } : {}),
+                },
               ),
           ]),
         )
