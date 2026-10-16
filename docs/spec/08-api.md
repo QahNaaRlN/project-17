@@ -34,9 +34,14 @@ by:entity в `data.content` Delivery page. Параметр `locale` выбир�
 
 Пакет [источников данных](../studio-data-sources.md), STU-219…236,
 реализует `document.setDataSource` внутри `apply-operations`, inverse/rebase
-по ключу подключения и формы параметров. Он подготовлен в ветке
-`feature/studio-data-sources`; слияние в dev ещё не выполнено. Исполнение loader остаётся
+по ключу подключения и формы параметров. Он слит в dev в
+[PR #58](https://github.com/QahNaaRlN/project-17/pull/58); CI PR и merge-коммита пройдены. Исполнение loader остаётся
 на серверной стороне приложения; новый CMS endpoint исполнения не вводится.
+
+Следующая [спецификация действий и условий](../studio-behavior-conditions.md),
+STU-237…254, использует существующие node.setBehavior/node.setCondition и
+планирует отдельные advisory-права редактирования, строгие аргументы и повторные
+проверки доступа. Эти дополнения и формы ещё не реализованы.
 
 ## 2. Аутентификация
 

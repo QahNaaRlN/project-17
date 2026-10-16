@@ -1,7 +1,12 @@
 # Studio: источники данных и повторяющиеся блоки
 
-Статус: реализация STU-219…236 подготовлена в `feature/studio-data-sources`;
-слияние в dev ещё не выполнено. Проверки и приёмка перечислены в §8.
+Статус: STU-219…236 реализованы и слиты в `dev` 2026-10-16 в
+[PR #58](https://github.com/QahNaaRlN/project-17/pull/58), merge
+`c4b8286df779dbf1f41f0c23f46d73e7c7249f84`.
+[CI итогового SHA PR](https://github.com/QahNaaRlN/project-17/actions/runs/38894564872)
+`4f921bb1a4bed741f605fb5f2055c99be680a6b3` и
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/38895859007)
+пройдены: Check (TS + Go) и Docker image. Проверки и приёмка перечислены в §8.
 Дата: 2026-10-16. Проверенная основа реализации: `origin/dev` на
 `e9b70bcb7647a41ba8b0d24c0fefbaeed3293137`, после слияния
 [PR #57](https://github.com/QahNaaRlN/project-17/pull/57).
@@ -9,6 +14,9 @@
 Пакет продолжает [привязки контента](studio-content-bindings.md),
 [источники runtime](runtime-actions-data.md), [структуру](studio-structure.md)
 и [preview bridge](preview-bridge.md). Figma не требуется.
+
+Следующий ручной пакет — [действия и условия показа](studio-behavior-conditions.md),
+STU-237…254. Спецификация готова; реализация и приёмка не начаты.
 
 ## 1. Результат и границы
 
@@ -279,8 +287,9 @@ Studio coverage: statements 92,34%, branches 86,51%, functions 92,16%, lines 93,
 записи. После исправлений локально пройдены 299 тестов Studio; coverage:
 statements 92,59%, branches 86,49%, functions 92,54%, lines 93,91%.
 Полный `pnpm check` в Windows остановился только на Go `-race`: нет CGO.
-Linux race и общий порог Go coverage 95% должны пройти в CI конечного SHA;
-локальная проверка не заменяет этот gate. Пороги не снижались.
+Linux race и общий порог Go coverage 95% пройдены в CI итогового SHA PR и
+merge-коммита, вместе со сборками и браузерными сценариями. Локальные ограничения
+Windows не считаются прохождением этих проверок. Пороги не снижались.
 
 Общие Go/TS fixtures — [studio-data-sources.json](../packages/ir/fixtures/studio-data-sources.json).
 Проверки формы, параметров, зависимостей, конфликтов и прав находятся в
@@ -316,10 +325,11 @@ page `01a143ea-a0aa-7718-a101-5ccb507a2fa9`, manifest приложения
 Приёмка выполнена на рабочем дереве ветки до коммита; её нельзя объявлять CI
 конечного SHA. Отчёты не содержат секретов и не добавляются в репозиторий.
 
-Зависимости реализации: активный manifest с params/result и совместимым registry
+Зависимости эксплуатации: активный manifest с params/result и совместимым registry
 приложения, серверные операции/права, уже слитый PR #57, существующий preview
 bridge. Для приёмки дополнительно нужны схема Collection, два OIDC-пользователя,
 PostgreSQL, реальные файлы/image delivery и управляемый локальный loader.
-Figma и production не блокируют этот пакет. После него остаются конструктор
-поведения/условий, advanced expressions, component.extract, Missing Capability
-и измерения NFR; их порядок уточняется по фактическому `dev` после приёмки.
+Figma и production не блокируют этот пакет. Следующим ручным этапом выбран
+конструктор [действий и условий](studio-behavior-conditions.md), STU-237…254.
+Advanced expressions, component.extract, Missing Capability и измерения NFR
+остаются отдельными пакетами; полный M4 и IR-044 этим слиянием не закрыты.
