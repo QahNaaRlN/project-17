@@ -335,9 +335,18 @@ export function repeatTree(
   };
 }
 export function repeatPlaces(doc: IrDocument, manifest: Manifest, tree: NestedNode) {
-  return destinations(doc, manifest, tree).filter(
-    (p) => doc.nodes[p.parentId]?.type !== "Repeat" && !itemScope(doc, manifest, p.parentId),
-  );
+  return destinations(doc, manifest, tree).filter((place) => {
+    let id = place.parentId;
+    const seen = new Set<string>();
+    while (!seen.has(id)) {
+      seen.add(id);
+      if (doc.nodes[id]?.type === "Repeat") return false;
+      const parent = location(doc, id);
+      if (!parent) return true;
+      id = parent.parentId;
+    }
+    return false;
+  });
 }
 export function insertRepeat(target: string, place: Place, tree: NestedNode): Operation {
   return insertion(target, place, tree);

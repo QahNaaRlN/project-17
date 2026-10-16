@@ -168,11 +168,27 @@ it("STU-225/226/227/228: Repeat creates one template, stable key, empty outside 
     (f) => f.path === "$data.featured.items",
   )!;
   expect(
+    destinations(
+      doc,
+      session.manifest,
+      repeatTree(list, 2, "", new Set(Object.keys(doc.nodes))),
+    ).some((p) => p.parentId === empty.id),
+  ).toBe(true);
+  expect(
     repeatPlaces(
       doc,
       session.manifest,
       repeatTree(list, 2, "", new Set(Object.keys(doc.nodes))),
-    ).some((p) => p.parentId === template.id),
+    ).some((p) => [template.id, empty.id].includes(p.parentId)),
+  ).toBe(false);
+  const legacy = structuredClone(doc);
+  legacy.nodes[repeat.id]!.bindings = { items: "$data.unknown.items" };
+  expect(
+    repeatPlaces(
+      legacy,
+      session.manifest,
+      repeatTree(list, 2, "", new Set(Object.keys(legacy.nodes))),
+    ).some((p) => [template.id, empty.id].includes(p.parentId)),
   ).toBe(false);
   for (const [limit, key] of [
     [0, ""],
