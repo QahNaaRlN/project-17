@@ -126,14 +126,23 @@ export function StoreApp({ initialModel }: AppProps) {
     const controller = new AbortController();
     request.current = controller;
     if (showLoading) setBusy(true);
+    const locale = latest.current.locale ?? initialModel.locale;
     try {
-      const response = await fetch("/api/store", { signal: controller.signal, cache: "no-store" });
+      const response = await fetch(
+        "/api/store" + (locale ? "?locale=" + encodeURIComponent(locale) : ""),
+        { signal: controller.signal, cache: "no-store" },
+      );
       if (!response.ok && response.status !== 404) throw new Error("STORE_READ_FAILED");
       const next = (await response.json()) as StoreModel;
       if (!controller.signal.aborted && alive.current) setModel(next);
     } catch {
       if (!controller.signal.aborted && alive.current)
-        setModel({ status: "error", preview: initialModel.preview, images: {} });
+        setModel({
+          status: "error",
+          preview: initialModel.preview,
+          images: {},
+          ...(locale ? { locale } : {}),
+        });
     } finally {
       if (!controller.signal.aborted && alive.current) setBusy(false);
     }
@@ -154,7 +163,7 @@ export function StoreApp({ initialModel }: AppProps) {
       Math.max(5000, Math.min(model.refreshAt - Date.now(), 2_147_483_647)),
     );
     return () => clearTimeout(timer);
-    // Refresh reads no state except the invariant initial preview flag.
+    // Refresh reads the current locale through latest without restarting this timer.
   }, [model.refreshAt, model.status]);
   const c = model.catalog;
   return (

@@ -148,11 +148,12 @@ it("STORE-005: при размонтировании запрос отменяе
     await pending.catch(() => {});
   });
 });
-it("STORE-006: обновляет модель до истечения подписанных URL", async () => {
+it("STORE-006/STU-211/215: обновляет URL в выбранной локали", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(model()))));
   const initial = model();
+  initial.locale = "en";
   initial.refreshAt = 1000;
   await mount(createElement(StoreApp, { initialModel: initial }));
   await act(async () => {
@@ -163,6 +164,7 @@ it("STORE-006: обновляет модель до истечения подп�
     await vi.advanceTimersByTimeAsync(1);
   });
   expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch).toHaveBeenCalledWith("/api/store?locale=en", expect.anything());
 });
 it("STORE-006: долгий срок URL не переполняет таймер", async () => {
   vi.useFakeTimers();
