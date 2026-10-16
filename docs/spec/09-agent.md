@@ -168,6 +168,13 @@ MCP-сервер встроен в CMS (`/mcp`, транспорт Streamable HT
 
 ## 5. Missing Capability
 
+Следующий implementation-пакет описан отдельно:
+[Studio: Missing Capability и context pack](../studio-missing-capability.md),
+STU-255…274. Спецификация готова по dev после PR #59; код ещё не реализован.
+Первый срез ограничен action-запросами, ручной передачей и явным применением;
+webhook, автоматическое fulfillment и preview/<ref> ниже остаются целевой
+архитектурой последующих пакетов.
+
 ### 5.1. Жизненный цикл
 
 ```
