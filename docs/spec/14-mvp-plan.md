@@ -80,7 +80,7 @@ Figma не требуется. Конструктор поведения/усл�
 Полный M4 остаётся частичным.
 
 [Действия и условия показа](../studio-behavior-conditions.md), STU-237…254:
-**реализованы в `feature/studio-behavior`; ещё не слиты в dev**.
+**реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); ещё не слиты в dev**.
 Добавлены цепочки с типизированными аргументами, navigate/scrollTo, конструктор
 when, работа со скрытыми узлами и design/interact. Используются существующие
 node.setBehavior/node.setCondition; добавлены отдельные права behavior/condition,

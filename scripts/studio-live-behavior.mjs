@@ -380,10 +380,10 @@ try {
   });
   const localePattern = "**/api/store?locale=en";
   await alice.route(localePattern, async (route) => {
-    const response = await route.fetch();
     started();
     await released;
-    await route.fulfill({ response });
+    // Keep this request in the browser so partitioned preview cookies stay scoped.
+    await route.continue();
   });
   await alice.getByLabel("Язык", { exact: true }).selectOption("en");
   await held;
@@ -496,11 +496,25 @@ try {
   expect(await publicPage.locator("[data-cms-node]").count()).toBe(0);
   await publicPage.screenshot({ path: resolve(output, "behavior-published.png"), fullPage: true });
   const published = await read(author, "/changesets/" + cs.id);
+  const delivery = await admin("create-delivery-key", {
+    name: "behavior-evidence-" + stamp,
+    environment: "staging",
+  });
+  const delivered = await fetch(
+    cfg.baseUrl + "/delivery/v1/" + cfg.project + "/staging/page?path=/store&locale=ru",
+    {
+      headers: { Authorization: "Bearer " + delivery.key },
+    },
+  );
+  expect(delivered.status).toBe(200);
+  const deliveredPage = await delivered.json();
   Object.assign(report, {
     changesetId: cs.id,
     pageId,
     entityId: entity,
     seq: published.seq,
+    pageVersionId: deliveredPage.page.versionId,
+    contentVersions: deliveredPage.contentContext?.versions,
     createdBehaviorViaUI: true,
     createdConditionViaUI: true,
     exactRetry: true,

@@ -1,6 +1,6 @@
 # Studio: действия и условия показа
 
-Статус: STU-237…254 реализованы в `feature/studio-behavior`; ещё не слиты в dev.
+Статус: STU-237…254 реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); ещё не слиты в dev.
 Проверки и границы подтверждения — в [отчёте реализации](studio-behavior-conditions-evidence.md).
 Дата: 2026-10-16. Проверенная основа: `origin/dev` на
 `c4b8286df779dbf1f41f0c23f46d73e7c7249f84`, после слияния

@@ -89,3 +89,42 @@ func TestBehaviorRightsHistorySTU243251(t *testing.T) {
 		})
 	}
 }
+
+// A saved declaration is revalidated against the active target manifest.
+func TestBehaviorTargetManifestSTU251(t *testing.T) {
+	e := cntSetup(t)
+	var manifest map[string]any
+	_ = json.Unmarshal([]byte(cmstest.DefaultManifest), &manifest)
+	manifest["actions"] = map[string]any{"test.notice": map[string]any{"args": map[string]any{
+		"title": map[string]any{"type": "string", "required": true},
+	}}}
+	raw, _ := json.Marshal(manifest)
+	e.ActivateManifest("staging", raw)
+	cs := cntCS(e)
+	made, err := cntOp(e, cs, "document.create", nil, map[string]any{"kind": "page",
+		"root": map[string]any{"id": "n_root", "type": "Button", "bindings": map[string]any{"label": "$local.t_title"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := made.Operations[0].Target
+	if _, err := cntOp(e, cs, "localContent.set", &page, map[string]any{"key": "t_title", "type": "text", "locale": "ru", "value": "Notice"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cntOp(e, cs, "node.setBehavior", &page, map[string]any{"nodeId": "n_root", "event": "click",
+		"handlers": []any{map[string]any{"action": "test.notice", "args": map[string]any{"title": map[string]any{"lit": "valid before change"}}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	manifest["actions"].(map[string]any)["test.notice"].(map[string]any)["args"].(map[string]any)["title"] = map[string]any{"type": "number", "required": true}
+	raw, _ = json.Marshal(manifest)
+	e.ActivateManifest("staging", raw)
+	var review workflow.Review
+	e.Must(e.Admin, "submit-changeset", map[string]any{"changesetId": cs, "expectedSeq": cntSeq(e, cs), "targets": []string{"staging"}}, &review)
+	for _, check := range review.Checks {
+		if check.Stage == "ir" && check.Status == "failed" && strings.Contains(string(check.Details), "ACTION_ARGS_INVALID") {
+			return
+		}
+	}
+	t.Fatal("active manifest change was trusted", review)
+}

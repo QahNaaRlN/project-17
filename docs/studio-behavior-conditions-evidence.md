@@ -1,6 +1,6 @@
 # Studio: проверка действий и условий показа
 
-2026-10-16. Реализация STU-237…254 в `feature/studio-behavior`, от
+2026-10-16. Реализация STU-237…254 в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), ветка `feature/studio-behavior`, от
 `origin/dev c4b8286`. В dev пакет ещё не слит; полный M4/IR-044/M5 не закрыт.
 Контракт и ограничения: [спецификация](studio-behavior-conditions.md).
 
@@ -39,17 +39,25 @@ loadSources результат надо передать в scope.sourceErrors; 
 
 ## Валидация
 
-Промежуточная локальная приёмка подтвердила формы on/when, два экземпляра Repeat,
+Настоящая локальная приёмка подтвердила формы on/when, два экземпляра Repeat,
 design click/Enter без эффектов, порядок builtin обработчиков, остановку на ошибке,
 favorite с item args, реальный anchor, RU/EN, точный повтор после потерянного ответа,
 сохранение ввода при конфликте, undo/redo, 375 px и публикацию Alice → Bob.
 Новый публичный браузер подтвердил опубликованное поведение и отсутствие draft
-до публикации. Итоговый прогон и CI должны относиться к финальному SHA.
+до публикации. Задержанный браузерный запрос подтвердил запрет старых обработчиков
+во время смены локали. Тест задерживает исходный запрос, сохраняя область
+partitioned preview cookie, а не подменяет его запросом из API-контекста.
+Отчёт behavior-acceptance.json сохраняет SHA/dirty, CS/seq, manifest hash,
+pageVersionId и версии primary content без credentials/приватных args.
+CI проверяется для последнего head [PR #59](https://github.com/QahNaaRlN/project-17/pull/59/checks).
 
-Локальные TypeScript-наборы проходят пороги покрытия. go tool sqlc generate,
+Локальные TypeScript-наборы проходят пороги покрытия: Studio 312 тестов,
+React 70; существующая браузерная регрессия — 60 сценариев.
+Format/lint/typecheck и сборки прошли. go tool sqlc generate,
 Go build и интеграционные наборы затронутых модулей проверяются на отдельном
 PostgreSQL. Windows не содержит инструмента covdata для полного покрытия и
-C-компилятора для race: окончательное подтверждение этих проверок даёт Linux CI.
+C-компилятора для race: полный pnpm check остановился на этой проверке;
+окончательное подтверждение race/coverage даёт Linux CI.
 При полном локальном Go-прогоне один MinIO-контейнер исчез во время запуска;
 узкий повтор internal/assets прошёл.
 
