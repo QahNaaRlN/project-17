@@ -47,6 +47,14 @@ jobs:
         run: |
           pnpm --filter @cms/store-example exec playwright install --with-deps chromium
           pnpm --filter @cms/store-example test:e2e
+      - name: Browser failure context
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-context
+          path: examples/react-store/test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 3
 
   docker:
     name: Docker image

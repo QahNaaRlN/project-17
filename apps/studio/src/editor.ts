@@ -679,16 +679,21 @@ export function createEditor(
       !session?.record ||
       !document ||
       state.status !== "ready" ||
+      session.changeset.state !== "open"
+    )
+      return;
+    if (
       !operations.every((op) =>
         op.type === "node.setBehavior"
           ? session.review.canEditBehavior === true
           : op.type === "node.setCondition"
             ? session.review.canEditCondition === true
             : session.review.canEdit,
-      ) ||
-      session.changeset.state !== "open"
-    )
+      )
+    ) {
+      store.setState({ error: "FORBIDDEN" });
       return;
+    }
     const submittingFields = new Set(
       operations.flatMap((op) =>
         op.type === "node.setBehavior" || op.type === "node.setCondition"
