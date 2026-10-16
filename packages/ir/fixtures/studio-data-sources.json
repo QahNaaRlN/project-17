@@ -1,6 +1,12 @@
 {
   "compatibility": [
     {
+      "name": "URL does not implicitly become a Link object",
+      "from": { "type": "url", "required": true },
+      "to": { "type": "link", "required": true },
+      "valid": false
+    },
+    {
       "name": "URL scheme subset",
       "from": { "type": "url", "schemes": ["https"] },
       "to": { "type": "url", "schemes": ["https", "http"] },

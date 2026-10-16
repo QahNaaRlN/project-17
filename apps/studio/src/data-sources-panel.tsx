@@ -863,71 +863,74 @@ function RepeatSettings({
   const disabled = !!locked || securityReadOnly || !ownDirtyOnly || legacy;
   const place = location(doc, selected.id);
   return (
-    <fieldset disabled={disabled} key={selected.id}>
-      <legend>{ru ? "Настройки повторения" : "Repeat settings"}</legend>
-      {legacy && (
+    <>
+      <fieldset disabled={disabled} key={selected.id}>
+        <legend>{ru ? "Настройки повторения" : "Repeat settings"}</legend>
+        {legacy && (
+          <p>
+            {ru
+              ? "Существующие динамические настройки доступны только для чтения."
+              : "Existing dynamic settings are read only."}
+          </p>
+        )}
         <p>
           {ru
-            ? "Существующие динамические настройки доступны только для чтения."
-            : "Existing dynamic settings are read only."}
+            ? "Правка шаблона меняет все карточки. Empty доступен в дереве."
+            : "Template edits update every card. Empty is available in the tree."}
         </p>
-      )}
-      <p>
-        {ru
-          ? "Правка шаблона меняет все карточки. Empty доступен в дереве."
-          : "Template edits update every card. Empty is available in the tree."}
-      </p>
-      <label>
-        {ru ? "Лимит повторения" : "Repeat limit"}
-        <input
-          type="number"
-          min={1}
-          max={200}
-          value={limit}
-          onChange={(e) => setLimit(Number(e.target.value))}
-        />
-      </label>
-      <label>
-        {ru ? "Ключ повторения" : "Repeat key"}
-        <select
-          aria-label={ru ? "Ключ повторения" : "Repeat key"}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-        >
-          <option value="">{ru ? "Индекс (нестабилен)" : "Index (unstable)"}</option>
-          {!keys.some((f) => f.path === key) && key && <option value={key}>{key}</option>}
-          {keys.map((f) => (
-            <option key={f.path}>{f.path}</option>
-          ))}
-        </select>
-      </label>
-      <button
-        disabled={
-          !dirty ||
-          !Number.isInteger(limit) ||
-          limit < 1 ||
-          limit > 200 ||
-          (key !== "" && key !== String(props.key ?? "") && !keys.some((f) => f.path === key))
-        }
-        onClick={async () => {
-          await editor.applyBindings([
-            {
-              type: "node.setProps",
-              target,
-              payload: {
-                nodeId: selected.id,
-                set: { limit, ...(key ? { key } : {}) },
-                ...(!key ? { unset: ["key"] } : {}),
+        <label>
+          {ru ? "Лимит повторения" : "Repeat limit"}
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          {ru ? "Ключ повторения" : "Repeat key"}
+          <select
+            aria-label={ru ? "Ключ повторения" : "Repeat key"}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          >
+            <option value="">{ru ? "Индекс (нестабилен)" : "Index (unstable)"}</option>
+            {!keys.some((f) => f.path === key) && key && <option value={key}>{key}</option>}
+            {keys.map((f) => (
+              <option key={f.path}>{f.path}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          disabled={
+            !dirty ||
+            !Number.isInteger(limit) ||
+            limit < 1 ||
+            limit > 200 ||
+            (key !== "" && key !== String(props.key ?? "") && !keys.some((f) => f.path === key))
+          }
+          onClick={async () => {
+            await editor.applyBindings([
+              {
+                type: "node.setProps",
+                target,
+                payload: {
+                  nodeId: selected.id,
+                  set: { limit, ...(key ? { key } : {}) },
+                  ...(!key ? { unset: ["key"] } : {}),
+                },
               },
-            },
-          ]);
-          if (!editor.store.getState().error) editor.formDirty("property-repeatSettings", false);
-        }}
-      >
-        {ru ? "Сохранить повторение" : "Save repeat"}
-      </button>
+            ]);
+            if (!editor.store.getState().error) editor.formDirty("property-repeatSettings", false);
+          }}
+        >
+          {ru ? "Сохранить повторение" : "Save repeat"}
+        </button>
+        {place && <p>{selected.bindings?.items as string}</p>}
+      </fieldset>
       <button
-        disabled={!dirty}
+        disabled={!dirty || state.status === "saving"}
         onClick={() => {
           setLimit(Number(props.limit ?? 200));
           setKey(String(props.key ?? ""));
@@ -935,7 +938,6 @@ function RepeatSettings({
       >
         {ru ? "Сбросить" : "Reset"}
       </button>
-      {place && <p>{selected.bindings?.items as string}</p>}
-    </fieldset>
+    </>
   );
 }

@@ -11,7 +11,7 @@ func simpleCompatible(from, to map[string]any, depth int) bool {
 		return false
 	}
 	f, t := from["type"], to["type"]
-	if (t == "text" || t == "string") && f != "text" && f != "string" {
+	if f != t && !((t == "text" || t == "string") && (f == "text" || f == "string")) {
 		return false
 	}
 	if !compatible(from, to, 0) {

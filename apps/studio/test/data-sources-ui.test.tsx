@@ -35,6 +35,23 @@ it("STU-234: an open form can be discarded after edit access is revoked", async 
   await click("Отмена");
   expect(editor.store.getState().dirtyFields["property-dataSource"]).toBe(false);
 });
+it("STU-228/234: revoked edit access still permits discarding Repeat settings without a write", async () => {
+  const { source, repeat } = repeatedFixture();
+  const { api } = await setup(source, undefined, repeat.id);
+  await change("Лимит повторения", "7");
+  expect(editor.store.getState().dirtyFields["property-repeatSettings"]).toBe(true);
+  await act(async () => {
+    const session = editor.store.getState().session!;
+    editor.store.setState({
+      session: { ...session, review: { ...session.review, canEdit: false } },
+    });
+  });
+  expect(button("Сохранить повторение").matches(":disabled")).toBe(true);
+  expect(button("Сбросить").matches(":disabled")).toBe(false);
+  await click("Сбросить");
+  expect(editor.store.getState().dirtyFields["property-repeatSettings"]).toBe(false);
+  expect(api.apply).not.toHaveBeenCalled();
+});
 afterEach(async () => {
   await act(async () => root?.unmount());
   editor?.dispose();

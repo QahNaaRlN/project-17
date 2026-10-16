@@ -2,6 +2,16 @@ package bindingdoc
 
 import "testing"
 
+func TestDirectDataURLDoesNotBecomeLinkSTU224234(t *testing.T) {
+	a := app(t)
+	obj(a["dataSources"])["test.url"] = object{"result": object{"type": "url", "required": true}}
+	d := document(object{"type": "Link", "bindings": object{"to": "$data.redirect"}})
+	d["dataSources"] = object{"redirect": object{"source": "test.url"}}
+	if !has(Validate(d, a, Options{}), "BINDING_TYPE_MISMATCH") {
+		t.Fatal("URL binding passed publication validation as a Link object")
+	}
+}
+
 func TestDataKeysAndScopesSTU223226227234(t *testing.T) {
 	a := app(t)
 	for _, key := range []string{"id", "$item.id"} {
