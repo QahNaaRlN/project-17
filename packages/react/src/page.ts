@@ -1,4 +1,11 @@
-import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
+import {
+  createElement,
+  Fragment,
+  useLayoutEffect,
+  useMemo,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { RichText, type RichTextResources } from "./rich-text.js";
 import {
   executeActions,
@@ -45,6 +52,15 @@ export function CmsPage({
   canInteract,
   preview = plan.preview ?? false,
 }: CmsPageProps): ReactNode {
+  // A ready flag can become true again while an earlier handler is suspended.
+  // Keep that chain tied to the committed plan and interaction mode instead.
+  const lifetime = useMemo(() => ({ active: true }), [plan, mode]);
+  useLayoutEffect(() => {
+    lifetime.active = true;
+    return () => {
+      lifetime.active = false;
+    };
+  }, [lifetime]);
   function render(node: PlanNode): ReactNode {
     const props = node.props;
     const children = node.children.map(render);
@@ -98,7 +114,7 @@ export function CmsPage({
                 },
                 {
                   mode,
-                  ...(canInteract ? { isActive: canInteract } : {}),
+                  isActive: () => lifetime.active && (canInteract?.() ?? true),
                   ...(onActionError ? { onError: onActionError } : {}),
                 },
               ),
