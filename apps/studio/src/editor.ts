@@ -667,10 +667,11 @@ export function createEditor(
   }
   async function applyBindings(operations: Operation[], selection?: string, source?: "json") {
     const state = store.getState(),
-      session = state.session;
+      session = state.session,
+      document = state.document;
     if (
       !session?.record ||
-      !state.document ||
+      !document ||
       state.status !== "ready" ||
       !session.review.canEdit ||
       session.changeset.state !== "open"
@@ -682,7 +683,7 @@ export function createEditor(
           ? ["property-" + String(op.payload.prop)]
           : op.payload.nodeId === state.selected &&
               op.type === "node.setProps" &&
-              state.document.nodes[state.selected!]?.type === "Repeat"
+              document.nodes[state.selected!]?.type === "Repeat"
             ? ["property-repeatSettings"]
             : [],
       ),
@@ -700,8 +701,8 @@ export function createEditor(
       store.setState({ error: "FIELD_DRAFT_PENDING" });
       return;
     }
-    const next = applyOperations(state.document, operations);
-    const problems = scopeProblems(state.document, next, session.manifest);
+    const next = applyOperations(document, operations);
+    const problems = scopeProblems(document, next, session.manifest);
     if (problems.length) {
       store.setState({ error: "DATA_SCOPE_CHANGED" });
       return;
