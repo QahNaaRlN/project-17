@@ -55,4 +55,14 @@ it("STU-210/211/212: SSR получает content до плана и отдел�
     'aria-label="Cover"',
   );
   expect(JSON.stringify(missing)).not.toContain("private storage key");
+  getImage.mockClear();
+  for (const value of [undefined, null]) {
+    page.data.content = { title: "Heading", cover: value, alt: "Cover" };
+    const absent = (await loadPage(cms, "/"))!;
+    const html = renderToStaticMarkup(createElement(CmsPage, { plan: absent }));
+    expect(html).toContain("Heading");
+    expect(html).toContain('aria-label="Cover"');
+    expect(absent.diagnostics).toContainEqual({ code: "CMS_IMAGE_UNAVAILABLE", nodeId: "n_image" });
+  }
+  expect(getImage).not.toHaveBeenCalled();
 });

@@ -96,18 +96,20 @@ export async function loadPage(
   return plan;
 }
 
-/** Signed models are loaded on the server in the same environment and preview scope. */
+/** Load signed models in the same scope and return their earliest refresh time. */
 export async function loadPlanImages(
   cms: CmsClient,
   plan: RenderPlan,
   read: ReadOptions = {},
-): Promise<void> {
+): Promise<number | undefined> {
   const images: NonNullable<RenderPlan["images"]> = Object.create(null);
   const requests = new Map<string, ReturnType<CmsClient["getImage"]>>();
+  let refreshAt: number | undefined;
   async function visit(node: PlanNode): Promise<void> {
     if (node.type === "Image") {
       try {
         const ref = node.props.src as { assetId: string };
+        if (!ref) throw new Error("CMS_IMAGE_UNAVAILABLE");
         const fit = node.props.fit === "cover" ? "cover" : "contain";
         const key = ref.assetId + ":" + fit;
         if (!requests.has(key)) requests.set(key, cms.getImage(ref.assetId, { ...read, fit }));
@@ -118,6 +120,8 @@ export async function loadPlanImages(
           loading: node.props.loading === "eager" ? "eager" : "lazy",
           width: { base: "100vw" },
         }).props;
+        const next = Date.parse(model.expiresAt) - 30_000;
+        refreshAt = Math.min(refreshAt ?? next, next);
       } catch (error) {
         if (read.signal?.aborted) throw error;
         plan.diagnostics.push({ code: "CMS_IMAGE_UNAVAILABLE", nodeId: node.id });
@@ -127,4 +131,5 @@ export async function loadPlanImages(
   }
   await Promise.all(plan.roots.map(visit));
   if (Object.keys(images).length) plan.images = images;
+  return refreshAt;
 }

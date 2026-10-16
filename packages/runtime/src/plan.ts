@@ -216,13 +216,13 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           : undefined;
       if (!allowed) return reject("CMS_NODE_UNKNOWN", id);
       if (node.type === "Image") {
-        const ref = props.src as Record<string, unknown> | undefined;
+        const ref = props.src as Record<string, unknown> | null | undefined;
         if (
-          !ref ||
-          typeof ref !== "object" ||
-          typeof ref.assetId !== "string" ||
-          !/^[0-9a-f-]{36}$/i.test(ref.assetId) ||
-          (props.alt !== undefined && typeof props.alt !== "string") ||
+          (ref != null &&
+            (typeof ref !== "object" ||
+              typeof ref.assetId !== "string" ||
+              !/^[0-9a-f-]{36}$/i.test(ref.assetId))) ||
+          (props.alt != null && typeof props.alt !== "string") ||
           (props.fit !== undefined && !["contain", "cover"].includes(String(props.fit))) ||
           (props.loading !== undefined && !["lazy", "eager"].includes(String(props.loading)))
         )

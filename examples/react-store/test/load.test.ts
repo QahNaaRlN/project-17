@@ -4,6 +4,61 @@ import { cms, id, page, image, now } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
 afterEach(() => vi.restoreAllMocks());
 describe("STORE-001/005/006/007: чтение CMS", () => {
+  it("STU-212/215: обложка из primary content обновляет подписанный URL до истечения", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const c = cms(),
+      data = page(catalog);
+    data.document.nodes.n_store!.children!.push("n_primary_image");
+    data.document.nodes.n_primary_image = {
+      id: "n_primary_image",
+      type: "Image",
+      bindings: { src: "$content.cover", alt: "$content.alt" },
+    };
+    data.data.content = { cover: { assetId: id }, alt: "Cover" };
+    vi.mocked(c.getPage).mockResolvedValue(data);
+    const result = await loadStore(c, "/store");
+    expect(result.status).toBe("ready");
+    expect(result.plan!.images).toBeDefined();
+    expect(result.refreshAt).toBe(now + 270_000);
+  });
+  it.each([undefined, null])(
+    "STU-211/212/216: отсутствие обложки %s сохраняет страницу и preview",
+    async (cover) => {
+      const c = cms(),
+        data = page(catalog);
+      data.document.nodes.n_store!.children!.push("n_primary_title", "n_primary_image");
+      data.document.nodes.n_primary_title = {
+        id: "n_primary_title",
+        type: "Heading",
+        bindings: { text: "$content.title" },
+      };
+      data.document.nodes.n_primary_image = {
+        id: "n_primary_image",
+        type: "Image",
+        bindings: { src: "$content.cover", alt: "$content.alt" },
+      };
+      data.data.content = {
+        title: "Available title",
+        alt: "Cover",
+        ...(cover === null ? { cover: null } : {}),
+      };
+      vi.mocked(c.getPage).mockResolvedValue(data);
+      const result = await loadStore(
+        c,
+        "/store",
+        { locale: "en", preview: { token: "test", changesetId: id } },
+        { studioOrigin: "https://studio.test", manifestHash: "sha256:" + "a".repeat(64) },
+      );
+      expect(result.status).toBe("ready");
+      expect(result.bridge).toBeDefined();
+      expect(JSON.stringify(result.plan)).toContain("Available title");
+      expect(result.plan!.diagnostics).toContainEqual({
+        code: "CMS_IMAGE_UNAVAILABLE",
+        nodeId: "n_primary_image",
+      });
+      expect(c.getImage).not.toHaveBeenCalled();
+    },
+  );
   it("STU-141: SSR разрешает дизайн-токены приложения", async () => {
     const c = cms(),
       data = page(catalog);

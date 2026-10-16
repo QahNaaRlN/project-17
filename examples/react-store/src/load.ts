@@ -63,7 +63,8 @@ export async function loadStore(
       };
     }
     if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
-    await loadPlanImages(cms, model.plan, read);
+    const refreshAt = await loadPlanImages(cms, model.plan, read);
+    if (refreshAt !== undefined) model.refreshAt = refreshAt;
     if (page.diagnostics)
       model.plan.diagnostics.push(
         ...page.diagnostics.map((d) => ({ code: d.code, nodeId: page.document.root })),

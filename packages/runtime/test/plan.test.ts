@@ -21,6 +21,21 @@ function invalid(node: Partial<Node>, options: PlanOptions = {}) {
   return plan.diagnostics[0]!.code;
 }
 describe("SDK-001/013, IR-040/045: render plan", () => {
+  it.each([undefined, null])(
+    "STU-211/212/216: missing Image source %s retains its placeholder",
+    (src) => {
+      const plan = preparePage(document([{ type: "Image", props: { src, alt: "Cover" } }]));
+      expect(plan.roots).toHaveLength(1);
+      expect(plan.roots[0]!.type).toBe("Image");
+      expect(plan.roots[0]!.props.alt).toBe("Cover");
+    },
+  );
+  it.each(["https://private.test/image", {}, { assetId: "invalid" }])(
+    "STU-212: malformed Image source %s remains invalid",
+    (src) => {
+      expect(invalid({ type: "Image", props: { src } })).toBe("CMS_IMAGE_INVALID");
+    },
+  );
   it("resolves bindings/conditions/localization and serializes only used values", () => {
     const doc = document([
       {
