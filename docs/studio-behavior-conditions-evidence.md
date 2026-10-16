@@ -51,7 +51,7 @@ partitioned preview cookie, а не подменяет его запросом �
 pageVersionId и версии primary content без credentials/приватных args.
 CI проверяется для последнего head [PR #59](https://github.com/QahNaaRlN/project-17/pull/59/checks).
 
-Локальные TypeScript-наборы проходят пороги покрытия: Studio 312 тестов,
+Локальные TypeScript-наборы проходят пороги покрытия: Studio 313 тестов,
 React 70; существующая браузерная регрессия — 60 сценариев.
 Format/lint/typecheck и сборки прошли. go tool sqlc generate,
 Go build и интеграционные наборы затронутых модулей проверяются на отдельном

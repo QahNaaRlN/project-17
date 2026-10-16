@@ -282,7 +282,15 @@ function DataPanel({ editor, rights }: { editor: Editor; rights?: string[] | und
   const source = registeredSource(manifest, use.source);
   let change: ReturnType<typeof sourceChange> | null = null;
   try {
-    if (dialog === "source") change = sourceChange(doc, manifest, target, key, remove ? null : use);
+    if (dialog === "source")
+      change = sourceChange(
+        doc,
+        manifest,
+        target,
+        key,
+        remove ? null : use,
+        session.record!.path ?? "",
+      );
   } catch {
     /* Invalid key is represented by the disabled submit. */
   }

@@ -529,7 +529,8 @@ try {
     mobileNoOverflow: true,
     twoHumanPublication: true,
     freshPublicBrowser: true,
-    manifestHash: (
+    manifestHash: (await read(author, "/manifest?environment=staging")).manifestHash,
+    deployedManifestHash: (
       await (await publicPage.request.get(cfg.appOrigin + "/.well-known/cms-manifest-hash")).text()
     ).trim(),
   });

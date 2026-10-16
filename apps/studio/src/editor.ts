@@ -716,7 +716,7 @@ export function createEditor(
       return;
     }
     const next = applyOperations(document, operations);
-    const problems = scopeProblems(document, next, session.manifest);
+    const problems = scopeProblems(document, next, session.manifest, session.record.path ?? "");
     if (problems.length) {
       store.setState({ error: "DATA_SCOPE_CHANGED" });
       return;

@@ -235,6 +235,7 @@ export function sourceChange(
   target: string,
   key: string,
   use: DataSourceUse | null,
+  pagePath = "",
 ) {
   const operation = sourceOperation(target, key, use),
     after = applyOperations(doc, [operation]);
@@ -295,7 +296,15 @@ export function sourceChange(
       if (!next || !compatible(next.schema, receiver))
         removals.push(...dataBinding(target, node, prop, null));
     }
-    const behavior = behaviorDependencies(doc, after, manifest, target, node.id, prefixes);
+    const behavior = behaviorDependencies(
+      doc,
+      after,
+      manifest,
+      target,
+      node.id,
+      prefixes,
+      pagePath,
+    );
     affected.push(...behavior.affected);
     blocked.push(...behavior.blocked);
     removals.push(...behavior.operations);
@@ -311,7 +320,7 @@ export function sourceChange(
         blocked,
       );
   const operations = [...removals, operation];
-  blocked.push(...scopeProblems(doc, applyOperations(doc, operations), manifest));
+  blocked.push(...scopeProblems(doc, applyOperations(doc, operations), manifest, pagePath));
   if (operations.length > 200) blocked.push("/dataSources/" + escape(key));
   return { affected, blocked, operations };
 }
@@ -365,11 +374,24 @@ export function insertRepeat(target: string, place: Place, tree: NestedNode): Op
   return insertion(target, place, tree);
 }
 
-export function scopeProblems(before: IrDocument, after: IrDocument, manifest: Manifest): string[] {
+export function scopeProblems(
+  before: IrDocument,
+  after: IrDocument,
+  manifest: Manifest,
+  pagePath = "",
+): string[] {
   const problems: string[] = [];
   for (const node of Object.values(after.nodes)) {
     if (before.nodes[node.id]) {
-      const change = behaviorDependencies(before, after, manifest, "", node.id, ["$data", "$item"]);
+      const change = behaviorDependencies(
+        before,
+        after,
+        manifest,
+        "",
+        node.id,
+        ["$data", "$item"],
+        pagePath,
+      );
       problems.push(
         ...change.operations.map(
           (op) => `/nodes/${escape(node.id)}/${op.type === "node.setBehavior" ? "on" : "when"}`,

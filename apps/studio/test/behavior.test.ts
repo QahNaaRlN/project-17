@@ -182,7 +182,14 @@ it("STU-244/245/252: typed predicates, group size, depth and total budget preser
     { path: "$local.obj", schema: { type: "object", fields: {} } },
   );
   const exists = { op: "exists", arg: "$context.locale" };
+  fields.push(
+    { path: "$local.choice", schema: { type: "enum", values: ["one", "two"] } },
+    { path: "$local.narrow", schema: { type: "enum", values: ["one"] } },
+    { path: "$local.same", schema: { type: "enum", values: ["one", "two"] } },
+  );
   const valid = (p: unknown) => editablePredicate(p, fields, doc);
+  expect(valid({ op: "eq", args: ["$local.choice", "$local.narrow"] })).toBe(false);
+  expect(valid({ op: "eq", args: ["$local.choice", "$local.same"] })).toBe(true);
   expect(valid(exists)).toBe(true);
   expect(valid({ op: "empty", arg: "$data.featured" })).toBe(true);
   for (const op of ["eq", "neq"]) {
@@ -282,4 +289,47 @@ it("STU-241/243/251: compatible changes preserve behavior; incompatible changes 
   const op = behaviorOperation(session.record.id, "n_heading", "click", []);
   expect(op.payload.handlers).toBeNull();
   expect(conditionOperation(session.record.id, "n_heading", null).payload.when).toBeNull();
+});
+it("STU-241: source dependency checks retain declared route parameters in compatible action chains", () => {
+  const { doc, manifest, session } = setup();
+  const result = resultFields(doc, manifest).fields.find(
+    (f) => f.path === "$data.featured",
+  )!.schema;
+  manifest.actions!["test.route"] = {
+    args: { value: result, slug: { type: "string", required: true } },
+  };
+  doc.nodes.n_heading!.on = {
+    click: {
+      action: "test.route",
+      args: { value: "$data.featured", slug: "$context.route.params.slug" },
+    },
+  };
+  const change = dataChange(
+    doc,
+    manifest,
+    session.record.id,
+    "featured",
+    doc.dataSources!.featured!,
+    "/:slug",
+  );
+  expect(change.blocked).toEqual([]);
+  expect(change.operations.map((op) => op.type)).toEqual(["document.setDataSource"]);
+  delete doc.dataSources;
+  manifest.actions!["test.route"] = {
+    args: { value: { type: "string", maxLength: 64 }, slug: { type: "string", required: true } },
+  };
+  doc.nodes.n_heading!.on!.click = {
+    action: "test.route",
+    args: { value: "$content.handle", slug: "$context.route.params.slug" },
+  };
+  manifest.schemas!.Other = structuredClone(manifest.schemas!.Collection!);
+  const content = contentChange(
+    doc,
+    manifest,
+    session.record.id,
+    { schema: "Other", resolve: doc.content!.resolve },
+    "/:slug",
+  );
+  expect(content.blocked).toEqual([]);
+  expect(content.operations.map((op) => op.type)).toEqual(["document.setContent"]);
 });

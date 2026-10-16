@@ -128,6 +128,7 @@ export function sourceChange(
   manifest: Manifest,
   target: string,
   content: IrDocument["content"] | null,
+  pagePath = "",
 ) {
   const choices = content ? contentFields(manifest, content.schema).fields : [];
   const previous = contentFields(manifest, doc.content?.schema ?? "").fields;
@@ -159,7 +160,15 @@ export function sourceChange(
       } else scan(binding, pointer);
     }
     if (schemaChanged) {
-      const change = behaviorDependencies(doc, after, manifest, target, node.id, ["$content"]);
+      const change = behaviorDependencies(
+        doc,
+        after,
+        manifest,
+        target,
+        node.id,
+        ["$content"],
+        pagePath,
+      );
       blocked.push(...change.blocked);
       behaviorOps.push(...change.operations);
       affected.push(

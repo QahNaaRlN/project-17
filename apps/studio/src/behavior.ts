@@ -191,6 +191,14 @@ export function editablePredicate(value: unknown, fields: DataField[], doc: IrDo
     const right = p.args[1],
       lit = object(right);
     if (right === undefined) return false;
+    const rightType =
+      typeof right === "string" ? fields.find((f) => f.path === right)?.schema : undefined;
+    if (
+      schema.type === "enum" &&
+      rightType?.type === "enum" &&
+      !compatible({ ...schema, required: false }, { ...rightType, required: false })
+    )
+      return false;
     if (p.op === "eq" || p.op === "neq") return validOperand(right, scalar, fields, doc);
     if (["gt", "gte", "lt", "lte"].includes(p.op))
       return (
