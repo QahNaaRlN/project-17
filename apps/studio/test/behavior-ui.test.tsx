@@ -122,6 +122,43 @@ it("STU-242/253: URL, anchor and scroll targets are selected from document nodes
     { action: "scrollTo", args: { target: { lit: "n_root" } } },
   ]);
 });
+it("STU-239/245/253: reordered steps and removed predicates keep displayed literals aligned with saved values", async () => {
+  const { session } = await setup();
+  await click("Настроить событие click");
+  await change("Действие", "test.use");
+  await click("Добавить действие");
+  await change("Значение параметра name", "literal");
+  await change("Литерал name", "One");
+  await click("Добавить действие");
+  await change("Значение параметра name", "literal", 1);
+  await change("Литерал name", "Two", 1);
+  await click("Выше 2");
+  expect(input("Литерал name", 0).value).toBe("Two");
+  expect(input("Литерал name", 1).value).toBe("One");
+  await click("Сохранить");
+  expect(session.record.body.nodes.n_heading!.on!.click).toMatchObject([
+    { args: { name: { lit: "Two" } } },
+    { args: { name: { lit: "One" } } },
+  ]);
+  await click("Настроить условие");
+  await change("Оператор", "eq");
+  await change("Поле условия", "$context.locale");
+  await change("Значение параметра Сравнение", "literal");
+  await change("Литерал Сравнение", "ru");
+  await change("Оператор", "and");
+  await click("Добавить условие");
+  await change("Оператор", "eq", 2);
+  await change("Поле условия", "$context.locale", 1);
+  await change("Значение параметра Сравнение", "literal", 1);
+  await change("Литерал Сравнение", "en", 1);
+  await click("Удалить условие 1");
+  expect(input("Литерал Сравнение").value).toBe("en");
+  await click("Сохранить");
+  expect(session.record.body.nodes.n_heading!.when).toEqual({
+    op: "and",
+    args: [{ op: "eq", args: ["$context.locale", { lit: "en" }] }],
+  });
+});
 it("STU-244/245/246: conditions support groups, not, typed comparison, null and homogeneous in lists", async () => {
   const { session } = await setup();
   await click("Настроить условие");

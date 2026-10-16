@@ -52,13 +52,19 @@ export function actionTarget(
     for (const id of ancestors) {
       if (
         nodes[id]?.type === "Repeat" &&
-        !segments.some((part) => part.startsWith(id + ":") || part === id)
+        !segments.some(
+          (part, at) => part.startsWith(id + ":") || (part === id && segments[at + 1] === "empty"),
+        )
       )
         throw new Error("CMS_ACTION_TARGET_INVALID");
     }
     for (let i = segments.length - 1; i >= 0; i--) {
       const id = segments[i]!.split(":")[0]!;
-      if (nodes[id]?.type === "Repeat" && !ancestors.has(id)) {
+      if (
+        nodes[id]?.type === "Repeat" &&
+        !ancestors.has(id) &&
+        (segments[i]!.startsWith(id + ":") || segments[i + 1] === "empty")
+      ) {
         if (segments[i + 1] === "empty") segments.splice(i, 2);
         else segments.splice(i, 1);
       }

@@ -207,6 +207,7 @@ it("STU-242/248: Repeat action targets address the current item or outer documen
   expect(events.click![0]!.args.target).toBe("repeat:one/target");
   expect(events.click![1]!.args.to).toEqual({ kind: "url", url: "#outer" });
   expect(actionTarget("empty", "outer", doc.nodes, "repeat/empty/")).toBe("outer");
+  expect(actionTarget("button", "outer", doc.nodes, "repeat/repeat:one/")).toBe("repeat/outer");
   expect(() => actionTarget("outer", "target", doc.nodes, "")).toThrow("CMS_ACTION_TARGET_INVALID");
   expect(() => actionTarget("button", "missing", doc.nodes, "repeat:one/")).toThrow(
     "CMS_ACTION_TARGET_INVALID",

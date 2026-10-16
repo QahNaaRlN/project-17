@@ -386,6 +386,8 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
     [action, setAction] = useState("");
   const openedSeq = useRef(session.changeset.seq),
     form = useRef<HTMLFormElement>(null);
+  const stepKeys = useRef<number[]>([]),
+    nextStep = useRef(0);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const dirty = dialog !== null;
   useEffect(() => {
@@ -455,6 +457,9 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
       setChain(
         current === undefined ? [] : structuredClone(Array.isArray(current) ? current : [current]),
       );
+      stepKeys.current = (
+        current === undefined ? [] : Array.isArray(current) ? current : [current]
+      ).map(() => ++nextStep.current);
       setAction(catalog.find(available) ?? "");
     } else {
       setLegacy(!!node.when && !editablePredicate(node.when, fields, doc));
@@ -572,6 +577,7 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                 onClick={() => {
                   setLegacy(false);
                   setChain([]);
+                  stepKeys.current = [];
                   setWhen(seed(fields));
                 }}
               >
@@ -584,7 +590,7 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                 <>
                   <ol>
                     {chain.map((call, i) => (
-                      <li key={i}>
+                      <li key={stepKeys.current[i]}>
                         <strong>
                           {i + 1}. {call.action}
                         </strong>
@@ -617,6 +623,10 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                           onClick={() => {
                             const next = [...chain];
                             [next[i - 1], next[i]] = [next[i]!, next[i - 1]!];
+                            [stepKeys.current[i - 1], stepKeys.current[i]] = [
+                              stepKeys.current[i]!,
+                              stepKeys.current[i - 1]!,
+                            ];
                             setChain(next);
                           }}
                         >
@@ -628,6 +638,10 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                           onClick={() => {
                             const next = [...chain];
                             [next[i], next[i + 1]] = [next[i + 1]!, next[i]!];
+                            [stepKeys.current[i], stepKeys.current[i + 1]] = [
+                              stepKeys.current[i + 1]!,
+                              stepKeys.current[i]!,
+                            ];
                             setChain(next);
                           }}
                         >
@@ -635,7 +649,10 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                         </button>
                         <button
                           type="button"
-                          onClick={() => setChain(chain.filter((_, at) => at !== i))}
+                          onClick={() => {
+                            stepKeys.current.splice(i, 1);
+                            setChain(chain.filter((_, at) => at !== i));
+                          }}
                         >
                           {text("Удалить действие", "Remove action")} {i + 1}
                         </button>
@@ -666,7 +683,10 @@ function Panel({ editor, rights }: { editor: Editor; rights?: string[] | undefin
                   <button
                     type="button"
                     disabled={chain.length >= 8 || !action || !available(action)}
-                    onClick={() => setChain([...chain, { action, args: {} }])}
+                    onClick={() => {
+                      stepKeys.current.push(++nextStep.current);
+                      setChain([...chain, { action, args: {} }]);
+                    }}
                   >
                     {text("Добавить действие", "Add action")}
                   </button>

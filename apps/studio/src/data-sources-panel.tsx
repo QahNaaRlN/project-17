@@ -56,15 +56,27 @@ export function Parameter({
     value && typeof value === "object" && "lit" in value ? String(value.lit ?? "") : "",
   );
   const [error, setError] = useState(false);
+  const emitted = useRef(value);
+  useEffect(() => {
+    if (value !== emitted.current) {
+      emitted.current = value;
+      setRaw(value && typeof value === "object" && "lit" in value ? String(value.lit ?? "") : "");
+      setError(false);
+    }
+  }, [value]);
+  function update(next: unknown) {
+    emitted.current = next;
+    change(next);
+  }
   const choices = paths.filter((f) => compatible(f.schema, schema));
   function input(raw: string) {
     setRaw(raw);
     try {
-      change({ lit: literal(schema, raw) });
+      update({ lit: literal(schema, raw) });
       setError(false);
     } catch {
       setError(true);
-      change({ lit: { invalid: true } });
+      update({ lit: { invalid: true } });
     }
   }
   return (
@@ -81,9 +93,9 @@ export function Parameter({
           onChange={(e) => {
             setError(false);
             const mode = e.target.value;
-            if (mode === "omit") change(undefined);
-            else if (mode === "null") change({ lit: null });
-            else if (mode === "path") change(choices[0]?.path ?? "");
+            if (mode === "omit") update(undefined);
+            else if (mode === "null") update({ lit: null });
+            else if (mode === "path") update(choices[0]?.path ?? "");
             else input(raw);
           }}
         >
@@ -113,7 +125,7 @@ export function Parameter({
           <select
             aria-label={(ru ? "Путь параметра " : "Parameter path ") + name}
             value={String(value)}
-            onChange={(e) => change(e.target.value)}
+            onChange={(e) => update(e.target.value)}
           >
             {!choices.some((p) => p.path === value) && (
               <option value={String(value)}>{String(value)}</option>
