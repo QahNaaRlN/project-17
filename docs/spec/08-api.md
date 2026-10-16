@@ -34,9 +34,20 @@ by:entity в `data.content` Delivery page. Параметр `locale` выбир�
 
 Пакет [источников данных](../studio-data-sources.md), STU-219…236,
 реализует `document.setDataSource` внутри `apply-operations`, inverse/rebase
-по ключу подключения и формы параметров. Он подготовлен в ветке
-`feature/studio-data-sources`; слияние в dev ещё не выполнено. Исполнение loader остаётся
+по ключу подключения и формы параметров. Он слит в dev в
+[PR #58](https://github.com/QahNaaRlN/project-17/pull/58); CI PR и merge-коммита пройдены. Исполнение loader остаётся
 на серверной стороне приложения; новый CMS endpoint исполнения не вводится.
+
+Пакет [действий и условий](../studio-behavior-conditions.md), STU-237…254,
+реализован в ветке `feature/studio-behavior`, пока не слит в dev.
+Он использует node.setBehavior/node.setCondition, отдельные advisory-права,
+строгие аргументы и повторные проверки доступа. Нового endpoint исполнения нет.
+
+Ответ `GET /api/v1/changesets/{id}/review` сохраняет `canEdit` и добавляет
+`canEditBehavior = own && open && standard && behavior.use`,
+`canEditCondition = own && open && standard && design.compose`.
+Отсутствие нового флага в Studio запрещает соответствующую запись. Флаги
+не заменяют проверку Command Bus, primary content и locked-политик.
 
 ## 2. Аутентификация
 

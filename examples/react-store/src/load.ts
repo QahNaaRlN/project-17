@@ -1,5 +1,5 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
-import { Image, preparePage, loadSources, documentHash } from "@cms/runtime";
+import { Image, preparePage, loadSources, documentHash, sourceFailures } from "@cms/runtime";
 import { registry, storeTokens } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
@@ -20,7 +20,12 @@ export async function loadStore(
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {}, locale };
     const scope = {
-      context: { locale, store: catalog },
+      context: {
+        locale,
+        store: catalog,
+        route: { path, params: {} },
+        viewer: { authenticated: false },
+      },
       data: page.data,
       content: page.data.content as Record<string, unknown> | undefined,
     };
@@ -35,7 +40,7 @@ export async function loadStore(
     if (Object.hasOwn(page.data, "content")) data.content = page.data.content;
     model.plan = preparePage(composition, {
       natives: definitionsFor(catalog),
-      scope: { ...scope, data },
+      scope: { ...scope, data, sourceErrors: sourceFailures(data) },
       breakpoints: registry.breakpoints,
       tokens: storeTokens,
       actions: registry.actions,
@@ -60,12 +65,16 @@ export async function loadStore(
         document,
         hash: await documentHash(document),
         data,
+        sourceErrors: sourceFailures(data),
         ...(options.preview?.changesetId ? { changesetId: options.preview.changesetId } : {}),
       };
     }
     if (
       model.plan.diagnostics.some(
-        (d) => !/^CMS_(SOURCE_|REPEAT_|DATA_VALUE_INVALID$|IMAGE_UNAVAILABLE$)/.test(d.code),
+        (d) =>
+          !/^CMS_(SOURCE_|REPEAT_|DATA_VALUE_INVALID$|IMAGE_UNAVAILABLE$|ACTION_|EVENT_|VALUE_)/.test(
+            d.code,
+          ),
       )
     )
       throw new Error("STORE_COMPOSITION_INVALID");

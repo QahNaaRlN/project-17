@@ -64,6 +64,13 @@ it("STU-010/026, SDK-032: handshake и точные origin/Window, синхро�
   editor.width(99);
   editor.locale("en");
   expect(editor.store.getState()).toMatchObject({ mode: "interact", width: 375, locale: "en" });
+  const invalidations = frame.postMessage.mock.calls.filter(
+    ([message]) => message.type === "invalidate",
+  ).length;
+  receive("ready", { documentId, protocolVersion: 1 });
+  expect(
+    frame.postMessage.mock.calls.filter(([message]) => message.type === "invalidate"),
+  ).toHaveLength(invalidations);
 });
 it("SDK-042: сохраняет только безопасную геометрию своего документа", async () => {
   const { editor, receive } = await setup();

@@ -257,6 +257,7 @@ func CheckEdit(before, after map[string]any, manage bool) ir.Result {
 		fail("", "/policy")
 	}
 	checkDataEdits(before, after, fail)
+	checkBehaviorPrimaryEdits(before, after, fail)
 	a, b := obj(before["nodes"]), obj(after["nodes"])
 	protected := func(doc map[string]any) map[string]bool {
 		out := map[string]bool{}
@@ -281,6 +282,29 @@ func CheckEdit(before, after map[string]any, manage bool) ir.Result {
 		return out
 	}
 	pa, pb := protected(before), protected(after)
+	// A condition on any ancestor can hide a locked subtree. Check both
+	// snapshots so a move or removal cannot bypass the guard.
+	containsLocked := func(doc map[string]any) map[string]bool {
+		out := map[string]bool{}
+		var walk func(string) bool
+		walk = func(id string) bool {
+			n := obj(obj(doc["nodes"])[id])
+			locked := n["locked"] == true || obj(n["zone"])["locked"] == true
+			for _, v := range array(n["children"]) {
+				locked = walk(fmt.Sprint(v)) || locked
+			}
+			for _, list := range obj(n["slots"]) {
+				for _, v := range array(list) {
+					locked = walk(fmt.Sprint(v)) || locked
+				}
+			}
+			out[id] = locked
+			return locked
+		}
+		walk(fmt.Sprint(doc["root"]))
+		return out
+	}
+	ha, hb := containsLocked(before), containsLocked(after)
 	locations := func(doc map[string]any) map[string]string {
 		out := map[string]string{}
 		var walk func(string, string)
@@ -309,6 +333,9 @@ func CheckEdit(before, after map[string]any, manage bool) ir.Result {
 	}
 	for _, id := range keysBool(ids) {
 		x, y := obj(a[id]), obj(b[id])
+		if (ha[id] || hb[id]) && !reflect.DeepEqual(x["when"], y["when"]) {
+			fail(id, ir.Pointer("nodes", id, "when"))
+		}
 		if !reflect.DeepEqual(x["zone"], y["zone"]) || !reflect.DeepEqual(x["locked"], y["locked"]) {
 			fail(id, ir.Pointer("nodes", id, "zone"))
 			continue
@@ -318,7 +345,7 @@ func CheckEdit(before, after map[string]any, manage bool) ir.Result {
 				fail(id, ir.Pointer("nodes", id))
 				continue
 			}
-			for _, field := range []string{"type", "children", "slots"} {
+			for _, field := range []string{"type", "children", "slots", "on", "when"} {
 				if !reflect.DeepEqual(x[field], y[field]) {
 					fail(id, ir.Pointer("nodes", id, field))
 					break

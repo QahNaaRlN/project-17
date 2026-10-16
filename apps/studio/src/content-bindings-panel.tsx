@@ -168,7 +168,13 @@ function Bindings({
     : candidate.data?.schema
       ? { schema: candidate.data.schema, resolve: { by: "entity", entityId: candidate.data.id } }
       : null;
-  const change = sourceChange(doc, session.manifest, session.record.id, declaration);
+  const change = sourceChange(
+    doc,
+    session.manifest,
+    session.record.id,
+    declaration,
+    session.record.path ?? "",
+  );
   const candidateValid =
     remove ||
     (!candidate.isError &&

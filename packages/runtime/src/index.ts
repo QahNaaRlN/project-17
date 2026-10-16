@@ -18,6 +18,7 @@ export type {
   PlannedEvents,
 } from "./actions.js";
 export { loadSource, loadSources, sourceResult, appendPage } from "./sources.js";
+export { sourceFailures } from "./source-error.js";
 export type {
   LoaderContext,
   RuntimeSource,

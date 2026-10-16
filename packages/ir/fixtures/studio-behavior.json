@@ -1,0 +1,117 @@
+{
+  "builtins": {
+    "navigate": { "to": { "type": "link", "required": true } },
+    "scrollTo": { "target": { "type": "nodeRef", "required": true } }
+  },
+  "compatibility": [
+    {
+      "name": "number is not text",
+      "from": { "type": "number", "required": true },
+      "to": { "type": "text", "required": true },
+      "valid": false
+    },
+    {
+      "name": "url is not Link",
+      "from": { "type": "url", "required": true },
+      "to": { "type": "link" },
+      "valid": false
+    },
+    {
+      "name": "object is not string",
+      "from": { "type": "object", "fields": {} },
+      "to": { "type": "string" },
+      "valid": false
+    },
+    {
+      "name": "text and string",
+      "from": { "type": "text", "required": true, "maxLength": 64 },
+      "to": { "type": "string", "required": true, "maxLength": 64 },
+      "valid": true
+    },
+    {
+      "name": "missing required value",
+      "from": { "type": "boolean" },
+      "to": { "type": "boolean", "required": true },
+      "valid": false
+    },
+    {
+      "name": "default permits omission",
+      "from": { "type": "number" },
+      "to": { "type": "number", "required": true, "default": 0 },
+      "valid": true
+    },
+    {
+      "name": "asset kind",
+      "from": { "type": "asset", "assetKind": "image" },
+      "to": { "type": "asset", "assetKind": "video" },
+      "valid": false
+    },
+    {
+      "name": "typed object",
+      "from": {
+        "type": "object",
+        "required": true,
+        "fields": { "id": { "type": "string", "required": true } }
+      },
+      "to": {
+        "type": "object",
+        "required": true,
+        "fields": { "id": { "type": "string", "required": true } }
+      },
+      "valid": true
+    }
+  ],
+  "operations": [
+    {
+      "type": "node.setBehavior",
+      "payload": {
+        "nodeId": "n_root",
+        "event": "click",
+        "handlers": [
+          { "action": "store.favorite", "args": { "id": "$item.id", "title": "$item.title" } },
+          { "action": "scrollTo", "args": { "target": { "lit": "n_root" } } }
+        ]
+      },
+      "field": "on",
+      "expected": {
+        "click": [
+          { "action": "store.favorite", "args": { "id": "$item.id", "title": "$item.title" } },
+          { "action": "scrollTo", "args": { "target": { "lit": "n_root" } } }
+        ]
+      }
+    },
+    {
+      "type": "node.setCondition",
+      "payload": {
+        "nodeId": "n_root",
+        "when": {
+          "op": "and",
+          "args": [
+            { "op": "eq", "args": ["$context.locale", { "lit": "ru" }] },
+            { "op": "neq", "args": ["$item.priceRub", { "lit": null }] }
+          ]
+        }
+      },
+      "field": "when",
+      "expected": {
+        "op": "and",
+        "args": [
+          { "op": "eq", "args": ["$context.locale", { "lit": "ru" }] },
+          { "op": "neq", "args": ["$item.priceRub", { "lit": null }] }
+        ]
+      }
+    },
+    {
+      "type": "node.setBehavior",
+      "payload": { "nodeId": "n_root", "event": "click", "handlers": null },
+      "field": "on",
+      "expected": null
+    },
+    {
+      "type": "node.setCondition",
+      "payload": { "nodeId": "n_root", "when": null },
+      "field": "when",
+      "expected": null
+    }
+  ]
+}

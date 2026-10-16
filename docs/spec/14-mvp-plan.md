@@ -62,15 +62,32 @@ resolver by:entity, локали и preview/published с подписанным�
 также пройден: Check (TS + Go) и Docker image.
 
 Пакет [источники данных и повторяющиеся блоки](../studio-data-sources.md),
-STU-219…236: **реализован в `feature/studio-data-sources`, ещё не слит в dev**.
+STU-219…236: **реализован и слит в dev в
+[PR #58](https://github.com/QahNaaRlN/project-17/pull/58)** 2026-10-16,
+merge `c4b8286df779dbf1f41f0c23f46d73e7c7249f84`.
 Добавлены формы подключений/параметров из manifest, типизированные `$data`
 и `$item`, Repeat/empty, история и preview с реальными загрузчиками приложения.
-Статус проверок и приёмки приведён в спецификации пакета.
+Локальная сквозная приёмка пройдена.
+[CI итогового SHA PR `4f921bb`](https://github.com/QahNaaRlN/project-17/actions/runs/38894564872)
+и [CI merge-коммита в dev](https://github.com/QahNaaRlN/project-17/actions/runs/38895859007)
+пройдены: Check (TS + Go) и Docker image, включая Linux race/Go coverage 95%,
+сборки и 60 браузерных сценариев. Исправления ревью покрыты Go/TS-фикстурой
+совместимости URL/Link и UI-тестом сброса Repeat после отзыва доступа.
 Зависимости эксплуатации: активный manifest и совместимый серверный registry,
 права design.compose/content.read, preview bridge и image delivery.
 Figma не требуется. Конструктор поведения/условий и component.extract в пакет
 не входят; полный шаг 4 MVP и IR-044 ещё не закрыты.
 Полный M4 остаётся частичным.
+
+[Действия и условия показа](../studio-behavior-conditions.md), STU-237…254:
+**реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); ещё не слиты в dev**.
+Добавлены цепочки с типизированными аргументами, navigate/scrollTo, конструктор
+when, работа со скрытыми узлами и design/interact. Используются существующие
+node.setBehavior/node.setCondition; добавлены отдельные права behavior/condition,
+строгая совместимость, защита locked и устаревшего контекста.
+Зависимости: manifest events/actions/args, registry клиентского приложения,
+пакет #58 и preview bridge. Для приёмки — два OIDC-пользователя, PostgreSQL
+и управляемые обработчики приложения. Figma не требуется.
 Пакет [Structure, CodeMirror и JSON diff](../studio-json-diff.md) добавляет JSON
 узла/страницы, диагностики/подсказки и атомарный diff с историей (STU-090…094).
 Пакет [сущностей, RichText и ассетов](../studio-content.md) добавляет каталог
@@ -80,10 +97,12 @@ Figma не требуется. Конструктор поведения/усл�
 Пакет [Studio Agent и MCP](../studio-agent.md) добавляет делегированные сессии,
 семантические инструменты, серверный OpenRouter и шаги с отменой (STU-120…125).
 Для живого вызова нужны серверный ключ, модель и вход пользователя с agent.delegate.
-Следующий пакет — Missing Capability/context pack и передача кодовому агенту.
+Следующий отдельный пакет M5 — Missing Capability/context pack и передача кодовому агенту;
+перед реализацией ему нужна собственная спецификация по актуальному dev.
 Полный M5 ещё не завершён: условные политики, индекс кода, fulfillment и webhook
 остаются зависимостями следующего пакета M5. Первый конструктор данных описан
-в STU-219…236 выше; он реализован в отдельной ветке и ожидает слияния. Конструктор поведения/условий,
+в STU-219…236 выше и слит в dev. Конструктор поведения/условий описан
+в STU-237…254 и реализован в отдельной ветке, ожидающей ревью и слияния;
 advanced bindings, component.extract, буфер/wrap и NFR-приёмка остаются отдельными задачами.
 
 ## 2. Сквозной сценарий приёмки

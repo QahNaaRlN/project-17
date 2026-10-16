@@ -1,6 +1,6 @@
 import { ReviewDiff } from "./review-diff-panel.js";
 import type { Api } from "./types.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { Editor } from "./editor.js";
 import { diagnosticNode, reviewDiagnostics, policyViolations } from "./review.js";
@@ -177,10 +177,13 @@ export function PublishingPanel({
   const confirmation = useRef<HTMLDivElement>(null);
   const comparisonRequest = useRef<AbortController | null>(null);
   const [checkingComparison, setCheckingComparison] = useState(false);
-  useEffect(() => {
+  // Invalidate the old comparison before the new status becomes interactive.
+  // A delayed passive cleanup could otherwise abort a newly opened confirmation.
+  useLayoutEffect(() => {
     comparisonRequest.current?.abort();
     comparisonRequest.current = null;
     setCheckingComparison(false);
+    setDiffSnapshot(null);
     return () => comparisonRequest.current?.abort();
   }, [
     session?.changeset.id,
@@ -188,11 +191,11 @@ export function PublishingPanel({
     session?.changeset.state,
     session?.config.environment,
   ]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (diffSnapshot && confirmationSnapshot && diffSnapshot !== confirmationSnapshot)
       setChoice(null);
   }, [diffSnapshot, confirmationSnapshot]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     setChoice(null);
     setComment("");
   }, [session?.changeset.id, session?.changeset.seq, session?.changeset.state]);

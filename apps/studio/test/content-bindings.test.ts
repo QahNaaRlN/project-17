@@ -130,9 +130,13 @@ it("STU-208/209/217: явная замена удаляет props, unbind сох
   expect(removed).not.toHaveProperty("content");
   expect(applyOperations(after, documentDiff(after, removed, documentId))).toEqual(removed);
   after.nodes.n_root!.when = { op: "exists", arg: "$content.title" };
-  expect(sourceChange(after, session.manifest, documentId, null).blocked).toContain(
-    "/nodes/n_root/when/arg",
-  );
+  const conditionalChange = sourceChange(after, session.manifest, documentId, null);
+  expect(conditionalChange.blocked).toEqual([]);
+  expect(conditionalChange.operations).toContainEqual({
+    type: "node.setCondition",
+    target: documentId,
+    payload: { nodeId: "n_root", when: null },
+  });
 });
 it("STU-209/217: одинаковая схема сохраняет сложные выражения, несовместимый источник блокирует их", () => {
   const session = setup(),

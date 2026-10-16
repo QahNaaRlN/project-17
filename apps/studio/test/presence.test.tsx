@@ -68,6 +68,9 @@ it("STU-025/114: присутствие/CS, отложенное обновле�
     expect(host.textContent).toContain("Сохранённое состояние изменилось");
     await act(async () => {
       editor.locale("en");
+      expect(editor.store.getState().locale).toBe("ru");
+      // Check the translated notice independently of the dirty navigation guard.
+      editor.store.setState({ locale: "en" });
     });
     expect(host.textContent).toContain("Saved state changed");
     await act(async () => {

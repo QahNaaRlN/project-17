@@ -41,6 +41,7 @@ export interface StoreModel {
     studioOrigin: string;
     manifestHash: string;
     data: Record<string, unknown>;
+    sourceErrors?: Record<string, string>;
     changesetId?: string;
   };
 }

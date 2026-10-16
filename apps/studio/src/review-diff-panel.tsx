@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
 import type { Editor } from "./editor.js";
@@ -34,6 +34,7 @@ export function ReviewDiff({
       session.config.environment,
       session.changeset.id,
       session.changeset.seq,
+      session.changeset.state,
       state.historyRevision,
     ],
     queryFn: ({ signal }) => api.diffIndex!(session, signal),
@@ -77,7 +78,7 @@ export function ReviewDiff({
     !invalid &&
     (!object || page.isSuccess) &&
     !state.remotePending;
-  useEffect(() => {
+  useLayoutEffect(() => {
     onSnapshot(ready ? index.data!.snapshot : null);
     return () => onSnapshot(null);
   }, [ready, index.data?.snapshot, onSnapshot]);

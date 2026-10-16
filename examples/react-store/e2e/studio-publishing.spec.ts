@@ -106,6 +106,7 @@ test("STU-074: lost committed publication retries exact key/body without another
   });
   await page.goto(`${origin}/editor#document=${id}&changeset=${id}`);
   const commands: { key: string; body: string | null }[] = [];
+  await expect(page.getByText("Предпросмотр подключён", { exact: true })).toBeVisible();
   page.on("request", (r) => {
     if (r.url().endsWith("/commands/publish"))
       commands.push({ key: r.headers()["idempotency-key"]!, body: r.postData() });

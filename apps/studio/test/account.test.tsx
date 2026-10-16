@@ -89,6 +89,8 @@ it("STU-082: legacy service setup mounts without any human session lookup", asyn
 it("STU-083: work list opens another author's reviewed page without editable-owner assumptions", async () => {
   const { api, session } = await setup();
   session.review.canEdit = false;
+  session.review.canEditBehavior = false;
+  session.review.canEditCondition = false;
   await act(async () => {
     await vi.waitFor(() => expect(button("Обновить работы").disabled).toBe(false));
   });

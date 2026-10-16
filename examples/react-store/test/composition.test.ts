@@ -31,6 +31,19 @@ it("MF-010/STORE-001: storefront manifest, plan and React consume one registry",
     type: "object",
     fields: { products: { type: "list" } },
   });
+  // STU-240/241: the result fields satisfy the same bounds as favorite args.
+  expect(manifest.dataSources!["store.collectionProducts"]!.result).toMatchObject({
+    fields: {
+      items: {
+        of: {
+          fields: {
+            id: manifest.actions!["store.favorite"]!.args!.id,
+            title: manifest.actions!["store.favorite"]!.args!.title,
+          },
+        },
+      },
+    },
+  });
 });
 it("DS-030: native components apply generated classes, including the root wrapper", async () => {
   const initial = model();

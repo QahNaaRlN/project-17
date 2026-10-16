@@ -69,7 +69,7 @@ export async function attachPreviewBridge(options: PreviewBridgeOptions) {
         : null;
   }
   function click(event: MouseEvent) {
-    if (controller.mode !== "design") return;
+    if (controller.interactive) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const element = target(event);

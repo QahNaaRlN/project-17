@@ -3,6 +3,7 @@ import type { IrDocument } from "@cms/ir";
 import { atom, designDeclarations, responsive, type DesignOptions } from "./design.js";
 import { planEvents, type PlannedEvents, type RuntimeAction } from "./actions.js";
 import { fieldValue, jsonValue } from "./values.js";
+import { sourceError } from "./source-error.js";
 import type { Image } from "./image.js";
 
 export interface PlanNode {
@@ -148,6 +149,8 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
     };
     const childFrame = { ...frame, ancestors: [...frame.ancestors, id] };
     try {
+      const failedCondition = node.when && sourceError(node.when, scope);
+      if (failedCondition) return reject(failedCondition, id);
       if (node.when && !evaluatePredicate(node.when, scope)) return [];
       const props: Record<string, unknown> = Object.assign(Object.create(null), node.props);
       if (
@@ -159,27 +162,8 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           return reject("CMS_PROP_INVALID", id);
         if (Object.hasOwn(props, name)) return reject("CMS_PROP_CONFLICT", id);
         if (typeof binding === "string") {
-          const match = /^\$data\.([A-Za-z][A-Za-z0-9_]*)(?:\.(.*))?$/.exec(binding);
-          const source = match
-            ? (scope.data as Record<string, unknown> | undefined)?.[match[1]!]
-            : undefined;
-          if (
-            source &&
-            typeof source === "object" &&
-            Object.hasOwn(source, "error") &&
-            Object.keys(source).length === 1 &&
-            !/^error(?:\.|$)/.test(match?.[2] ?? "")
-          ) {
-            const code = (source as { error?: { code?: unknown } }).error?.code;
-            return unavailable(
-              typeof code === "string" &&
-                /^CMS_SOURCE_(UNKNOWN|TIMEOUT|ABORTED|TIMEOUT_INVALID|CURSOR_INVALID|PARAMS_INVALID|RESULT_INVALID|KEY_INVALID|FAILED)$/.test(
-                  code,
-                )
-                ? code
-                : "CMS_SOURCE_FAILED",
-            );
-          }
+          const code = sourceError(binding, scope);
+          if (code && !/^\$data\.[^.]+\.error(?:\.|$)/.test(binding)) return unavailable(code);
         }
         const value = evaluateBinding(binding, scope);
         if (value !== undefined) props[name] = value;
@@ -298,7 +282,16 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
         );
       } catch (error) {
         const code =
-          error instanceof Error && /^CMS_(ACTION|EVENT|VALUE)_/.test(error.message)
+          error instanceof Error &&
+          [
+            "CMS_ACTION_UNKNOWN",
+            "CMS_EVENT_UNKNOWN",
+            "CMS_ACTION_CHAIN_INVALID",
+            "CMS_ACTION_TARGET_INVALID",
+            "CMS_ACTION_ARGS_INVALID",
+            "CMS_ACTION_SOURCE_UNAVAILABLE",
+            "CMS_VALUE_INVALID",
+          ].includes(error.message)
             ? error.message
             : "CMS_ACTION_ARGS_INVALID";
         return reject(code, id);

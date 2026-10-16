@@ -617,7 +617,7 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 		d.certified = false
 	}
 	d.body = next
-	if op.Type == ops.DocumentSetContent || ((op.Type == ops.NodeSetBinding || op.Type == ops.DocumentSetDataSource) && (next["content"] != nil || bytes.Contains(op.Payload, []byte("$content")))) {
+	if op.Type == ops.DocumentSetContent || ((op.Type == ops.NodeSetBinding || op.Type == ops.DocumentSetDataSource || op.Type == ops.NodeSetBehavior || op.Type == ops.NodeSetCondition) && (next["content"] != nil || bytes.Contains(op.Payload, []byte("$content")))) {
 		if err := commandbus.Require(s.actor, auth.ContentRead); err != nil {
 			return recordInput{}, err
 		}

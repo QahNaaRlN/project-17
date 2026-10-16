@@ -40,10 +40,15 @@ CI PR #53 пройден. [История публикаций и безопас
 реализованы и слиты в dev в [PR #57](https://github.com/QahNaaRlN/project-17/pull/57)
 2026-10-16; локальная приёмка и CI конечного SHA PR пройдены.
 Пакет [источники данных и повторяющиеся блоки](../studio-data-sources.md),
-STU-219…236, реализован в ветке `feature/studio-data-sources`, ещё не слит в dev.
+STU-219…236, реализован и слит в dev в
+[PR #58](https://github.com/QahNaaRlN/project-17/pull/58), merge `c4b8286`.
 Он добавляет формы источников/параметров, `$data`/`$item`, Repeat/empty,
 историю и preview через сервер приложения. Доказательства и статус проверок
-перечислены в спецификации. Figma не требуется.
+перечислены в спецификации; CI PR и merge-коммита пройдены. Figma не требуется.
+[Действия и условия показа](../studio-behavior-conditions.md), STU-237…254,
+реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); изменения ещё не слиты в dev.
+Формы поддерживают цепочки, строгие аргументы, navigate/scrollTo и when,
+раздельные права, legacy read-only и защиту устаревшего preview.
 Остальные конструкторы данных/поведения, advanced binding picker, component.extract,
 междокументный буфер/wrap и измерения NFR остаются частями полного M4.
 

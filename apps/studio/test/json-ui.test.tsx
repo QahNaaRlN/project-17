@@ -102,6 +102,24 @@ it("STU-090/091/093/094: JSON узла показывает diff, сохраня
   await click("Визуальный");
   expect(document.querySelector(".cm-editor")).toBeNull();
 });
+it("STU-243/244/251: Structure retains on/when input when its separate edit permission is missing", async () => {
+  const { api } = await setup();
+  await act(async () => {
+    const session = editor.store.getState().session!;
+    editor.store.setState({
+      session: { ...session, review: { ...session.review, canEditCondition: false } },
+    });
+  });
+  const value = JSON.parse(view().state.doc.toString());
+  value.when = { op: "exists", arg: "$context.locale" };
+  await input(JSON.stringify(value, null, 2));
+  await click("Сохранить JSON");
+  expect(api.apply).not.toHaveBeenCalled();
+  expect(editor.store.getState().error).toBe("FORBIDDEN");
+  expect(editor.store.getState().dirtyFields.json).toBe(true);
+  expect(JSON.parse(view().state.doc.toString()).when).toEqual(value.when);
+  expect(editor.store.getState().document!.nodes.n_heading!.when).toBeUndefined();
+});
 it("STU-090/092: синтаксис и ID диагностируются, переход к проблеме выделяет JSON", async () => {
   await setup();
   await input("{");

@@ -358,6 +358,8 @@ export function createEditor(
         (op) =>
           op.type === "document.setContent" ||
           op.type === "document.setDataSource" ||
+          op.type === "node.setBehavior" ||
+          op.type === "node.setCondition" ||
           (op.type === "node.setBinding" &&
             /^\$(data|item)(\.|$)/.test(String(op.payload.binding))) ||
           (op.type === "node.setBinding" &&
@@ -373,6 +375,10 @@ export function createEditor(
     }
     if (store.getState().dirtyFields.json && source !== "json") {
       store.setState({ error: "JSON_DRAFT_PENDING" });
+      return;
+    }
+    if (store.getState().dirtyFields["property-behavior"]) {
+      store.setState({ error: "FIELD_DRAFT_PENDING" });
       return;
     }
     const state = store.getState(),
@@ -673,19 +679,32 @@ export function createEditor(
       !session?.record ||
       !document ||
       state.status !== "ready" ||
-      !session.review.canEdit ||
       session.changeset.state !== "open"
     )
       return;
+    if (
+      !operations.every((op) =>
+        op.type === "node.setBehavior"
+          ? session.review.canEditBehavior === true
+          : op.type === "node.setCondition"
+            ? session.review.canEditCondition === true
+            : session.review.canEdit,
+      )
+    ) {
+      store.setState({ error: "FORBIDDEN" });
+      return;
+    }
     const submittingFields = new Set(
       operations.flatMap((op) =>
-        op.payload.nodeId === state.selected && op.type === "node.setBinding"
-          ? ["property-" + String(op.payload.prop)]
-          : op.payload.nodeId === state.selected &&
-              op.type === "node.setProps" &&
-              document.nodes[state.selected!]?.type === "Repeat"
-            ? ["property-repeatSettings"]
-            : [],
+        op.type === "node.setBehavior" || op.type === "node.setCondition"
+          ? ["property-behavior"]
+          : op.payload.nodeId === state.selected && op.type === "node.setBinding"
+            ? ["property-" + String(op.payload.prop)]
+            : op.payload.nodeId === state.selected &&
+                op.type === "node.setProps" &&
+                document.nodes[state.selected!]?.type === "Repeat"
+              ? ["property-repeatSettings"]
+              : [],
       ),
     );
     if (
@@ -702,7 +721,7 @@ export function createEditor(
       return;
     }
     const next = applyOperations(document, operations);
-    const problems = scopeProblems(document, next, session.manifest);
+    const problems = scopeProblems(document, next, session.manifest, session.record.path ?? "");
     if (problems.length) {
       store.setState({ error: "DATA_SCOPE_CHANGED" });
       return;
@@ -866,7 +885,10 @@ export function createEditor(
               : null,
           });
           send("select", { nodeId: state.selected });
-          invalidate();
+          // The first handshake needs an authoritative reload. Later ready
+          // messages acknowledge an init (including locale) that already loaded
+          // its context; invalidating again would discard the fresh plan.
+          if (!state.connected) invalidate();
         }
       } else if (initialized && data.type === "node.click" && typeof p.nodeId === "string") {
         select(
@@ -982,6 +1004,10 @@ export function createEditor(
       watchHandshake();
     },
     mode(mode: EditorState["mode"]) {
+      if (fieldDirty() || contentDirty() || store.getState().dirtyFields.json) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return;
+      }
       store.setState({ mode });
       send("mode", { mode });
     },
@@ -1001,6 +1027,10 @@ export function createEditor(
       store.setState({ viewMode });
     },
     locale(locale: EditorState["locale"]) {
+      if (fieldDirty() || contentDirty() || store.getState().dirtyFields.json) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return;
+      }
       store.setState({ locale });
       if (store.getState().session && initialized) {
         send("init", {

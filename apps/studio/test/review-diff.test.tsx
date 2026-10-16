@@ -172,6 +172,46 @@ it("STU-158: fresh publication re-read rejects a changed pointer hash", async ()
   expect(button("Опубликовать").disabled).toBe(true);
   expect(document.body.textContent).toContain("Перечитайте сравнение");
 });
+it("STU-158: approval with the same sequence waits for its own comparison before publication", async () => {
+  const { api } = await setup("in_review");
+  let resolve!: (value: DiffIndex) => void;
+  vi.mocked(api.diffIndex!).mockImplementationOnce(
+    async () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await act(async () => {
+    const session = editor.store.getState().session!;
+    editor.store.setState({
+      session: {
+        ...session,
+        changeset: { ...session.changeset, state: "approved" },
+      },
+    });
+  });
+  await settle();
+  expect(api.diffIndex).toHaveBeenCalledTimes(2);
+  expect(button("Опубликовать").disabled).toBe(true);
+  expect(document.querySelector(".publication-confirmation")).toBeNull();
+  vi.mocked(api.diffPage!).mockResolvedValue({ ...page(), snapshot: otherHash });
+  vi.mocked(api.diffIndex!).mockResolvedValue({ ...index(), snapshot: otherHash });
+  await act(async () => resolve({ ...index(), snapshot: otherHash }));
+  await settle();
+  await settle();
+  expect(button("Опубликовать").disabled).toBe(false);
+  await click("Опубликовать");
+  expect(button("Подтвердить публикацию").disabled).toBe(false);
+  expect(api.workflow).not.toHaveBeenCalled();
+  await click("Подтвердить публикацию");
+  expect(api.workflow).toHaveBeenCalledWith(
+    expect.objectContaining({ diffSnapshot: otherHash }),
+    "publish",
+    "",
+    expect.any(String),
+    expect.any(AbortSignal),
+  );
+});
 it("STU-158: a late publication read cannot confirm a different work; dirty input and errors block decisions", async () => {
   const { api } = await setup();
   let resolve!: (v: DiffIndex) => void;
