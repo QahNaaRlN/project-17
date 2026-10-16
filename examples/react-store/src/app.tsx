@@ -72,11 +72,23 @@ export function StoreApp({ initialModel }: AppProps) {
           scope: {
             context: { locale: current.locale ?? "ru", store: catalog },
             data: current.bridge!.data,
+            content: current.bridge!.data.content as Record<string, unknown> | undefined,
           },
         });
+        plan.diagnostics.push(
+          ...(current.plan?.diagnostics.filter((d) =>
+            /^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(d.code),
+          ) ?? []),
+        );
         bridge?.controller.notify("diagnostics", { items: plan.diagnostics });
-        if (plan.diagnostics.length) throw new Error("STORE_PREVIEW_INVALID");
+        if (
+          plan.diagnostics.some(
+            (d) => !/^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(d.code),
+          )
+        )
+          throw new Error("STORE_PREVIEW_INVALID");
         plan.preview = true;
+        if (current.plan?.images) plan.images = current.plan.images;
         plan.interactionMode = "design";
         if (!stopped) {
           const next = { ...current, catalog, plan, bridge: { ...current.bridge!, ...snapshot } };
@@ -93,6 +105,7 @@ export function StoreApp({ initialModel }: AppProps) {
         else {
           bridge = value;
           previewBridge.current = value;
+          value.controller.notify("diagnostics", { items: latest.current.plan?.diagnostics ?? [] });
         }
       })
       .catch(() => {
@@ -113,14 +126,23 @@ export function StoreApp({ initialModel }: AppProps) {
     const controller = new AbortController();
     request.current = controller;
     if (showLoading) setBusy(true);
+    const locale = latest.current.locale ?? initialModel.locale;
     try {
-      const response = await fetch("/api/store", { signal: controller.signal, cache: "no-store" });
+      const response = await fetch(
+        "/api/store" + (locale ? "?locale=" + encodeURIComponent(locale) : ""),
+        { signal: controller.signal, cache: "no-store" },
+      );
       if (!response.ok && response.status !== 404) throw new Error("STORE_READ_FAILED");
       const next = (await response.json()) as StoreModel;
       if (!controller.signal.aborted && alive.current) setModel(next);
     } catch {
       if (!controller.signal.aborted && alive.current)
-        setModel({ status: "error", preview: initialModel.preview, images: {} });
+        setModel({
+          status: "error",
+          preview: initialModel.preview,
+          images: {},
+          ...(locale ? { locale } : {}),
+        });
     } finally {
       if (!controller.signal.aborted && alive.current) setBusy(false);
     }
@@ -141,7 +163,7 @@ export function StoreApp({ initialModel }: AppProps) {
       Math.max(5000, Math.min(model.refreshAt - Date.now(), 2_147_483_647)),
     );
     return () => clearTimeout(timer);
-    // Refresh reads no state except the invariant initial preview flag.
+    // Refresh reads the current locale through latest without restarting this timer.
   }, [model.refreshAt, model.status]);
   const c = model.catalog;
   return (

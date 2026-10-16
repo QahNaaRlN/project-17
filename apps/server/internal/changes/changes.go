@@ -279,6 +279,11 @@ type ApplyResult struct {
 
 func authorizeApply(actor auth.Actor, p applyPayload) error {
 	for _, op := range p.Operations {
+		if op.Type == ops.DocumentSetContent {
+			if err := commandbus.Require(actor, auth.ContentRead); err != nil {
+				return err
+			}
+		}
 		right, ok := OperationRight(op.Type)
 		if !ok {
 			continue // неизвестный тип отклонит Validate
@@ -327,6 +332,7 @@ type session struct {
 }
 
 type workingDoc struct {
+	primaryChanged  bool
 	sourceVersionID uuid.UUID // version read before this command allocates or changes a working copy
 	kind            string
 	schemaVersion   *int32
@@ -537,6 +543,9 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 	if err := s.flush(); err != nil {
 		return ApplyResult{}, err
 	}
+	if err := s.validatePrimaryEdits(); err != nil {
+		return ApplyResult{}, err
+	}
 	if err := s.q.SetChangesetSeq(s.ctx, store.SetChangesetSeqParams{ID: s.cs.ID, Seq: s.cs.Seq}); err != nil {
 		return ApplyResult{}, err
 	}
@@ -557,6 +566,14 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 }
 
 func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, error) {
+	if op.Type == ops.DocumentSetContent {
+		if err := commandbus.Require(s.actor, auth.ContentRead); err != nil {
+			return recordInput{}, err
+		}
+		if s.cs.Kind != "standard" {
+			return recordInput{}, commandbus.Validation(map[string]string{"changesetId": "нужен standard Change Set"})
+		}
+	}
 	if right, ok := OperationRight(op.Type); ok {
 		if err := commandbus.Require(s.actor, right); err != nil {
 			return recordInput{}, err
@@ -597,6 +614,9 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 		d.certified = false
 	}
 	d.body = next
+	if op.Type == ops.DocumentSetContent || (op.Type == ops.NodeSetBinding && (next["content"] != nil || bytes.Contains(op.Payload, []byte("$content")))) {
+		d.primaryChanged = true
+	}
 	payload := op.Payload
 	if res.Payload != nil {
 		payload = res.Payload

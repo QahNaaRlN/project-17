@@ -150,6 +150,8 @@ it("STU-100/101/103: контент и upload проходят только че
     changesetId +
     "&kind=entity";
   expect((await fetch(origin + base)).status).toBe(200);
+  // STU-203: catalogue search crosses the authenticated proxy in the same CS.
+  expect((await fetch(origin + base + "&q=Story")).status).toBe(200);
   for (const tail of ["&changesetId=" + changesetId, "&unknown=x", "&after=bad"])
     expect((await fetch(origin + base + tail)).status).toBe(400);
   expect(
@@ -327,6 +329,19 @@ it("STU-061/064: адаптер пропускает структурные гр
     expect(JSON.parse(String(fetcher.mock.calls.at(-1)![1]!.body)).payload).toEqual(payload);
     expect(fetcher.mock.calls.at(-1)![1]!.headers).toMatchObject({ "Idempotency-Key": "test-key" });
   }
+});
+it("STU-204/217: proxy сохраняет document.setContent, null и группу без переписывания", async () => {
+  const { post, fetcher } = await setup();
+  const payload = {
+    changesetId,
+    expectedSeq: 3,
+    group: true,
+    operations: [{ type: "document.setContent", target: documentId, payload: { content: null } }],
+  };
+  expect((await post("/api/studio/api/v1/commands/apply-operations", { payload })).status).toBe(
+    200,
+  );
+  expect(JSON.parse(String(fetcher.mock.calls.at(-1)![1]!.body)).payload).toEqual(payload);
 });
 it("STU-050/052: адаптер разрешает только историю CS и замороженные undo/redo", async () => {
   const { origin, post, fetcher } = await setup();

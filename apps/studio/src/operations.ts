@@ -5,7 +5,10 @@ import { StudioError, type Operation } from "./types.js";
 export function applyOperations(source: IrDocument, operations: Operation[]): IrDocument {
   const doc = structuredClone(source);
   for (const { type, payload: p } of operations) {
-    if (type === "localContent.set") {
+    if (type === "document.setContent") {
+      if (p.content === null) delete doc.content;
+      else doc.content = structuredClone(p.content) as NonNullable<IrDocument["content"]>;
+    } else if (type === "localContent.set") {
       const key = String(p.key),
         old = doc.localContent?.[key];
       (doc.localContent ??= {})[key] = {

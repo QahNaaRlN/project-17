@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"regexp"
@@ -158,6 +159,9 @@ func load(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID,
 	if err != nil {
 		return out, err
 	}
+	if err := changes.RequirePrimaryRead(ctx, q, actor, id); err != nil {
+		return out, err
+	}
 	if len(objects) > 1000 {
 		return out, problem(422, "DIFF_LIMIT_EXCEEDED")
 	}
@@ -267,6 +271,9 @@ func ReadIndex(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.
 	return v.index, err
 }
 func CheckExpected(ctx context.Context, q *store.Queries, actor auth.Actor, id uuid.UUID, snapshot *string) error {
+	if err := changes.RequirePrimaryRead(ctx, q, actor, id); err != nil {
+		return err
+	}
 	if snapshot == nil {
 		return nil
 	}

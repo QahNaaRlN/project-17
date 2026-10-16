@@ -3,6 +3,7 @@ import { Image, preparePage, loadSources, documentHash } from "@cms/runtime";
 import { registry, storeTokens } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
+import { loadPlanImages } from "@cms/react/server";
 
 export async function loadStore(
   cms: CmsClient,
@@ -11,13 +12,18 @@ export async function loadStore(
   bridge?: { studioOrigin: string; manifestHash: string },
 ): Promise<StoreModel> {
   const preview = !!options.preview;
-  const { locale = "ru", ...read } = options;
+  const locale = options.locale ?? "ru",
+    read = { ...options, locale };
   try {
     const page = await cms.getPage(path, read);
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
     const model: StoreModel = { status: "ready", preview, catalog, images: {}, locale };
-    const scope = { context: { locale, store: catalog }, data: page.data };
+    const scope = {
+      context: { locale, store: catalog },
+      data: page.data,
+      content: page.data.content as Record<string, unknown> | undefined,
+    };
     const composition = storeComposition(page.document, catalog);
     const data = {
       ...page.data,
@@ -57,6 +63,12 @@ export async function loadStore(
       };
     }
     if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
+    const refreshAt = await loadPlanImages(cms, model.plan, read);
+    if (refreshAt !== undefined) model.refreshAt = refreshAt;
+    if (page.diagnostics)
+      model.plan.diagnostics.push(
+        ...page.diagnostics.map((d) => ({ code: d.code, nodeId: page.document.root })),
+      );
     const refs = [
       ...(catalog.heroAsset
         ? [{ key: "hero", asset: catalog.heroAsset, alt: "Предметы коллекции", hero: true }]

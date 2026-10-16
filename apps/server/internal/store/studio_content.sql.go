@@ -23,8 +23,9 @@ LEFT JOIN changeset_objects co ON co.object_id=o.id AND co.changeset_id=$1
 JOIN object_versions v ON v.id=COALESCE(co.working_version_id,o.head_version_id)
 WHERE o.project_id=$2 AND o.kind=$3::text
  AND ($4::text='' OR o.schema_name=$4)
+ AND ($5::text='' OR strpos(lower((v.body->'title')::text),lower($5::text))>0)
  AND (NOT v.deleted OR co.object_id IS NOT NULL)
- AND o.id>$5::uuid
+ AND o.id>$6::uuid
 ORDER BY o.id LIMIT 51
 `
 
@@ -33,6 +34,7 @@ type ListStudioContentParams struct {
 	ProjectID   uuid.UUID `json:"projectId"`
 	Kind        string    `json:"kind"`
 	SchemaName  string    `json:"schemaName"`
+	Search      string    `json:"search"`
 	AfterID     uuid.UUID `json:"afterId"`
 }
 
@@ -52,6 +54,7 @@ func (q *Queries) ListStudioContent(ctx context.Context, arg ListStudioContentPa
 		arg.ProjectID,
 		arg.Kind,
 		arg.SchemaName,
+		arg.Search,
 		arg.AfterID,
 	)
 	if err != nil {

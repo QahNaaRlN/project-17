@@ -244,7 +244,7 @@ export function createStudioHandler(
             const allowed = [
               "environment",
               "changesetId",
-              ...(path.endsWith("content-catalog") ? ["kind", "schema", "after"] : []),
+              ...(path.endsWith("content-catalog") ? ["kind", "schema", "after", "q"] : []),
             ];
             if (
               [...url.searchParams.keys()].some(
@@ -485,6 +485,7 @@ export function createStudioHandler(
               envelope.payload.operations.some(
                 (op: { type?: unknown }) =>
                   ![
+                    "document.setContent",
                     "node.setProps",
                     "node.setDesign",
                     "node.setBinding",

@@ -473,6 +473,9 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 		if !set.Has(right) {
 			violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(right)})
 		}
+		if oa.Type == "document.setContent" && !set.Has(auth.ContentRead) {
+			violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(auth.ContentRead)})
+		}
 	}
 	status := "passed"
 	if len(violations) > 0 {

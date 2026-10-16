@@ -1,6 +1,12 @@
 import type { CmsClient, ReadOptions } from "@cms/core";
 import type { IrDocument } from "@cms/ir";
-import { preparePageWithData, type DataPlanOptions, type RenderPlan } from "@cms/runtime";
+import {
+  Image,
+  preparePageWithData,
+  type DataPlanOptions,
+  type RenderPlan,
+  type PlanNode,
+} from "@cms/runtime";
 import { nativeDefinitions, type Registry } from "@cms/component-registry";
 export { createPreviewHandler, getPreviewState, previewFrameAncestors } from "./preview-server.js";
 export type { PreviewHandlerOptions } from "./preview-server.js";
@@ -64,7 +70,15 @@ export async function loadPage(
       : {}),
     ...options,
     components,
-    scope: { data: page.data, ...options.scope },
+    scope: {
+      data: page.data,
+      ...options.scope,
+      ...(page.data.content ? { content: page.data.content as Record<string, unknown> } : {}),
+      context: {
+        ...options.scope?.context,
+        ...(page.contentContext ? { locale: page.contentContext.locale } : {}),
+      },
+    },
     sourceOptions: {
       ...options.sourceOptions,
       ...(options.read?.signal ? { signal: options.read.signal } : {}),
@@ -74,5 +88,48 @@ export async function loadPage(
     plan.interactionMode = options.mode ?? "design";
     plan.preview = true;
   }
+  if (page.diagnostics)
+    plan.diagnostics.push(
+      ...page.diagnostics.map((d) => ({ code: d.code, nodeId: d.nodeId ?? page.document.root })),
+    );
+  await loadPlanImages(cms, plan, options.read);
   return plan;
+}
+
+/** Load signed models in the same scope and return their earliest refresh time. */
+export async function loadPlanImages(
+  cms: CmsClient,
+  plan: RenderPlan,
+  read: ReadOptions = {},
+): Promise<number | undefined> {
+  const images: NonNullable<RenderPlan["images"]> = Object.create(null);
+  const requests = new Map<string, ReturnType<CmsClient["getImage"]>>();
+  let refreshAt: number | undefined;
+  async function visit(node: PlanNode): Promise<void> {
+    if (node.type === "Image") {
+      try {
+        const ref = node.props.src as { assetId: string };
+        if (!ref) throw new Error("CMS_IMAGE_UNAVAILABLE");
+        const fit = node.props.fit === "cover" ? "cover" : "contain";
+        const key = ref.assetId + ":" + fit;
+        if (!requests.has(key)) requests.set(key, cms.getImage(ref.assetId, { ...read, fit }));
+        const model = await requests.get(key);
+        if (!model) throw new Error("CMS_IMAGE_UNAVAILABLE");
+        images[node.key] = Image(model, {
+          alt: node.props.decorative === true ? "" : String(node.props.alt ?? ""),
+          loading: node.props.loading === "eager" ? "eager" : "lazy",
+          width: { base: "100vw" },
+        }).props;
+        const next = Date.parse(model.expiresAt) - 30_000;
+        refreshAt = Math.min(refreshAt ?? next, next);
+      } catch (error) {
+        if (read.signal?.aborted) throw error;
+        plan.diagnostics.push({ code: "CMS_IMAGE_UNAVAILABLE", nodeId: node.id });
+      }
+    }
+    await Promise.all(node.children.map(visit));
+  }
+  await Promise.all(plan.roots.map(visit));
+  if (Object.keys(images).length) plan.images = images;
+  return refreshAt;
 }

@@ -404,7 +404,7 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         crypto.randomUUID(),
       );
     },
-    async contentCatalog(session, kind, schema, cursor, signal) {
+    async contentCatalog(session, kind, schema, cursor, signal, search) {
       const value = (await listing<ContentItem>(
         "/api/v1/content-catalog",
         {
@@ -412,6 +412,7 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
           changesetId: session.changeset.id,
           kind,
           ...(schema ? { schema } : {}),
+          ...(search ? { q: search } : {}),
         },
         cursor,
         signal,

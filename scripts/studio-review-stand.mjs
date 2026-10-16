@@ -124,7 +124,16 @@ const reviewManifest = JSON.parse(
 );
 reviewManifest.schemas = {
   ...reviewManifest.schemas,
-  Article: { version: 1, title: "Article", fields: { title: { type: "text", localized: true } } },
+  Article: {
+    version: 1,
+    title: "Article",
+    fields: {
+      title: { type: "text", localized: true },
+      ...(process.env.CMS_REVIEW_BINDINGS === "true"
+        ? { cover: { type: "asset", assetKind: "image" }, alt: { type: "text", localized: true } }
+        : {}),
+    },
+  },
 };
 await command("register-manifest", { environment: "staging", manifest: reviewManifest });
 const author = await command("create-role", {
@@ -150,6 +159,11 @@ writeFileSync(
     project,
     environment: "staging",
     authMode: "oidc",
+    ...(env.CMS_S3_ENDPOINT
+      ? {
+          assetUploadOrigin: `${env.CMS_S3_SECURE === "false" ? "http" : "https"}://${env.CMS_S3_ENDPOINT}`,
+        }
+      : {}),
     studioOrigin,
     appOrigin,
   }),

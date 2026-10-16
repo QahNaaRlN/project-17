@@ -120,6 +120,10 @@ export function createCmsClient(options: ClientOptions): CmsClient {
     images = false,
   ): Promise<T | null> {
     const preview = opts.preview;
+    if (opts.locale !== undefined) {
+      input(typeof opts.locale === "string" && /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(opts.locale));
+      if (endpoint === "page") params.set("locale", opts.locale);
+    }
     input(preview === undefined || (decode.record(preview) && secret(preview.token)));
     const token = preview?.token ?? key;
     input(secret(token));

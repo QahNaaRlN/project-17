@@ -27,7 +27,7 @@ func studioContentRoutes(router chi.Router, d Deps) {
 			values := r.URL.Query()
 			allowed := []string{"environment", "changesetId"}
 			if route == "/content-catalog" {
-				allowed = append(allowed, "kind", "schema", "after")
+				allowed = append(allowed, "kind", "schema", "after", "q")
 			}
 			for key, entries := range values {
 				if len(entries) != 1 || !slices.Contains(allowed, key) {
@@ -85,7 +85,11 @@ func studioContentRoutes(router chi.Router, d Deps) {
 					return
 				}
 			}
-			rows, err := q.ListStudioContent(r.Context(), store.ListStudioContentParams{ProjectID: actor.ProjectID, ChangesetID: cs, Kind: kind, SchemaName: schema, AfterID: after})
+			if len([]rune(values.Get("q"))) > 200 {
+				writeError(w, r, d.Log, badParam("q", "до 200 символов"))
+				return
+			}
+			rows, err := q.ListStudioContent(r.Context(), store.ListStudioContentParams{ProjectID: actor.ProjectID, ChangesetID: cs, Kind: kind, SchemaName: schema, AfterID: after, Search: values.Get("q")})
 			if err != nil {
 				writeError(w, r, d.Log, err)
 				return

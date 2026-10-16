@@ -304,6 +304,19 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 				return ir.Result{}, err
 			}
 			r.Diagnostics = append(r.Diagnostics, typed.Diagnostics...)
+			if typed.Valid {
+				id, parseErr := uuid.Parse(fmt.Sprint(resolve["entityId"]))
+				if parseErr == nil {
+					source, readErr := c.contentVersion(ctx, id)
+					if readErr != nil {
+						return ir.Result{}, readErr
+					}
+					_, version, known := c.Schema(fmt.Sprint(content["schema"]))
+					if !known || source.SchemaVersion == nil || *source.SchemaVersion != version {
+						r.Diagnostics = append(r.Diagnostics, problem("SCHEMA_UPCAST_REQUIRED", "/content/resolve", "", nil).Diagnostics...)
+					}
+				}
+			}
 		}
 
 		r.Diagnostics = append(r.Diagnostics, extra...)

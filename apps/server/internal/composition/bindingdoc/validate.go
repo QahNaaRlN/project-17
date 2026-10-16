@@ -160,6 +160,13 @@ func (c *checker) binding(v any, target object, p, id string, s scopes, depth in
 		return nil
 	}
 	if expr, ok := v.(string); ok {
+		if strings.HasPrefix(expr, "$content.") {
+			source := c.path(expr, p, id, s)
+			if source != nil && !SimpleContentCompatible(source, target) {
+				c.add("BINDING_TYPE_MISMATCH", p, id, object{"expected": target, "actual": source})
+			}
+			return source
+		}
 		return c.value(expr, target, p, id, s, "BINDING_TYPE_MISMATCH")
 	}
 	b := obj(v)

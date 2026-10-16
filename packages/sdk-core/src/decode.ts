@@ -37,7 +37,9 @@ function diagnostics(value: Record<string, unknown>) {
             typeof d.code === "string" &&
             typeof d.pointer === "string" &&
             ["error", "warning"].includes(d.severity as string) &&
-            typeof d.message === "string",
+            typeof d.message === "string" &&
+            (d.nodeId === undefined || typeof d.nodeId === "string") &&
+            (d.params === undefined || record(d.params)),
         ),
     );
   }
@@ -55,6 +57,19 @@ export function page(value: unknown): PageResponse {
   );
   valid(doc(value.document).kind === "page");
   valid(record(value.components) && record(value.data) && record(value.dataSources));
+  if (value.data.content !== undefined) valid(record(value.data.content));
+  if (value.contentContext !== undefined) {
+    valid(
+      record(value.contentContext) &&
+        typeof value.contentContext.locale === "string" &&
+        record(value.contentContext.versions),
+    );
+    valid(
+      Object.entries(value.contentContext.versions).every(
+        ([id, version]) => uuid(id) && uuid(version),
+      ),
+    );
+  }
   for (const [key, component] of Object.entries(value.components)) {
     valid(uuid(key) && record(component) && uuid(component.versionId));
     valid(doc(component.document).kind === "component");

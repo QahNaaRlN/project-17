@@ -83,11 +83,12 @@ type PageRef struct {
 // Page — ответ /page (08 §5.1). Компоненты, данные и источники появятся вместе с
 // Composed-компонентами и контентом; пока они пустые.
 type Page struct {
-	Page        PageRef         `json:"page"`
-	Document    json.RawMessage `json:"document"`
-	Components  map[string]any  `json:"components"`
-	Data        map[string]any  `json:"data"`
-	DataSources map[string]any  `json:"dataSources"`
+	ContentContext *ContentContext `json:"contentContext,omitempty"`
+	Page           PageRef         `json:"page"`
+	Document       json.RawMessage `json:"document"`
+	Components     map[string]any  `json:"components"`
+	Data           map[string]any  `json:"data"`
+	DataSources    map[string]any  `json:"dataSources"`
 	// Diagnostics — диагностика документа в черновом режиме (API-042).
 	Diagnostics []ir.Diagnostic `json:"diagnostics,omitzero"`
 }
@@ -107,7 +108,7 @@ func notFound(detail string) error {
 }
 
 // GetPage возвращает опубликованную страницу по пути запроса.
-func GetPage(ctx context.Context, q *store.Queries, a Access, path string) (Page, error) {
+func GetPage(ctx context.Context, q *store.Queries, a Access, path string, locales ...string) (Page, error) {
 	routes, err := GetRoutes(ctx, q, a)
 	if err != nil {
 		return Page{}, err
@@ -120,11 +121,19 @@ func GetPage(ctx context.Context, q *store.Queries, a Access, path string) (Page
 	if err != nil {
 		return Page{}, err
 	}
-	return Page{
+	p := Page{
 		Page:     PageRef{ObjectID: d.ObjectID, VersionID: d.VersionID, Path: route.Path, Params: params},
 		Document: d.Document, Components: map[string]any{}, Data: map[string]any{}, DataSources: map[string]any{},
 		Diagnostics: d.Diagnostics,
-	}, nil
+	}
+	locale := ""
+	if len(locales) > 0 {
+		locale = locales[0]
+	}
+	if err := resolvePrimary(ctx, q, a, &p, locale); err != nil {
+		return Page{}, err
+	}
+	return p, nil
 }
 
 // GetDocument возвращает опубликованный в окружении документ.
