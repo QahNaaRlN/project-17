@@ -308,7 +308,10 @@ test("STU-021: отказ, конфликт и потерянный ответ �
   await expect(frame.locator('[data-cms-node="n_store"]')).toHaveCSS("padding-top", "36px");
   await expect(page.getByRole("alert").filter({ hasText: "STUDIO_RESPONSE_LOST" })).toBeVisible();
   await request.post(origin + "/studio-control", { data: { state: "in_review" } });
-  await page.getByRole("button", { name: "Перечитать черновик", exact: true }).click();
+  await page
+    .locator("footer")
+    .getByRole("button", { name: "Перечитать черновик", exact: true })
+    .click();
   await expect(
     page.getByText("Этот черновик доступен только для чтения", { exact: true }),
   ).toBeVisible();

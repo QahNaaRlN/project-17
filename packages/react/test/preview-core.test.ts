@@ -300,3 +300,74 @@ it("SDK-040: refresh хоста обновляет snapshot в той же оч�
   await f.controller.refresh();
   expect(f.reload).toHaveBeenCalledTimes(2);
 });
+it("STU-231: changing locale aborts the old request and ignores its late result even if the loader ignores abort", async () => {
+  const f = await fixture();
+  await f.init();
+  let finish!: (value: PreviewSnapshot) => void, oldSignal!: AbortSignal;
+  f.reload.mockImplementationOnce((signal: AbortSignal) => {
+    oldSignal = signal;
+    return new Promise<PreviewSnapshot>((resolve) => {
+      finish = resolve;
+    });
+  });
+  const first = f.receive("invalidate", { seq: 1, objectIds: ["document"] });
+  await vi.waitFor(() => expect(f.reload).toHaveBeenCalledTimes(1));
+  f.reload.mockResolvedValueOnce(await snapshot("English"));
+  const latest = f.receive("init", { sessionId: "session", locale: "en", mode: "design" });
+  expect(oldSignal.aborted).toBe(true);
+  finish(await snapshot("stale Russian"));
+  await Promise.all([first, latest]);
+  expect(f.render).toHaveBeenCalledTimes(1);
+  expect(f.controller.snapshot.document.nodes.text!.props).toEqual({ text: "English" });
+  expect(f.errors()).toEqual([]);
+});
+it("STU-231: superseded locale messages cannot reload or commit an intermediate context", async () => {
+  const f = await fixture();
+  await f.init();
+  let finish!: (value: PreviewSnapshot) => void;
+  f.reload.mockImplementationOnce(
+    () =>
+      new Promise<PreviewSnapshot>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = f.controller.refresh();
+  await vi.waitFor(() => expect(f.reload).toHaveBeenCalledTimes(1));
+  const en = f.receive("init", { sessionId: "session", locale: "en", mode: "design" });
+  const ru = f.receive("init", { sessionId: "session", locale: "ru", mode: "design" });
+  f.reload.mockResolvedValueOnce(await snapshot("latest Russian"));
+  finish(await snapshot("stale"));
+  await Promise.all([first, en, ru]);
+  expect(f.reload).toHaveBeenCalledTimes(2);
+  expect(f.reload.mock.calls[1]![1]).toBe("ru");
+  expect(f.render).toHaveBeenCalledTimes(1);
+});
+it("STU-231/230: a foreign or invalid init cannot cancel an authorized source load", async () => {
+  const f = await fixture();
+  await f.init();
+  let finish!: (value: PreviewSnapshot) => void, signal!: AbortSignal;
+  f.reload.mockImplementationOnce((value: AbortSignal) => {
+    signal = value;
+    return new Promise<PreviewSnapshot>((resolve) => {
+      finish = resolve;
+    });
+  });
+  const first = f.controller.refresh();
+  await vi.waitFor(() => expect(f.reload).toHaveBeenCalledTimes(1));
+  await f.controller.receive({
+    origin: "https://other.example",
+    source: f.parent,
+    data: f.message("init", { sessionId: "session", locale: "en", mode: "design" }),
+  });
+  const invalid = f.receive("init", {
+    sessionId: "session",
+    changesetId: "other",
+    locale: "en",
+    mode: "design",
+  });
+  expect(signal.aborted).toBe(false);
+  finish(await snapshot("valid"));
+  await Promise.all([first, invalid]);
+  expect(f.controller.snapshot.document.nodes.text!.props).toEqual({ text: "valid" });
+  expect(f.errors()).toContain("CMS_PREVIEW_INIT_INVALID");
+});

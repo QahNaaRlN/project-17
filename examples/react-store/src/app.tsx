@@ -83,7 +83,10 @@ export function StoreApp({ initialModel }: AppProps) {
         bridge?.controller.notify("diagnostics", { items: plan.diagnostics });
         if (
           plan.diagnostics.some(
-            (d) => !/^(BINDING_|CONTENT_|SCHEMA_|CMS_IMAGE_UNAVAILABLE$)/.test(d.code),
+            (d) =>
+              !/^(BINDING_|CONTENT_|SCHEMA_|CMS_(IMAGE_UNAVAILABLE$|SOURCE_|REPEAT_|DATA_VALUE_INVALID$))/.test(
+                d.code,
+              ),
           )
         )
           throw new Error("STORE_PREVIEW_INVALID");

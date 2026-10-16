@@ -339,19 +339,31 @@ it.each([false, true])(
     expect(api.open).not.toHaveBeenCalled();
     expect(api.pages).not.toHaveBeenCalled();
     expect(api.preview).not.toHaveBeenCalled();
-    expect(
-      document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')?.value,
-    ).toBe("asset");
+    await expect
+      .poll(async () => {
+        await flush();
+        return document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')
+          ?.value;
+      })
+      .toBe("asset");
     if (entityWrite) {
       await click("Создать сущность");
-      expect(
-        document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')!.value,
-      ).toBe("entity");
+      await expect
+        .poll(async () => {
+          await flush();
+          return document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')
+            ?.value;
+        })
+        .toBe("entity");
       expect(document.body.textContent).toContain("нет схем сущностей");
       await click("Загрузить файл");
-      expect(
-        document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')!.value,
-      ).toBe("asset");
+      await expect
+        .poll(async () => {
+          await flush();
+          return document.querySelector<HTMLSelectElement>('select[aria-label="Тип контента"]')
+            ?.value;
+        })
+        .toBe("asset");
     }
   },
 );

@@ -135,7 +135,12 @@ export async function loadSources(
   if (entries.length > 64) return { error: { code: "CMS_SOURCE_LIMIT" } };
   return Object.fromEntries(
     await Promise.all(
-      entries.map(async ([key, use]) => [key, await loadSource(use, sources, scope, options)]),
+      entries.map(async ([key, use]) => [
+        key,
+        ["content", "constructor", "prototype", "__proto__"].includes(key)
+          ? { error: { code: "CMS_SOURCE_KEY_INVALID" } }
+          : await loadSource(use, sources, scope, options),
+      ]),
     ),
   );
 }

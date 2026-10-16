@@ -107,7 +107,7 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 		if err != nil {
 			return err
 		}
-		policy, err := policyCheck(ctx, q, cs.ProjectID, actors)
+		policy, err := policyCheck(ctx, q, cs.ProjectID, cs.ID, actors)
 		if err != nil {
 			return err
 		}

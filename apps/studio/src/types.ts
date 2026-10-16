@@ -73,6 +73,7 @@ export interface WorkQueueCard {
 export interface Operation {
   type:
     | "document.setContent"
+    | "document.setDataSource"
     | "node.setProps"
     | "node.setDesign"
     | "node.setBinding"

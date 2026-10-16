@@ -11,6 +11,13 @@
 .content-bindings p {
   overflow-wrap: anywhere;
 }
+.content-bindings fieldset {
+  min-width: 0;
+}
+.content-bindings code,
+.content-bindings li {
+  overflow-wrap: anywhere;
+}
 .content-bindings button,
 .content-bindings select,
 .content-bindings input {

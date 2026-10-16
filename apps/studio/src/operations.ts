@@ -5,7 +5,22 @@ import { StudioError, type Operation } from "./types.js";
 export function applyOperations(source: IrDocument, operations: Operation[]): IrDocument {
   const doc = structuredClone(source);
   for (const { type, payload: p } of operations) {
-    if (type === "document.setContent") {
+    if (type === "document.setDataSource") {
+      const key = String(p.key);
+      if (
+        !/^[A-Za-z][A-Za-z0-9_]*$/.test(key) ||
+        ["content", "constructor", "prototype", "__proto__"].includes(key) ||
+        p.use === undefined
+      )
+        throw new StudioError("FIELD_INVALID");
+      if (p.use === null) {
+        delete doc.dataSources?.[key];
+        if (doc.dataSources && !Object.keys(doc.dataSources).length) delete doc.dataSources;
+      } else
+        (doc.dataSources ??= {})[key] = structuredClone(p.use) as NonNullable<
+          IrDocument["dataSources"]
+        >[string];
+    } else if (type === "document.setContent") {
       if (p.content === null) delete doc.content;
       else doc.content = structuredClone(p.content) as NonNullable<IrDocument["content"]>;
     } else if (type === "localContent.set") {

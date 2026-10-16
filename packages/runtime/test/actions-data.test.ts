@@ -74,7 +74,7 @@ it("SDK-014: предел страницы допускает 64 источни�
     expect(plan.roots.length).toBe(count === 64 ? 1 : 0);
   }
 });
-it("SDK-014: ошибка одного источника оставляет empty и независимый успешный контент", async () => {
+it("SDK-014/STU-232: ошибка источника отличается от empty и сохраняет независимый контент", async () => {
   const definition = source(),
     failure = {
       ...source(),
@@ -104,10 +104,10 @@ it("SDK-014: ошибка одного источника оставляет emp
     },
   };
   const plan = await preparePageWithData(doc, { sources: [definition, failure] });
-  expect(plan.diagnostics).toEqual([]);
+  expect(plan.diagnostics).toEqual([{ code: "CMS_SOURCE_FAILED", nodeId: "repeat" }]);
   expect(plan.roots[0]!.children.map((node) => node.props.text)).toEqual([
     "one",
-    "empty",
+    "Data unavailable",
     "CMS_SOURCE_FAILED",
   ]);
   expect(JSON.stringify(plan)).not.toContain("private-message");

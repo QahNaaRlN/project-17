@@ -32,6 +32,7 @@ export async function loadStore(
         ...(options.signal ? { signal: options.signal } : {}),
       })),
     };
+    if (Object.hasOwn(page.data, "content")) data.content = page.data.content;
     model.plan = preparePage(composition, {
       natives: definitionsFor(catalog),
       scope: { ...scope, data },
@@ -62,7 +63,12 @@ export async function loadStore(
         ...(options.preview?.changesetId ? { changesetId: options.preview.changesetId } : {}),
       };
     }
-    if (model.plan.diagnostics.length) throw new Error("STORE_COMPOSITION_INVALID");
+    if (
+      model.plan.diagnostics.some(
+        (d) => !/^CMS_(SOURCE_|REPEAT_|DATA_VALUE_INVALID$|IMAGE_UNAVAILABLE$)/.test(d.code),
+      )
+    )
+      throw new Error("STORE_COMPOSITION_INVALID");
     const refreshAt = await loadPlanImages(cms, model.plan, read);
     if (refreshAt !== undefined) model.refreshAt = refreshAt;
     if (page.diagnostics)

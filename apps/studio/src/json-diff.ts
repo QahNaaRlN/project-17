@@ -31,6 +31,7 @@ export function semanticDocument(source: IrDocument): IrDocument {
     }
   }
   if (doc.localContent && !Object.keys(doc.localContent).length) delete doc.localContent;
+  if (doc.dataSources && !Object.keys(doc.dataSources).length) delete doc.dataSources;
   return doc;
 }
 // Unique IDs turn LCS into LIS: O(n log n), bounded memory even for 5,000 siblings.
@@ -108,7 +109,7 @@ export function documentDiff(
     after = semanticDocument(candidate);
   for (const key of keys(before, after))
     if (
-      !["nodes", "localContent", "content"].includes(key) &&
+      !["nodes", "localContent", "content", "dataSources"].includes(key) &&
       !same(
         (before as unknown as Record<string, unknown>)[key],
         (after as unknown as Record<string, unknown>)[key],
@@ -244,6 +245,10 @@ export function documentDiff(
   }
   if (!same(before.content, after.content))
     add("document.setContent", { content: after.content ?? null });
+  for (const key of keys(before.dataSources, after.dataSources)) {
+    if (!same(before.dataSources?.[key], after.dataSources?.[key]))
+      add("document.setDataSource", { key, use: after.dataSources?.[key] ?? null });
+  }
   for (const key of keys(before.localContent, after.localContent)) {
     const a = before.localContent?.[key],
       b = after.localContent?.[key];

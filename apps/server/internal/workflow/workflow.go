@@ -292,7 +292,7 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		return evaluation{}, err
 	}
 	checks := []Check{check}
-	policy, err := policyCheck(ctx, q, projectID, opActors)
+	policy, err := policyCheck(ctx, q, projectID, changesetID, opActors)
 	if err != nil {
 		return evaluation{}, err
 	}
@@ -433,7 +433,7 @@ func mustJSON(v any) json.RawMessage {
 }
 
 // policyCheck — этап 5: у каждого автора операций есть право на её тип на момент подачи.
-func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opActors []store.ChangesetOperationActorsRow) (Check, error) {
+func policyCheck(ctx context.Context, q *store.Queries, projectID, changesetID uuid.UUID, opActors []store.ChangesetOperationActorsRow) (Check, error) {
 	var violations []map[string]string
 	rights := map[uuid.UUID]auth.RightSet{}
 	for _, oa := range opActors {
@@ -475,6 +475,15 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID uuid.UUID, opA
 		}
 		if oa.Type == "document.setContent" && !set.Has(auth.ContentRead) {
 			violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(auth.ContentRead)})
+		}
+		if oa.Type == "document.setDataSource" && !set.Has(auth.ContentRead) {
+			if err := changes.RequirePrimaryRead(ctx, q, auth.Actor{Rights: set}, changesetID); err != nil {
+				var domain *commandbus.Error
+				if !errors.As(err, &domain) || domain.Code != "FORBIDDEN" {
+					return Check{}, err
+				}
+				violations = append(violations, map[string]string{"actorId": oa.ActorID.String(), "operation": oa.Type, "right": string(auth.ContentRead)})
+			}
 		}
 	}
 	status := "passed"
