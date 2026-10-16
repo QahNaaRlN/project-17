@@ -1,0 +1,123 @@
+{
+  "compatibility": [
+    {
+      "name": "URL scheme subset",
+      "from": { "type": "url", "schemes": ["https"] },
+      "to": { "type": "url", "schemes": ["https", "http"] },
+      "valid": true
+    },
+    {
+      "name": "unknown URL schemes",
+      "from": { "type": "url" },
+      "to": { "type": "url", "schemes": ["https"] },
+      "valid": false
+    },
+    {
+      "name": "rich text subset",
+      "from": { "type": "richText", "marks": ["bold"], "blocks": [] },
+      "to": { "type": "richText", "marks": ["bold", "italic"], "blocks": ["paragraph"] },
+      "valid": true
+    },
+    {
+      "name": "rich text mark mismatch",
+      "from": { "type": "richText", "marks": ["bold"] },
+      "to": { "type": "richText", "marks": ["italic"] },
+      "valid": false
+    },
+    {
+      "name": "matching reference",
+      "from": { "type": "reference", "schema": "Article" },
+      "to": { "type": "reference", "schema": "Article" },
+      "valid": true
+    },
+    {
+      "name": "mismatched node reference",
+      "from": { "type": "nodeRef", "nodeType": "Box" },
+      "to": { "type": "nodeRef", "nodeType": "Modal" },
+      "valid": false
+    },
+    {
+      "name": "matching color",
+      "from": { "type": "color" },
+      "to": { "type": "color" },
+      "valid": true
+    },
+    {
+      "name": "number is not text",
+      "from": { "type": "number" },
+      "to": { "type": "text" },
+      "valid": false
+    },
+    {
+      "name": "optional is not required",
+      "from": { "type": "string" },
+      "to": { "type": "string", "required": true },
+      "valid": false
+    },
+    {
+      "name": "string length narrows safely",
+      "from": { "type": "string", "maxLength": 8 },
+      "to": { "type": "text", "maxLength": 16 },
+      "valid": true
+    },
+    {
+      "name": "unknown length is unsafe",
+      "from": { "type": "string" },
+      "to": { "type": "text", "maxLength": 16 },
+      "valid": false
+    },
+    {
+      "name": "image is not video",
+      "from": { "type": "asset", "assetKind": "image" },
+      "to": { "type": "asset", "assetKind": "video" },
+      "valid": false
+    },
+    {
+      "name": "bounded list",
+      "from": { "type": "list", "max": 4, "of": { "type": "string" } },
+      "to": { "type": "list", "max": 8, "of": { "type": "text" } },
+      "valid": true
+    },
+    {
+      "name": "unbounded list is unsafe",
+      "from": { "type": "list", "of": { "type": "string" } },
+      "to": { "type": "list", "max": 8, "of": { "type": "text" } },
+      "valid": false
+    },
+    {
+      "name": "closed object rejects extra fields",
+      "from": { "type": "object", "fields": { "extra": { "type": "number" } } },
+      "to": { "type": "object", "fields": {} },
+      "valid": false
+    },
+    {
+      "name": "missing optional field",
+      "from": { "type": "object", "fields": {} },
+      "to": { "type": "object", "fields": { "optional": { "type": "string" } } },
+      "valid": true
+    },
+    {
+      "name": "nested scalar does not coerce",
+      "from": { "type": "object", "fields": { "price": { "type": "number" } } },
+      "to": { "type": "object", "fields": { "price": { "type": "string" } } },
+      "valid": false
+    }
+  ],
+  "operations": [
+    {
+      "payload": {
+        "key": "featured",
+        "use": { "source": "test.items", "params": { "limit": { "lit": 4 } } }
+      },
+      "expected": { "featured": { "source": "test.items", "params": { "limit": { "lit": 4 } } } }
+    },
+    {
+      "payload": {
+        "key": "featured",
+        "use": { "source": "test.items", "params": { "limit": { "lit": 2 } } }
+      },
+      "expected": { "featured": { "source": "test.items", "params": { "limit": { "lit": 2 } } } }
+    },
+    { "payload": { "key": "featured", "use": null }, "expected": null }
+  ]
+}

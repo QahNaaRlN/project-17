@@ -52,16 +52,25 @@ async function assets(): Promise<Assets> {
   return { scripts: [`/${entry.file}`], styles: (entry.css ?? []).map((file) => `/${file}`) };
 }
 const handler = storeHandler(
-  (request) => {
+  async (request) => {
     const preview = getPreviewState(request.headers.cookie);
     const locale = new URL(request.url ?? "/", appOrigin).searchParams.get("locale") ?? "ru";
     if (locale !== "ru" && locale !== "en") throw new Error("STORE_LOCALE_INVALID");
-    return loadStore(
-      cms,
-      config.path,
-      { ...(preview ? { preview } : options), locale },
-      studioOrigin ? { studioOrigin, manifestHash: deployedHash } : undefined,
-    );
+    const controller = new AbortController(),
+      cancel = () => controller.abort();
+    request.once("aborted", cancel);
+    request.socket.once("close", cancel);
+    try {
+      return await loadStore(
+        cms,
+        config.path,
+        { ...(preview ? { preview } : options), locale, signal: controller.signal },
+        studioOrigin ? { studioOrigin, manifestHash: deployedHash } : undefined,
+      );
+    } finally {
+      request.off("aborted", cancel);
+      request.socket.off("close", cancel);
+    }
   },
   assets,
   async (html) => (vite ? vite.transformIndexHtml("/", html) : html),

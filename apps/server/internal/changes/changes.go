@@ -566,6 +566,9 @@ func (s *session) finish(applied []AppliedOperation) (ApplyResult, error) {
 }
 
 func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, error) {
+	if op.Type == ops.DocumentSetDataSource && s.cs.Kind != "standard" {
+		return recordInput{}, commandbus.Validation(map[string]string{"changesetId": "нужен standard Change Set"})
+	}
 	if op.Type == ops.DocumentSetContent {
 		if err := commandbus.Require(s.actor, auth.ContentRead); err != nil {
 			return recordInput{}, err
@@ -614,7 +617,10 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 		d.certified = false
 	}
 	d.body = next
-	if op.Type == ops.DocumentSetContent || (op.Type == ops.NodeSetBinding && (next["content"] != nil || bytes.Contains(op.Payload, []byte("$content")))) {
+	if op.Type == ops.DocumentSetContent || ((op.Type == ops.NodeSetBinding || op.Type == ops.DocumentSetDataSource) && (next["content"] != nil || bytes.Contains(op.Payload, []byte("$content")))) {
+		if err := commandbus.Require(s.actor, auth.ContentRead); err != nil {
+			return recordInput{}, err
+		}
 		d.primaryChanged = true
 	}
 	payload := op.Payload

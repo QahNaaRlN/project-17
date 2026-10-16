@@ -35,6 +35,10 @@ func Validate(document, app any, options Options) ir.Result {
 	s["local"] = fields(local)
 	data := object{}
 	for _, key := range keys(obj(c.doc["dataSources"])) {
+		if key == "content" || key == "constructor" || key == "prototype" || key == "__proto__" {
+			c.add("BINDING_PATH_UNRESOLVED", ir.Pointer("dataSources", key), "", nil)
+			continue
+		}
 		d := obj(obj(c.doc["dataSources"])[key])
 		def := obj(obj(c.app["dataSources"])[stringValue(d["source"])])
 		p := ir.Pointer("dataSources", key)
@@ -43,6 +47,15 @@ func Validate(document, app any, options Options) ir.Result {
 			continue
 		}
 		c.arguments(obj(d["params"]), obj(def["params"]), p+"/params", "", s, "BINDING_TYPE_MISMATCH")
+		for name, value := range obj(d["params"]) {
+			if path, ok := value.(string); ok {
+				from := c.path(path, p+ir.Pointer("params", name), "", s)
+				to := obj(obj(def["params"])[name])
+				if from != nil && to != nil && !SimpleContentCompatible(from, to) {
+					c.add("BINDING_TYPE_MISMATCH", p+ir.Pointer("params", name), "", nil)
+				}
+			}
+		}
 		result := copyMap(obj(def["result"]))
 		result["required"] = true
 		if def["paginated"] == true {
@@ -114,7 +127,13 @@ func Validate(document, app any, options Options) ir.Result {
 			}
 			childScopes["each"] = fields(aliases)
 			if key := stringValue(obj(n["props"])["key"]); key != "" {
-				c.path("$item."+key, p+"/props/key", id, childScopes)
+				if !strings.HasPrefix(key, "$") {
+					key = "$item." + key
+				}
+				t := c.path(key, p+"/props/key", id, childScopes)
+				if !strings.HasPrefix(key, "$item.") || (t != nil && t["type"] != "string" && t["type"] != "number") {
+					c.add("BINDING_TYPE_MISMATCH", p+"/props/key", id, nil)
+				}
 			}
 		}
 		for _, child := range arr(n["children"]) {
@@ -160,7 +179,7 @@ func (c *checker) binding(v any, target object, p, id string, s scopes, depth in
 		return nil
 	}
 	if expr, ok := v.(string); ok {
-		if strings.HasPrefix(expr, "$content.") {
+		if strings.HasPrefix(expr, "$content.") || strings.HasPrefix(expr, "$data.") || expr == "$item" || strings.HasPrefix(expr, "$item.") {
 			source := c.path(expr, p, id, s)
 			if source != nil && !SimpleContentCompatible(source, target) {
 				c.add("BINDING_TYPE_MISMATCH", p, id, object{"expected": target, "actual": source})

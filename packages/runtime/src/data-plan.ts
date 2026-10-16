@@ -24,7 +24,12 @@ export async function preparePageWithData(
           pending.set(instance, { doc, scope: appScope });
         return {
           ...appScope,
-          data: { ...(appScope.data as Record<string, unknown>), ...data.get(instance) },
+          data: {
+            ...(appScope.data as Record<string, unknown>),
+            ...Object.fromEntries(
+              Object.entries(data.get(instance) ?? {}).filter(([key]) => key !== "content"),
+            ),
+          },
         };
       },
     });

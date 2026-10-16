@@ -14,6 +14,7 @@ const safe = (key: string) =>
   /^[a-zA-Z][a-zA-Z0-9_]*$/.test(key) && !["constructor", "prototype", "__proto__"].includes(key);
 // Matches policydoc's applicability for the two controls offered by Studio.
 export function designFields(node: Node, manifest: Manifest): ("padding" | "gap")[] {
+  if (node.type === "Repeat") return [];
   const contract =
     (builtinCatalogue as unknown as Record<string, { container?: boolean }>)[node.type] ??
     manifest.components?.[node.type] ??
@@ -46,6 +47,7 @@ export function fields(doc: IrDocument, node: Node, manifest: Manifest, locale =
       binding,
       translations: local?.type === "text" ? (local.value as Record<string, unknown>) : {},
       editable:
+        node.type !== "Repeat" &&
         safe(name) &&
         scalar &&
         (binding === undefined || local !== undefined) &&

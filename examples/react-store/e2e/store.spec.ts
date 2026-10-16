@@ -28,13 +28,14 @@ test("IR-050/SDK-014: источник создаёт карточки, CMS уп
   await page.getByRole("button", { name: "В избранное: Чаша «Круг»" }).click();
   await expect(page.getByRole("status")).toHaveText("«Чаша «Круг»» добавлен в избранное");
 });
-test("SDK-014: ошибка загрузчика даёт empty и сохраняет остальные разделы, повтор восстанавливает каталог", async ({
+test("SDK-014/STU-232: ошибка загрузчика отличается от empty и сохраняет остальные разделы", async ({
   page,
   request,
 }) => {
   await control(request, "sourceerror");
   await page.goto("/");
-  await expect(page.getByText("Новые вещи скоро появятся")).toBeVisible();
+  await expect(page.getByText("Данные недоступны")).toBeVisible();
+  await expect(page.getByText("Новые вещи скоро появятся")).not.toBeVisible();
   await expect(page.locator(".product-card")).toHaveCount(0);
   await expect(page.locator(".hero")).toBeVisible();
   await expect(page.locator(".about")).toBeVisible();

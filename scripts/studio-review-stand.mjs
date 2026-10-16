@@ -135,6 +135,15 @@ reviewManifest.schemas = {
     },
   },
 };
+if (process.env.CMS_REVIEW_DATA_SOURCES === "true")
+  reviewManifest.schemas.Collection = {
+    version: 1,
+    title: "Collection",
+    fields: {
+      title: { type: "text", localized: true },
+      handle: { type: "string", required: true, localized: true, maxLength: 64 },
+    },
+  };
 await command("register-manifest", { environment: "staging", manifest: reviewManifest });
 const author = await command("create-role", {
   name: "studio-author",

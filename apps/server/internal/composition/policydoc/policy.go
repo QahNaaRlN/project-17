@@ -256,6 +256,7 @@ func CheckEdit(before, after map[string]any, manage bool) ir.Result {
 	if !reflect.DeepEqual(before["policy"], after["policy"]) {
 		fail("", "/policy")
 	}
+	checkDataEdits(before, after, fail)
 	a, b := obj(before["nodes"]), obj(after["nodes"])
 	protected := func(doc map[string]any) map[string]bool {
 		out := map[string]bool{}

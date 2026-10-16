@@ -128,6 +128,24 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
     if (frame.ancestors.includes(id)) return reject("CMS_NODE_CYCLE", id);
     const node = Object.hasOwn(doc.nodes, id) ? doc.nodes[id] : undefined;
     if (!node) return reject("CMS_NODE_MISSING", id);
+    const dataBound = Object.values(node.bindings ?? {}).some(
+      (binding) => typeof binding === "string" && /^\$(data|item)(\.|$)/.test(binding),
+    );
+    const unavailable = (code: string): PlanNode[] => {
+      diagnostics.push({ code, nodeId: id });
+      return [
+        {
+          id,
+          key: `${prefix}${id}`,
+          type: "Text",
+          props: {
+            text: scope.context?.locale === "ru" ? "Данные недоступны" : "Data unavailable",
+          },
+          className: "",
+          children: [],
+        },
+      ];
+    };
     const childFrame = { ...frame, ancestors: [...frame.ancestors, id] };
     try {
       if (node.when && !evaluatePredicate(node.when, scope)) return [];
@@ -140,6 +158,28 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
         if (["constructor", "prototype", "__proto__"].includes(name))
           return reject("CMS_PROP_INVALID", id);
         if (Object.hasOwn(props, name)) return reject("CMS_PROP_CONFLICT", id);
+        if (typeof binding === "string") {
+          const match = /^\$data\.([A-Za-z][A-Za-z0-9_]*)(?:\.(.*))?$/.exec(binding);
+          const source = match
+            ? (scope.data as Record<string, unknown> | undefined)?.[match[1]!]
+            : undefined;
+          if (
+            source &&
+            typeof source === "object" &&
+            Object.hasOwn(source, "error") &&
+            !/^error(?:\.|$)/.test(match?.[2] ?? "")
+          ) {
+            const code = (source as { error?: { code?: unknown } }).error?.code;
+            return unavailable(
+              typeof code === "string" &&
+                /^CMS_SOURCE_(UNKNOWN|TIMEOUT|ABORTED|TIMEOUT_INVALID|CURSOR_INVALID|PARAMS_INVALID|RESULT_INVALID|KEY_INVALID|FAILED)$/.test(
+                  code,
+                )
+                ? code
+                : "CMS_SOURCE_FAILED",
+            );
+          }
+        }
         const value = evaluateBinding(binding, scope);
         if (value !== undefined) props[name] = value;
       }
@@ -233,7 +273,8 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
       if (native) {
         for (const [name, definition] of Object.entries(native.props))
           if (definition.responsive) props[name] = baseProp(props[name]);
-        if (native.validate && !native.validate(props)) return reject("CMS_PROP_INVALID", id);
+        if (native.validate && !native.validate(props))
+          return reject(dataBound ? "CMS_DATA_VALUE_INVALID" : "CMS_PROP_INVALID", id);
       }
       const provided = native?.provide?.(props);
       const eventScope = provided
@@ -279,12 +320,18 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           : children(node.children ?? []);
       }
       if (node.type === "Repeat") {
+        const binding = node.bindings?.items;
+        const expression = typeof binding === "string" ? binding : undefined;
+        const sourceKey =
+          expression && /^\$data\.([A-Za-z][A-Za-z0-9_]*)(?:\.|$)/.exec(expression)?.[1];
         if (
           (node.design && Object.keys(node.design).length) ||
           Object.keys(node.slots ?? {}).some((name) => name !== "empty")
         )
           return reject("CMS_REPEAT_INVALID", id);
         const items = props.items;
+        if (sourceKey && (items == null || !Array.isArray(items)))
+          return unavailable("CMS_REPEAT_INVALID");
         if (items != null && !Array.isArray(items)) return reject("CMS_REPEAT_INVALID", id);
         const list = (items ?? []) as unknown[];
         const limit = props.limit ?? 200;
@@ -300,16 +347,24 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
         if (
           props.key !== undefined &&
           (typeof props.key !== "string" ||
-            !/^\$item(\.([A-Za-z][A-Za-z0-9_]*|[0-9]+))*$/.test(props.key))
+            !/^(?:\$item|(?:\$item\.)?[A-Za-z][A-Za-z0-9_]*(?:\.(?:[A-Za-z][A-Za-z0-9_]*|[0-9]+))*)$/.test(
+              props.key,
+            ))
         )
           return reject("CMS_REPEAT_INVALID", id);
         if (!list.length) return children(node.slots?.empty ?? [], scope, `${prefix}${id}/empty/`);
         const keys = new Set<string>();
-        return list.slice(0, limit as number).flatMap((item, index) => {
+        const instances = list.slice(0, limit as number).map((item, index) => {
           const each = Object.assign(Object.create(null), scope.each);
           if (props.as) each[String(props.as)] = item;
           const childScope = { ...scope, item, index, each };
-          const keyValue = props.key ? readPath(String(props.key), childScope) : index;
+          const keyPath =
+            typeof props.key === "string"
+              ? props.key.startsWith("$")
+                ? props.key
+                : "$item." + props.key
+              : undefined;
+          const keyValue = keyPath ? readPath(keyPath, childScope) : index;
           if (
             (typeof keyValue !== "string" && typeof keyValue !== "number") ||
             !String(keyValue).length ||
@@ -320,12 +375,11 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           const key = `${typeof keyValue}:${String(keyValue)}`;
           if (keys.has(key)) throw new Error("CMS_REPEAT_KEY_DUPLICATE");
           keys.add(key);
-          return children(
-            node.children ?? [],
-            childScope,
-            `${prefix}${id}:${encodeURIComponent(key)}/`,
-          );
+          return { childScope, key };
         });
+        return instances.flatMap(({ childScope, key }) =>
+          children(node.children ?? [], childScope, `${prefix}${id}:${encodeURIComponent(key)}/`),
+        );
       }
       if (node.slots && Object.keys(node.slots).length) return reject("CMS_SLOT_UNSUPPORTED", id);
       if (node.children?.length && !(containers.has(node.type) || native?.container))
@@ -376,7 +430,9 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
       ];
     } catch (error) {
       if (error instanceof Error && error.message === "CMS_EXPANSION_LIMIT") throw error;
-      return reject("CMS_NODE_INVALID", id);
+      if (error instanceof Error && /^CMS_REPEAT_KEY_(INVALID|DUPLICATE)$/.test(error.message))
+        return reject(error.message, id);
+      return reject(dataBound ? "CMS_DATA_VALUE_INVALID" : "CMS_NODE_INVALID", id);
     }
   }
   try {

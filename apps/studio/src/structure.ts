@@ -231,6 +231,7 @@ export function destinations(
         const place = { parentId: parent.id, slot, index };
         if (from?.parentId === parent.id && from.slot === slot && from.index === index) continue;
         if (!preservesPositions(doc, branches, from, place)) continue;
+        if (moving && !preservesItemScopes(doc, moving, place)) continue;
         result.push(place);
       }
     }
@@ -239,6 +240,35 @@ export function destinations(
 }
 export function insertion(documentId: string, place: Place, tree: NestedNode): Operation {
   return { type: "node.insert", target: documentId, payload: { ...place, subtree: tree } };
+}
+function preservesItemScopes(doc: IrDocument, moving: string, place: Place): boolean {
+  const owner = (document: IrDocument, id: string): string => {
+    const seen = new Set<string>();
+    while (!seen.has(id)) {
+      seen.add(id);
+      const p = location(document, id);
+      if (!p) return "";
+      if (document.nodes[p.parentId]?.type === "Repeat" && p.slot !== "empty") return p.parentId;
+      id = p.parentId;
+    }
+    return "";
+  };
+  const after = structuredClone(doc);
+  structuralApply(after, { type: "node.move", target: "", payload: { ...place, nodeId: moving } });
+  function scoped(value: unknown): boolean {
+    if (typeof value === "string") return /^\$(item|each|index)(\.|$)/.test(value);
+    return (
+      !!value &&
+      typeof value === "object" &&
+      Object.entries(value).some(
+        ([key, child]) => !["lit", "default", "template", "format"].includes(key) && scoped(child),
+      )
+    );
+  }
+  return Object.values(doc.nodes).every(
+    (node) =>
+      !scoped([node.bindings, node.when, node.on]) || owner(doc, node.id) === owner(after, node.id),
+  );
 }
 export function createBlock(
   type: string,

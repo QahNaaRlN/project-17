@@ -20,6 +20,7 @@ import { PublicationHistory } from "./publication-history-panel.js";
 import { PresencePanel } from "./presence.js";
 import { DeferredPanel } from "./deferred-panel.js";
 import { ContentBindingsPanel } from "./content-bindings-panel.js";
+import { DataSourcesPanel } from "./data-sources-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -115,6 +116,17 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
     CONTENT_DRAFT_PENDING: "Сохраните контент или сбросьте ввод перед другой правкой.",
     CONTENT_TARGET_MISMATCH: "Первым target CS должно быть окружение Studio.",
     BINDING_VALUE_MISSING: "Значение контента отсутствует в выбранной локали.",
+    DATA_SCOPE_CHANGED:
+      "Изменение нарушает привязки элемента или ключ повторения. Сначала снимите зависимые привязки.",
+    CMS_SOURCE_UNKNOWN: "Источник отсутствует в приложении.",
+    CMS_DATA_VALUE_INVALID: "Значение данных недоступно или не соответствует свойству блока.",
+    CMS_SOURCE_TIMEOUT: "Источник не ответил вовремя. Повторите предпросмотр.",
+    CMS_SOURCE_FAILED: "Не удалось загрузить данные источника.",
+    CMS_SOURCE_PARAMS_INVALID: "Параметры источника не соответствуют контракту.",
+    CMS_SOURCE_RESULT_INVALID: "Источник вернул данные неверного типа.",
+    CMS_REPEAT_INVALID: "Повторение не получило корректный список.",
+    CMS_REPEAT_KEY_INVALID: "У элемента отсутствует корректный ключ.",
+    CMS_REPEAT_KEY_DUPLICATE: "Ключи элементов повторяются.",
     BINDING_PATH_UNRESOLVED: "Путь контента не поддерживается или недоступен.",
     CMS_IMAGE_UNAVAILABLE: "Изображение недоступно или ещё не готово.",
     CONTENT_REFERENCE_UNPUBLISHED: "Источник или ассет недоступен в этом окружении.",
@@ -134,6 +146,17 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
   en: {
     FIELD_DRAFT_PENDING: "Save or discard the field input before selecting another element.",
     BINDING_VALUE_MISSING: "The content value is missing in the selected locale.",
+    DATA_SCOPE_CHANGED:
+      "This change breaks item bindings or a repeat key. Clear dependent bindings first.",
+    CMS_SOURCE_UNKNOWN: "The application source is unavailable.",
+    CMS_DATA_VALUE_INVALID: "A data value is unavailable or does not match the block property.",
+    CMS_SOURCE_TIMEOUT: "The source timed out. Retry preview.",
+    CMS_SOURCE_FAILED: "Could not load source data.",
+    CMS_SOURCE_PARAMS_INVALID: "Source parameters do not match the contract.",
+    CMS_SOURCE_RESULT_INVALID: "The source returned an invalid result.",
+    CMS_REPEAT_INVALID: "Repeat did not receive a valid list.",
+    CMS_REPEAT_KEY_INVALID: "An item has an invalid or missing key.",
+    CMS_REPEAT_KEY_DUPLICATE: "Item keys are duplicated.",
     BINDING_PATH_UNRESOLVED: "The content path is unsupported or unavailable.",
     CMS_IMAGE_UNAVAILABLE: "The image is unavailable or not ready yet.",
     CONTENT_REFERENCE_UNPUBLISHED: "The source or asset is unavailable in this environment.",
@@ -800,6 +823,7 @@ export function Studio({
               </section>
               <aside className="properties">
                 <ContentBindingsPanel {...{ api, editor, rights }} />
+                <DataSourcesPanel {...{ editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (
                   <>

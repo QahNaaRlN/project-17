@@ -1,13 +1,19 @@
 # Studio: привязки контента к странице
 
-Статус: реализовано в [PR #57](https://github.com/QahNaaRlN/project-17/pull/57),
-ветка `feature/studio-content-bindings`; локальная сквозная приёмка пройдена
-2026-10-16. Полный Linux check и CI конкретного SHA доступны в проверках PR.
+Статус: реализовано и слито в `dev` 2026-10-16 в
+[PR #57](https://github.com/QahNaaRlN/project-17/pull/57), merge
+`e9b70bcb7647a41ba8b0d24c0fefbaeed3293137`.
+Локальная сквозная приёмка и [полный CI конечного SHA PR](https://github.com/QahNaaRlN/project-17/actions/runs/38861497965)
+`9b9751d3af08e9d8ed802f4488fcda636087439f` пройдены.
 Дата: 2026-10-15. Основа: `dev` на
 `64aa96d39f64e08cd92fff90b461342009235416`, после слияния PR #56.
 Пакет STU-203…218 продолжает [создание работ с контентом](studio-content-work.md),
 [редактор контента](studio-content.md), [редактор и preview](studio-editor-preview.md)
 и [сравнение изменений](studio-review-diff.md). Figma не требуется.
+
+Следующий пакет — [источники данных и повторяющиеся блоки](studio-data-sources.md),
+STU-219…236. Реализация подготовлена в ветке `feature/studio-data-sources`;
+состояние проверок и приёмки приведено в её спецификации. Слияние ещё не выполнено.
 
 ## 1. Результат и границы
 
@@ -318,8 +324,13 @@ functions 91,51%, lines 93,49%.
 локаль, в том числе при повторе после ошибки. Добавлены регрессионные тесты;
 число тестов витрины после этих исправлений — 115.
 
+PR #57 слит в `dev`; полный [CI SHA `9b9751d`](https://github.com/QahNaaRlN/project-17/actions/runs/38861497965)
+пройден: Check (TS + Go) и Docker image, включая Linux race/coverage и браузерные
+регрессии. [CI merge-коммита `e9b70bc`](https://github.com/QahNaaRlN/project-17/actions/runs/38862616860)
+также пройден; актуальный план продолжения — в [дорожной карте](spec/14-mvp-plan.md).
+
 Полный локальный `pnpm check` ограничен отсутствием C-компилятора для Go race
 в Windows; локальный Go 1.26.0 также не содержит `covdata` для полного профиля
-`-coverpkg`. Полные race/coverage, сборки и браузерные регрессии проверяются CI.
+`-coverpkg`. Полные race/coverage, сборки и браузерные регрессии пройдены в CI PR.
 Пороги не снижены. Production, внешний IdP, CDN, locale fallback, полный M4
 и IR-044 остаются вне этого пакета.

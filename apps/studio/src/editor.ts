@@ -13,6 +13,7 @@ import {
   type ReviewDiagnostic,
 } from "./types.js";
 import { applyOperations } from "./operations.js";
+import { scopeProblems } from "./data-sources.js";
 import type { ContentOperation } from "./types.js";
 export interface EditorState {
   bindingRetry: boolean;
@@ -356,6 +357,9 @@ export function createEditor(
       operations.some(
         (op) =>
           op.type === "document.setContent" ||
+          op.type === "document.setDataSource" ||
+          (op.type === "node.setBinding" &&
+            /^\$(data|item)(\.|$)/.test(String(op.payload.binding))) ||
           (op.type === "node.setBinding" &&
             (store.getState().document?.content ||
               String(op.payload.binding).startsWith("$content"))),
@@ -414,6 +418,7 @@ export function createEditor(
             "node.remove",
             "node.move",
             "document.setContent",
+            "document.setDataSource",
             "node.setBinding",
           ].includes(operation.type),
         )
@@ -671,13 +676,34 @@ export function createEditor(
       session.changeset.state !== "open"
     )
       return;
+    const submittingFields = new Set(
+      operations.flatMap((op) =>
+        op.payload.nodeId === state.selected && op.type === "node.setBinding"
+          ? ["property-" + String(op.payload.prop)]
+          : op.payload.nodeId === state.selected &&
+              op.type === "node.setProps" &&
+              state.document.nodes[state.selected!]?.type === "Repeat"
+            ? ["property-repeatSettings"]
+            : [],
+      ),
+    );
     if (
       Object.entries(state.dirtyFields).some(
         ([key, dirty]) =>
-          dirty && key !== "property-contentBinding" && !(key === "json" && source === "json"),
+          dirty &&
+          key !== "property-contentBinding" &&
+          key !== "property-dataSource" &&
+          !submittingFields.has(key) &&
+          !(key === "json" && source === "json"),
       )
     ) {
       store.setState({ error: "FIELD_DRAFT_PENDING" });
+      return;
+    }
+    const next = applyOperations(state.document, operations);
+    const problems = scopeProblems(state.document, next, session.manifest);
+    if (problems.length) {
+      store.setState({ error: "DATA_SCOPE_CHANGED" });
       return;
     }
     pendingBinding = {
@@ -940,6 +966,7 @@ export function createEditor(
     store,
     open,
     apply,
+    applyBindings,
     applyContent,
     retryContent: sendContent,
     retryBinding: sendBinding,

@@ -8,7 +8,7 @@ import {
 import { createReactRegistry, defineReactComponent } from "@cms/react";
 import { Storefront, Hero, Collection, Item, Empty, About } from "./sections.js";
 import { productField as product, productsField as products } from "./contracts.js";
-import { favoriteProduct, loadProducts } from "./operations.js";
+import { favoriteProduct, loadProducts, loadCollectionProducts } from "./operations.js";
 const text = t.text().content().required().max(2000);
 const string = t.string().required().max(2000);
 const fields = {
@@ -37,6 +37,16 @@ export const registry = createRegistry({
     }),
   ],
   dataSources: [
+    defineDataSource({
+      name: "store.collectionProducts",
+      params: {
+        collection: t.string().required().max(64),
+        limit: t.number().int().min(1).max(64).default(12),
+        locale: t.string(),
+      },
+      result: t.object({ items: products }),
+      loader: loadCollectionProducts,
+    }),
     defineDataSource({
       name: "store.products",
       params: { limit: t.number().int().min(1).max(64).default(64) },

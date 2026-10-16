@@ -486,6 +486,7 @@ export function createStudioHandler(
                 (op: { type?: unknown }) =>
                   ![
                     "document.setContent",
+                    "document.setDataSource",
                     "node.setProps",
                     "node.setDesign",
                     "node.setBinding",

@@ -103,10 +103,14 @@ export async function createPreviewController(options: PreviewControllerOptions)
     initialized = false,
     disposed = false;
   let locale = options.locale ?? "ru",
+    requestedLocale = options.locale ?? "ru",
+    revision = 0,
+    contextReloadNeeded = false,
     sequence = -1,
     pending = 0,
     serial = Promise.resolve(),
     counter = 0;
+  let activeReload: AbortController | undefined;
   const lifecycle = new AbortController(),
     now = options.now ?? Date.now;
   function emit(type: string, payload: Record<string, unknown>) {
@@ -122,25 +126,40 @@ export async function createPreviewController(options: PreviewControllerOptions)
       documentId: snapshot.documentId,
     });
   }
-  async function commit(next: PreviewSnapshot) {
+  async function commit(next: PreviewSnapshot, expectedRevision = revision) {
     const value = await checked(next);
-    if (disposed) return;
+    if (disposed || expectedRevision !== revision) return;
     const started = now();
     await options.render(value);
-    if (disposed) return;
+    if (disposed || expectedRevision !== revision) return;
     snapshot = value;
     emit("rendered", { hash: snapshot.hash, durationMs: Math.max(0, now() - started) });
   }
   async function reload() {
-    const next = await options.reload(lifecycle.signal, locale);
-    if (!disposed) await commit(next);
+    const controller = new AbortController(),
+      expectedRevision = revision;
+    activeReload = controller;
+    try {
+      const next = await options.reload(
+        AbortSignal.any([lifecycle.signal, controller.signal]),
+        locale,
+      );
+      if (disposed || controller.signal.aborted || expectedRevision !== revision) return false;
+      await commit(next, expectedRevision);
+      return true;
+    } catch (cause) {
+      if (disposed || controller.signal.aborted || expectedRevision !== revision) return false;
+      throw cause;
+    } finally {
+      if (activeReload === controller) activeReload = undefined;
+    }
   }
   function node(input: unknown): input is string | null {
     return (
       input === null || (typeof input === "string" && Object.hasOwn(snapshot.document.nodes, input))
     );
   }
-  async function apply(data: unknown) {
+  async function apply(data: unknown, expectedRevision: number) {
     let message: Record<string, unknown>;
     try {
       const value = safeJson(data);
@@ -172,11 +191,11 @@ export async function createPreviewController(options: PreviewControllerOptions)
         initialized = true;
         mode = payload.mode as PreviewMode;
         options.onMode?.(mode);
-        if (locale !== payload.locale) {
+        if (locale !== payload.locale || contextReloadNeeded) {
           locale = payload.locale;
-          await reload();
+          if (await reload()) contextReloadNeeded = false;
         }
-        ready();
+        if (expectedRevision === revision) ready();
         return;
       }
       if (!initialized) throw new Error("CMS_PREVIEW_INIT_REQUIRED");
@@ -216,8 +235,7 @@ export async function createPreviewController(options: PreviewControllerOptions)
           )
             throw new Error("CMS_PREVIEW_MESSAGE_INVALID");
           if (Number(payload.seq) <= sequence) break;
-          await reload();
-          sequence = Number(payload.seq);
+          if (await reload()) sequence = Number(payload.seq);
           break;
         case "document.patch": {
           if (
@@ -271,10 +289,40 @@ export async function createPreviewController(options: PreviewControllerOptions)
     receive(event: { origin: string; source: unknown; data: unknown }): Promise<void> {
       if (disposed || event.origin !== origin || event.source !== options.parent || pending >= 32)
         return Promise.resolve();
+      // Cancel immediately on a valid new locale, before the serial queue reaches init.
+      // Invalid/foreign messages cannot interrupt a legitimate load.
+      try {
+        const data = safeJson(event.data);
+        if (
+          record(data) &&
+          data.cms === "preview" &&
+          data.v === 1 &&
+          data.type === "init" &&
+          text(data.id) &&
+          record(data.payload)
+        ) {
+          const payload = data.payload;
+          if (
+            text(payload.sessionId) &&
+            (payload.changesetId ?? undefined) === options.changesetId &&
+            text(payload.locale, 64) &&
+            ["design", "interact"].includes(String(payload.mode)) &&
+            payload.locale !== requestedLocale
+          ) {
+            requestedLocale = payload.locale;
+            revision++;
+            contextReloadNeeded = true;
+            activeReload?.abort();
+          }
+        }
+      } catch {
+        /* The queued validator reports malformed messages. */
+      }
+      const expectedRevision = revision;
       pending++;
       serial = serial
         .then(async () => {
-          if (!disposed) await apply(event.data);
+          if (!disposed && expectedRevision === revision) await apply(event.data, expectedRevision);
         })
         .catch(() => {
           emit("error", { code: "CMS_PREVIEW_UPDATE_FAILED" });
@@ -287,9 +335,10 @@ export async function createPreviewController(options: PreviewControllerOptions)
     notify: emit,
     refresh(): Promise<void> {
       if (disposed) return Promise.resolve();
+      const expectedRevision = revision;
       serial = serial
         .then(async () => {
-          if (!disposed) await reload();
+          if (!disposed && expectedRevision === revision) await reload();
         })
         .catch(() => {
           emit("error", { code: "CMS_PREVIEW_UPDATE_FAILED" });
@@ -299,6 +348,7 @@ export async function createPreviewController(options: PreviewControllerOptions)
     dispose() {
       disposed = true;
       lifecycle.abort();
+      activeReload?.abort();
     },
   };
 }
