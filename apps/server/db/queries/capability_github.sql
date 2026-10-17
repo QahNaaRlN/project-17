@@ -33,7 +33,7 @@ SELECT * FROM capability_github_observations WHERE project_id=$1 AND request_id=
 -- name: InsertCapabilityGithubAudit :exec
 INSERT INTO capability_github_audit(id,project_id,request_id,actor_id,event,generation,sync_id,attempt,reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);
 -- name: CapabilityGithubRefreshCount :one
-SELECT count(*) FROM capability_github_audit WHERE project_id=$1 AND event='refresh' AND created_at>now()-interval '1 hour';
+SELECT count(*) FROM capability_github_audit WHERE project_id=$1 AND event IN ('refresh','automatic_refresh') AND created_at>now()-interval '1 hour';
 -- name: EnsureCapabilityGithubCredential :exec
 INSERT INTO capability_github_credentials(credential_id) VALUES($1) ON CONFLICT DO NOTHING;
 -- name: LockCapabilityGithubCredential :one

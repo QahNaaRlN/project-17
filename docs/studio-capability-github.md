@@ -119,9 +119,16 @@ GitHub App installation authentication остаётся отдельным по�
 Правило проверки: `{source: check_run|commit_status, name, target: head|integration,
 appId? , creatorId?}`. Для check_run обязателен appId; для commit_status — creatorId.
 Имена точные, без regex/wildcards. Для Project 17 исходная операторская политика —
-`Check (TS + Go)` и `Docker image` из доверенного GitHub Actions app на integration;
+`Check (TS + Go)` и `Docker image` из доверенного GitHub Actions app на head;
 app ID подтверждается API при настройке, не угадывается по имени приложения.
 Политика CMS явно задана и не выдаётся за прочитанные GitHub rulesets/branch protection.
+В реальном PR #62 GitHub Actions app ID 15368 публикует обе проверки на
+`head.sha`; на `merge_commit_sha` открытого PR проверок нет. Это проверено через
+GitHub REST API, не выводится из checkout workflow. `target=head` означает
+принадлежность результата head SHA в API, а не доказательство фактически
+выполненного checkout. Не переносить этот success на integration SHA. Если
+проект требует CI именно после merge, оператор выбирает integration отдельно;
+до появления проверок на этом SHA итог unknown, а не success.
 
 `set-capability-github-config` с project.admin выбирает configId/enabled,
 expectedConfigRevision (0 для отсутствующей записи) и reason. Хранятся публичные

@@ -13,7 +13,7 @@ import (
 )
 
 const capabilityGithubRefreshCount = `-- name: CapabilityGithubRefreshCount :one
-SELECT count(*) FROM capability_github_audit WHERE project_id=$1 AND event='refresh' AND created_at>now()-interval '1 hour'
+SELECT count(*) FROM capability_github_audit WHERE project_id=$1 AND event IN ('refresh','automatic_refresh') AND created_at>now()-interval '1 hour'
 `
 
 func (q *Queries) CapabilityGithubRefreshCount(ctx context.Context, projectID uuid.UUID) (int64, error) {

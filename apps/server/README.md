@@ -254,7 +254,7 @@ River использует очередь capability_delivery (2 workers), lease
     "requiredChecks": [{
       "source": "check_run",
       "name": "Check (TS + Go)",
-      "target": "integration",
+      "target": "head",
       "appId": "<числовой ID доверенного GitHub App строкой>"
     }]
   }]
@@ -262,7 +262,11 @@ River использует очередь capability_delivery (2 workers), lease
 ```
 
 Подставить реальные ID/имена, а обязательные проверки перечислить полностью
-(для Project 17 также `Docker image`). Токен ограничить выбранным репозиторием:
+(для Project 17 также `Docker image`, GitHub Actions app ID 15368). В PR этого
+проекта API прикрепляет проверки к head SHA, даже когда checkout использует
+пробное слияние; поэтому исходная политика использует head. Для проверок
+фактического merge-коммита отдельно выбрать integration; отсутствие результатов
+на нём остаётся unknown. Токен ограничить выбранным репозиторием:
 Metadata/Pull requests/Checks/Commit statuses/Contents — read. Contents используется
 только для проверки родителей commit, исходники не читаются. Файл/токен не
 коммитить, не выдавать браузеру/агенту; для ротации изменить credentialId,

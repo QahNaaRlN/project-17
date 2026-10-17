@@ -489,3 +489,33 @@ func TestSTU303ConflictingDuplicateStatusCannotPass(t *testing.T) {
 		t.Fatal("conflicting commit status was trusted")
 	}
 }
+
+// Real GitHub Actions attribution observed on PR #62: results are attached to
+// head.sha even when workflow checkout tests the synthetic merge. Never move them.
+func TestSTU301HeadChecksDoNotProveSyntheticMergeChecks(t *testing.T) {
+	r := repoFixture()
+	r.RequiredChecks = []Rule{{Source: "check_run", Name: "Check", Target: "head", AppID: "7"}, {Source: "check_run", Name: "Check", Target: "integration", AppID: "7"}}
+	head, base, merge := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40)
+	c := &Client{client: &http.Client{Transport: roundtrip(func(req *http.Request) (*http.Response, error) {
+		p := req.URL.Path
+		switch {
+		case p == "/repos/owner/repo":
+			return response(200, map[string]any{"id": 42, "full_name": "owner/repo"}), nil
+		case strings.Contains(p, "/pulls/"):
+			return response(200, map[string]any{"id": 123, "number": 1, "state": "open", "mergeable": true, "merge_commit_sha": merge, "head": map[string]any{"sha": head, "repo": map[string]any{"id": 42}}, "base": map[string]any{"sha": base, "ref": "dev", "repo": map[string]any{"id": 42}}}), nil
+		case strings.Contains(p, "/git/commits/"):
+			return response(200, map[string]any{"sha": merge, "parents": []any{map[string]any{"sha": base}, map[string]any{"sha": head}}}), nil
+		case strings.Contains(p, "/commits/"+head+"/check-runs"):
+			return response(200, map[string]any{"total_count": 1, "check_runs": []any{map[string]any{"id": 1, "name": "Check", "head_sha": head, "status": "completed", "conclusion": "success", "app": map[string]any{"id": 7}, "check_suite": map[string]any{"id": 1}}}}), nil
+		default:
+			return response(200, map[string]any{"total_count": 0, "check_runs": []any{}}), nil
+		}
+	})}}
+	o, e := c.Observe(context.Background(), r, 1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if o.CI != "unknown" || o.Results[0].Outcome != "success" || o.Results[0].ExactSHA != head || o.Results[1].Outcome != "unknown" || o.Results[1].ExactSHA != merge {
+		t.Fatal(o)
+	}
+}

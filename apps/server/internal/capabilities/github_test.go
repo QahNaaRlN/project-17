@@ -530,3 +530,77 @@ func TestSTU295GithubCatalogReferencesExistingEnvironment(t *testing.T) {
 		t.Fatal("unknown environment accepted")
 	}
 }
+
+// STU-298/306: a storage failure cannot commit a partial network claim or an
+// observation whose lease/credential/audit transaction did not commit.
+func TestGithubWorkerAtomicClaimAndResultFailures(t *testing.T) {
+	for _, stage := range []string{"claim_link", "claim_credential", "claim_audit", "result_observation", "result_link", "result_credential", "result_audit"} {
+		t.Run(stage, func(t *testing.T) {
+			f := githubSetup(t)
+			f.link()
+			ctx := context.Background()
+			calls := 0
+			breakStage := func() {
+				switch stage {
+				case "claim_link", "result_link":
+					f.e.Break("capability_github_links", "UPDATE")
+				case "claim_credential", "result_credential":
+					f.e.Break("capability_github_credentials", "UPDATE")
+				case "claim_audit", "result_audit":
+					f.e.Break("capability_github_audit", "INSERT")
+				case "result_observation":
+					f.e.Break("capability_github_observations", "INSERT")
+				}
+			}
+			if strings.HasPrefix(stage, "claim_") {
+				breakStage()
+			}
+			f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) {
+				calls++
+				breakStage()
+				return observed(r, n), nil
+			})
+			if e := f.s.SyncGithub(ctx, GithubArgs{ProjectID: f.a.ProjectID, RequestID: f.request.ID}); e == nil {
+				t.Fatal("partial write reported success")
+			}
+			l := f.row()
+			if strings.HasPrefix(stage, "claim_") {
+				if calls != 0 || l.State != "queued" || l.Attempts != 0 || l.LeaseToken != nil {
+					t.Fatal("claim was partially committed", l, calls)
+				}
+			} else {
+				if calls != 1 || l.State != "sending" || l.Attempts != 1 || l.LeaseToken == nil {
+					t.Fatal("original uncertain claim was lost", l, calls)
+				}
+			}
+			_, e := f.e.Q.LatestCapabilityGithubObservation(ctx, store.LatestCapabilityGithubObservationParams{ProjectID: f.a.ProjectID, RequestID: f.request.ID})
+			if !errors.Is(e, pgx.ErrNoRows) {
+				t.Fatal("partial observation committed", e)
+			}
+		})
+	}
+}
+
+func TestSTU305AutomaticPollingConsumesProjectBudget(t *testing.T) {
+	f := githubSetup(t)
+	f.link()
+	ctx := context.Background()
+	for i := 0; i < 19; i++ {
+		if e := f.e.Q.InsertCapabilityGithubAudit(ctx, store.InsertCapabilityGithubAuditParams{ID: uuid.New(), ProjectID: f.a.ProjectID, RequestID: &f.request.ID, Event: "automatic_refresh", Reason: "another reserved poll"}); e != nil {
+			t.Fatal(e)
+		}
+	}
+	f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) { return observed(r, n), nil })
+	l := f.sync()
+	if l.State != "idle" || l.PollsLeft != 5 {
+		t.Fatal("automatic poll exceeded reserved project budget", l)
+	}
+	count, e := f.e.Q.CapabilityGithubRefreshCount(ctx, f.a.ProjectID)
+	if e != nil || count != 20 {
+		t.Fatal(count, e)
+	}
+	view, e := f.s.GithubGet(ctx, f.e.Q, f.a, f.request.ID)
+	if e != nil || view["current"] == nil {
+		t.Fatal("completed fresh observation lost at budget boundary", view, e)
+	}
+}

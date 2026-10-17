@@ -39,7 +39,7 @@ CREATE TABLE capability_github_audit (
  event text NOT NULL, generation bigint NOT NULL DEFAULT 0, sync_id uuid, attempt int NOT NULL DEFAULT 0 CHECK(attempt BETWEEN 0 AND 3), reason text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(project_id,request_id) REFERENCES capability_requests(project_id,id)
 );
-CREATE INDEX capability_github_budget ON capability_github_audit(project_id,created_at) WHERE event='refresh';
+CREATE INDEX capability_github_budget ON capability_github_audit(project_id,created_at) WHERE event IN ('refresh','automatic_refresh');
 CREATE TABLE capability_github_credentials (
  credential_id text PRIMARY KEY, blocked_until timestamptz NOT NULL DEFAULT now(), lease_token uuid, lease_until timestamptz
 );

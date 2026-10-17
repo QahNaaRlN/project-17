@@ -242,10 +242,19 @@ func (s *GithubService) finishGithub(ctx context.Context, args GithubArgs, claim
 		l.State = "idle"
 		l.Attempts = 0
 		if l.PollsLeft > 0 && now.Add(5*time.Minute).Before(l.WindowUntil) {
-			l.PollsLeft--
-			l.State = "queued"
-			l.NextAt = now.Add(5 * time.Minute)
-			l.SyncID = uuid.Must(uuid.NewV7())
+			count, err := q.CapabilityGithubRefreshCount(ctx, l.ProjectID)
+			if err != nil {
+				return err
+			}
+			if count < 20 {
+				l.PollsLeft--
+				l.State = "queued"
+				l.NextAt = now.Add(5 * time.Minute)
+				l.SyncID = uuid.Must(uuid.NewV7())
+				if e = q.InsertCapabilityGithubAudit(ctx, store.InsertCapabilityGithubAuditParams{ID: uuid.Must(uuid.NewV7()), ProjectID: l.ProjectID, RequestID: &l.RequestID, Event: "automatic_refresh", Generation: l.Generation, SyncID: &l.SyncID, Reason: "bounded_poll"}); e != nil {
+					return e
+				}
+			}
 		}
 	} else {
 		event = "sync_failed"
