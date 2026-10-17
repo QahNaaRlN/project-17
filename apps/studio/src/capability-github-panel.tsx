@@ -71,6 +71,10 @@ function Observation({ value, ru }: { value: GithubObservation; ru: boolean }) {
   return (
     <div>
       <p>
+        {ru ? "Наблюдение" : "Observation"}: PR #{f.number} · {ru ? "репозиторий" : "repository"}{" "}
+        {f.repositoryId}
+      </p>
+      <p>
         {githubLabel(f.state, ru)}
         {f.draft ? " · Draft" : ""} · CI: {githubLabel(f.ci, ru)}
       </p>

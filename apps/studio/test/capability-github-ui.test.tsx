@@ -226,13 +226,16 @@ it("STU-304/308: last-known errors and read-only state are explicit in English",
         current: null,
         canManage: false,
         syncState: "stale",
-        link: { ...view.link!, lastError: "permission_denied" },
+        link: { ...view.link!, pullNumber: 2, lastError: "permission_denied" },
+        url: "https://github.com/owner/repo/pull/2",
       }));
     },
     false,
   );
   expect(document.body.textContent).toContain("Last-known information");
   expect(document.body.textContent).toContain("not current verification");
+  expect(document.body.textContent).toContain("PR #1");
+  expect(document.body.textContent).toContain("PR #2");
   expect(document.querySelector("form")).toBeNull();
 });
 it("STU-312: form errors retain input and permit discard", async () => {
