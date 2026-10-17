@@ -265,6 +265,14 @@ func TestDeliveryFreshAuthorityAndInFlightCancellation(t *testing.T) {
 	if err != nil || view["state"] != "cancelled" || view["attempts"].([]any)[0].(object)["outcome"] != "acknowledged_after_cancel" {
 		t.Fatal(view, err)
 	}
+	beforeAudit, _ := f.e.Q.CapabilityDeliveryAudit(context.Background(), store.CapabilityDeliveryAuditParams{ProjectID: d.ProjectID, DeliveryID: &d.ID})
+	if err = f.s.finishDelivery(context.Background(), current, capabilitywebhook.Outcome{Acknowledged: true, Code: "STORED"}); err != nil {
+		t.Fatal(err)
+	}
+	afterAudit, _ := f.e.Q.CapabilityDeliveryAudit(context.Background(), store.CapabilityDeliveryAuditParams{ProjectID: d.ProjectID, DeliveryID: &d.ID})
+	if len(beforeAudit) != len(afterAudit) {
+		t.Fatal("duplicate late completion rewrote cancellation audit")
+	}
 }
 
 func TestDeliveryConcurrentClaimsExpiredLeaseAndRecovery(t *testing.T) {

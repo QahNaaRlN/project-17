@@ -300,6 +300,12 @@ func (s *DeliveryService) finishDelivery(ctx context.Context, claimed store.Capa
 		if err = q.FinishCapabilityDeliveryAttempt(ctx, finish); err != nil {
 			return err
 		}
+		d.LeaseToken = nil
+		d.LeaseUntil = nil
+		d, err = saveDelivery(ctx, q, d)
+		if err != nil {
+			return err
+		}
 		if err = deliveryAudit(ctx, q, d, finish.Outcome, "ATTEMPT_FINISHED_AFTER_CANCEL", nil); err != nil {
 			return err
 		}
