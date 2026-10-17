@@ -696,6 +696,12 @@ export async function studioFixture(id: string, previewToken: string) {
         res.end(JSON.stringify({ id, kind: "page", path: "/store", body: document }));
         return true;
       }
+      // Unknown read routes (including a request cancelled during test teardown)
+      // must not be parsed as command JSON or terminate the fixture server.
+      if (req.method !== "POST") {
+        fail(404, "NOT_FOUND");
+        return true;
+      }
       let body = "";
       for await (const chunk of req) body += String(chunk);
       const envelope = JSON.parse(body);

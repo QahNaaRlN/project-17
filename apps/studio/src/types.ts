@@ -90,6 +90,14 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  githubConfig?(signal?: AbortSignal): Promise<import("./capability-github.js").GithubConfig>;
+  github?(id: string, signal?: AbortSignal): Promise<import("./capability-github.js").GithubView>;
+  githubHistory?(
+    id: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<List<import("./capability-github.js").GithubObservation>>;
+  githubCommand?(attempt: import("./capability-github.js").GithubAttempt): Promise<unknown>;
   deliveryEndpoints?(
     signal?: AbortSignal,
   ): Promise<{ items: import("./capability-delivery.js").DeliveryEndpoint[] }>;

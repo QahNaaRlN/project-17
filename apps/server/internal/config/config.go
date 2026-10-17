@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilitygithub"
 	"github.com/qahnaarln/project-17/apps/server/internal/capabilitywebhook"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
@@ -14,6 +15,7 @@ import (
 
 // Config — конфигурация процесса cms.
 type Config struct {
+	CapabilityGithub   *capabilitygithub.Catalog
 	CapabilityWebhooks *capabilitywebhook.Catalog
 	OpenRouterKey      string
 	OpenRouterModel    string
@@ -51,6 +53,10 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	var errs []error
 	var webhookErr error
 	cfg.CapabilityWebhooks, webhookErr = capabilitywebhook.FromEnv(getenv)
+	if webhookErr != nil {
+		errs = append(errs, webhookErr)
+	}
+	cfg.CapabilityGithub, webhookErr = capabilitygithub.FromEnv(getenv)
 	if webhookErr != nil {
 		errs = append(errs, webhookErr)
 	}

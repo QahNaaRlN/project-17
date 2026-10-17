@@ -200,7 +200,8 @@ claim-schema-changeset. После исправлений и согласова�
 `register-manifest` связывает upload с точным hash в одной транзакции.
 Запросы создаёт capability.request; разработчик с code.propose видит отправленные
 карточки и ограниченный pack. Применение действия выполняет владелец CS отдельно
-после его появления в активном manifest. Проверки фактов PR пока нет.
+после его появления в активном manifest. Проверенные факты PR/CI добавлены
+отдельным пакетом ниже и не меняют этот ручной процесс.
 [Команды, Query API, права и приёмка](../../docs/studio-missing-capability.md).
 
 ### Подписанная доставка context pack
@@ -229,3 +230,77 @@ River использует очередь capability_delivery (2 workers), lease
 и raw response в них не попадают.
 [Протокол, DTO и ошибки](../../docs/studio-capability-delivery.md),
 [локальная приёмка](../../docs/studio-capability-delivery-acceptance.md).
+
+### Проверенные сведения GitHub PR/CI
+
+Миграция 00022 и очередь `capability_github` (2 workers) хранят наблюдения
+отдельно от инженерного статуса, IR, context pack и доставки. Подключение
+необязательно: без `CMS_CAPABILITY_GITHUB_CONFIG_FILE` ручной путь остаётся доступен.
+
+Оператор задаёт абсолютный путь к приватному JSON-файлу:
+
+```json
+{
+  "repositories": [{
+    "configId": "application",
+    "projectId": "<UUID проекта>",
+    "environment": "staging",
+    "repositoryId": "<числовой GitHub repository ID строкой>",
+    "owner": "<owner>",
+    "name": "<repo>",
+    "baseBranch": "dev",
+    "credentialId": "github-read-v1",
+    "token": "<read-only token; verify endpoint access>",
+    "requiredChecks": [{
+      "source": "check_run",
+      "name": "Check (TS + Go)",
+      "target": "head",
+      "appId": "<числовой ID доверенного GitHub App строкой>"
+    }]
+  }]
+}
+```
+
+Подставить реальные ID/имена, а обязательные проверки перечислить полностью
+(для Project 17 также `Docker image`, GitHub Actions app ID 15368). В PR этого
+проекта API прикрепляет проверки к head SHA, даже когда checkout использует
+пробное слияние; поэтому исходная политика использует head. Для проверок
+фактического merge-коммита отдельно выбрать integration; отсутствие результатов
+на нём остаётся unknown. Токен ограничить выбранным репозиторием:
+Metadata/Pull requests/Checks/Commit statuses/Contents — read.
+Проверка 2026-10-18 выявила ограничение текущего V1-контракта: интерфейс
+fine-grained PAT не предлагает Checks/read; тот же ключ читает приватный PR
+(200), но его Checks endpoint возвращает 403. Публичные Checks читаются, что
+не доказывает пригодность ключа для приватного репозитория. Не заменять ключ
+на широкий классический PAT; приватный Checks-сценарий остаётся заблокированным
+до подключения и внешней приёмки [GitHub App](../../docs/studio-capability-github-app.md).
+[Результаты живой проверки](../../docs/studio-capability-github-acceptance.md).
+Contents используется
+только для проверки родителей commit, исходники не читаются. Файл/токен не
+коммитить, не выдавать браузеру/агенту; для ротации изменить credentialId,
+перезапустить CMS и явно подтвердить новую настройку. Горячей перезагрузки нет.
+
+В Studio человек с project.admin открывает «Интеграция GitHub», выбирает запись
+каталога и явно подтверждает доступ участников CMS к ограниченным метаданным,
+в том числе приватных PR. Человек с code.propose привязывает номер PR к
+отправленному запросу и явно запускает обновление. Link/unlink/refresh используют
+Command Bus, reason, idempotency key и revision gates. Факты GitHub читаются через GET. Для App добавлены только фиксированный POST
+выпуска installation token и GET проверки списка доступных репозиториев;
+CMS не открывает/не сливает PR и не запускает CI. Сеть — фиксированный
+`https://api.github.com`, без redirects/proxy/закрытых адресов.
+
+После жеста — одна синхронизация и до пяти фоновых обновлений, не чаще 5 минут;
+окно 30 минут, свежесть снимка 15 минут. Ручной cooldown 60 секунд, 20 sync/час
+на проект, до 3 попыток на sync, общие ограничения по credentialId. Recovery
+каждые 30 секунд. Ошибка сохраняет last-known, а не зелёный текущий результат.
+Смена head/base/SHA, повтор CI и разные издатели проверок учитываются отдельно.
+Merged/success не означает deployed/fulfilled и не снимает блок публикации pending.
+[Контракты и границы](../../docs/studio-capability-github.md).
+
+
+Для приватных Checks вместо `token` можно задать `installation` с числовыми
+`appId`, `installationId` и абсолютным `privateKeyFile` (RSA PEM, права 600).
+Ключ считывается при старте; App выдаёт краткоживущий токен ровно на один
+репозиторий и пять прав чтения. Cache, обновление и отзыв обрабатывает CMS.
+Секреты не выдаются браузеру; установка App во внешнем GitHub подтверждается
+отдельно. [Полная инструкция и границы](../../docs/studio-capability-github-app.md).

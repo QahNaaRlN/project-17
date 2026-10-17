@@ -37,6 +37,7 @@ const MaxCommandBody = 1 << 20
 
 // Deps — зависимости HTTP-слоя.
 type Deps struct {
+	CapabilityGithub   *capabilities.GithubService
 	CapabilityDelivery *capabilities.DeliveryService
 	Agents             *agents.Service
 	Identity           *identity.Service
@@ -82,6 +83,7 @@ func NewRouter(d Deps) http.Handler {
 		workspaceRoutes(r, d)
 		capabilityRoutes(r, d)
 		capabilityDeliveryRoutes(r, d)
+		capabilityGithubRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))
 		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {
