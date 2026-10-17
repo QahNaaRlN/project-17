@@ -93,3 +93,24 @@ func TestReplacingExistingChainNeedsExplicitConfirmation(t *testing.T) {
 	_, err = call(f.e, f.a, "refresh-capability-context", Action{ID: r.ID, ExpectedRevision: 2, ExpectedSeq: 4, ExpectedManifestHash: f.hash}, "")
 	expectCode(t, err, "CAPABILITY_ANCHOR_CHANGED")
 }
+
+// STU-260: neither valid IR event representation may bypass replacement consent.
+func TestReplacingSingleHandlerNeedsExplicitConfirmation(t *testing.T) {
+	f := setup(t)
+	r := f.create()
+	before := object{"action": "scrollTo", "args": object{"target": object{"lit": r.NodeID}}}
+	f.e.Must(f.a, "apply-operations", object{"changesetId": f.cs, "expectedSeq": 1, "operations": []any{object{"type": "node.setBehavior", "target": f.doc, "payload": object{"nodeId": r.NodeID, "event": r.Event, "handlers": before}}}}, nil)
+	p := Action{ID: r.ID, ExpectedRevision: 1, ExpectedSeq: 2, ExpectedManifestHash: f.hash}
+	_, err := call(f.e, f.a, "submit-capability-request", p, "")
+	expectCode(t, err, "CAPABILITY_REPLACE_CONFIRM_REQUIRED")
+	p.ConfirmReplaceExisting = true
+	must(f.e, f.a, "submit-capability-request", p)
+	f.e.Must(f.a, "undo", object{"changesetId": f.cs, "expectedSeq": 3}, nil)
+	s, err := loadContext(context.Background(), f.e.Q, f.a, r, 4, f.hash, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw(obj(obj(obj(s.doc["nodes"])[r.NodeID])["on"])[r.Event])) != string(raw(before)) {
+		t.Fatal("undo did not restore the single handler")
+	}
+}

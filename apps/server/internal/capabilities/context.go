@@ -120,8 +120,19 @@ func behavior(r store.CapabilityRequest, handlers any) ops.Op {
 func pending(r store.CapabilityRequest) []any {
 	return []any{object{"action": "pending:" + r.ID.String()}}
 }
+
+// IR accepts either a single ActionCall or an array for an event.
+func handlerChain(value any) []any {
+	if value == nil {
+		return nil
+	}
+	if calls := arr(value); calls != nil {
+		return calls
+	}
+	return []any{value}
+}
 func exactPending(r store.CapabilityRequest, doc object) bool {
-	a := arr(obj(obj(obj(doc["nodes"])[r.NodeID])["on"])[r.Event])
+	a := handlerChain(obj(obj(obj(doc["nodes"])[r.NodeID])["on"])[r.Event])
 	return len(a) == 1 && len(obj(a[0])) == 1 && obj(a[0])["action"] == "pending:"+r.ID.String()
 }
 func projectPending(r store.CapabilityRequest, s snapshot) (snapshot, error) {
@@ -267,7 +278,7 @@ func buildPack(ctx context.Context, q *store.Queries, r store.CapabilityRequest,
 		structure = append(structure, nodeMeta(id, n))
 		selected["component:"+fmt.Sprint(n["type"])] = true
 		for _, v := range obj(n["on"]) {
-			for _, call := range arr(v) {
+			for _, call := range handlerChain(v) {
 				if key, ok := obj(call)["action"].(string); ok && !strings.HasPrefix(key, "pending:") {
 					selected["action:"+key] = true
 				}

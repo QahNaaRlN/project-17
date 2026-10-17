@@ -222,16 +222,18 @@ function DraftFields({
             )}
             {["number", "string", "text"].includes(arg.type) && (
               <>
-                <label>
-                  {text("Минимум", "Minimum")}
-                  <input
-                    type="number"
-                    step={arg.type === "number" ? "any" : "1"}
-                    min={arg.type === "number" ? undefined : 0}
-                    value={arg.min}
-                    onChange={(e) => change({ min: e.target.value })}
-                  />
-                </label>
+                {arg.type !== "text" && (
+                  <label>
+                    {text("Минимум", "Minimum")}
+                    <input
+                      type="number"
+                      step={arg.type === "number" ? "any" : "1"}
+                      min={arg.type === "number" ? undefined : 0}
+                      value={arg.min}
+                      onChange={(e) => change({ min: e.target.value })}
+                    />
+                  </label>
+                )}
                 <label>
                   {text("Максимум", "Maximum")}
                   <input
@@ -276,7 +278,8 @@ function proposed(args: Arg[]): Fields {
         .filter(Boolean);
     if (arg.type === "reference") field.schema = arg.schema;
     if (["number", "string", "text"].includes(arg.type)) {
-      if (arg.min !== "") field[arg.type === "number" ? "min" : "minLength"] = Number(arg.min);
+      if (arg.type !== "text" && arg.min !== "")
+        field[arg.type === "number" ? "min" : "minLength"] = Number(arg.min);
       if (arg.max !== "") field[arg.type === "number" ? "max" : "maxLength"] = Number(arg.max);
     }
     fields[arg.name] = field as unknown as Type;
@@ -446,7 +449,7 @@ export function CapabilityComposer({
                   {text("Ключ действия", "Action key")}
                   <input
                     required
-                    pattern="[a-z][a-zA-Z0-9]*\.[a-z][a-zA-Z0-9]*"
+                    pattern="[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+"
                     maxLength={200}
                     disabled={command.pending || command.uncertain}
                     value={key}

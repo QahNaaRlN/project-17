@@ -101,8 +101,9 @@ func TestPackIncludesScopedSlotsAndSelectedSourceMetadata(t *testing.T) {
 	}
 	nodes := obj(s.doc["nodes"])
 	obj(nodes[r.NodeID])["slots"] = object{"body": []any{"n_named", "n_absent"}}
-	nodes["n_named"] = object{"id": "n_named", "name": "Named child", "type": "Native", "children": []any{"n_named"}}
+	nodes["n_named"] = object{"id": "n_named", "name": "Named child", "type": "Native", "children": []any{"n_named"}, "on": object{"click": object{"action": "analytics.track"}}}
 	s.app["components"] = object{"Native": object{"props": object{"text": object{"type": "text"}}}}
+	s.app["actions"] = object{"analytics.track": object{"args": object{}}}
 	s.app["schemas"] = object{"Article": object{"fields": object{"title": object{"type": "text"}}}}
 	r.ProposedContract = raw(object{"args": object{"article": object{"type": "reference", "schema": "Article"}}})
 	index := object{"repo": object{"root": ".", "commit": strings.Repeat("a", 40)}, "elements": object{"component:Native": object{
@@ -134,6 +135,9 @@ func TestPackIncludesScopedSlotsAndSelectedSourceMetadata(t *testing.T) {
 	}
 	if !strings.Contains(string(p.Body), `"key":"Article"`) {
 		t.Fatal("referenced schema absent")
+	}
+	if !strings.Contains(string(p.Body), `"key":"analytics.track"`) {
+		t.Fatal("single handler's contract absent")
 	}
 	badKey := "invalid"
 	s.m.CodeIndexKey = &badKey

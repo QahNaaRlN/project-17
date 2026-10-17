@@ -193,7 +193,7 @@ it("STU-255/256/258/260: draft has typed args and explicit context/replacement c
       await change("Схема", "Article");
     }
     if (type === "number") {
-      await change("Минимум", "0", 2);
+      await change("Минимум", "0", 1);
       await change("Максимум", "10", 2);
     }
   }
@@ -219,6 +219,38 @@ it("STU-255/256/258/260: draft has typed args and explicit context/replacement c
   expect(document.body.textContent).toContain("submitted");
   await click("Закрыть");
   expect(document.querySelector("[role=dialog]")).toBeNull();
+});
+
+it("STU-255/256: namespaced action keys and text bounds match the manifest contract", async () => {
+  const { api } = await setup();
+  await click("Запросить действие для click");
+  await change("Ключ действия", "commerce.product.quickPreview");
+  expect(field("Ключ действия").checkValidity()).toBe(true);
+  await change("Заголовок", "Preview");
+  await change("Описание задачи", "Task");
+  await change("Критерии приёмки", "works");
+  await click("Добавить аргумент");
+  await change("Имя аргумента", "title");
+  await change("Минимум", "5");
+  await change("Тип аргумента", "text");
+  await change("Максимум", "200");
+  expect(
+    [...document.querySelectorAll("label")].some((label) =>
+      label.textContent?.startsWith("Минимум"),
+    ),
+  ).toBe(false);
+  await submit();
+  expect(vi.mocked(api.capabilityCommand!).mock.calls[0]![0].payload).toMatchObject({
+    key: "commerce.product.quickPreview",
+    proposedContract: { args: { title: { type: "text", required: false, maxLength: 200 } } },
+  });
+  expect(
+    (
+      vi.mocked(api.capabilityCommand!).mock.calls[0]![0].payload.proposedContract as {
+        args: Record<string, unknown>;
+      }
+    ).args.title,
+  ).not.toHaveProperty("minLength");
 });
 
 it("STU-270/272: uncertain create freezes exact payload and blocks locale/selection/Escape until retry", async () => {

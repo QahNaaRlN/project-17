@@ -118,6 +118,22 @@ func TestExplicitResolveCompatibilityAndUndo(t *testing.T) {
 	expectCode(t, err, "CAPABILITY_STATE_INVALID")
 }
 
+// STU-268: an exact pending call is eligible in either valid IR representation.
+func TestResolveSinglePendingHandler(t *testing.T) {
+	f := setup(t)
+	r := f.engineering(f.submit())
+	f.hash = f.activate(object{"value": object{"type": "string", "required": true}})
+	f.e.Must(f.a, "apply-operations", object{"changesetId": f.cs, "expectedSeq": 2, "operations": []any{object{"type": "node.setBehavior", "target": f.doc, "payload": object{"nodeId": r.NodeID, "event": r.Event, "handlers": object{"action": "pending:" + r.ID.String()}}}}}, nil)
+	view, err := Get(context.Background(), f.e.Q, f.a, r.ID)
+	if err != nil || view["anchorChanged"] != false {
+		t.Fatal("equivalent single pending considered changed", view, err)
+	}
+	result := must(f.e, f.a, "resolve-capability-request", Action{ID: r.ID, ExpectedRevision: r.Revision, ExpectedSeq: 3, ExpectedManifestHash: f.hash, Handlers: raw([]any{object{"action": r.Key, "args": object{"value": object{"lit": "chosen"}}}})})
+	if result.Request["status"] != "fulfilled" || result.Change.Changeset.Seq != 4 {
+		t.Fatal(result)
+	}
+}
+
 func TestSubmitRollbackAndNoIndex(t *testing.T) {
 	for _, table := range []string{"capability_context_packs", "capability_request_audit", "operations"} {
 		t.Run(table, func(t *testing.T) {

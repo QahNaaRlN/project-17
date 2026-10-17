@@ -241,7 +241,7 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		if r.Status != "draft" {
 			return out, fail("CAPABILITY_STATE_INVALID")
 		}
-		if len(arr(obj(obj(obj(s.doc["nodes"])[r.NodeID])["on"])[r.Event])) > 0 && !p.ConfirmReplaceExisting {
+		if len(handlerChain(obj(obj(obj(s.doc["nodes"])[r.NodeID])["on"])[r.Event])) > 0 && !p.ConfirmReplaceExisting {
 			return out, fail("CAPABILITY_REPLACE_CONFIRM_REQUIRED")
 		}
 		r.Status = "submitted"
