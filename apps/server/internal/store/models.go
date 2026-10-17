@@ -156,6 +156,85 @@ type CapabilityContextPack struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type CapabilityDelivery struct {
+	ID                  uuid.UUID  `json:"id"`
+	ProjectID           uuid.UUID  `json:"projectId"`
+	RequestID           uuid.UUID  `json:"requestId"`
+	RequestRevision     int64      `json:"requestRevision"`
+	PackRevision        int64      `json:"packRevision"`
+	PackHash            string     `json:"packHash"`
+	TargetID            uuid.UUID  `json:"targetId"`
+	TargetRevision      int64      `json:"targetRevision"`
+	TargetFingerprint   string     `json:"targetFingerprint"`
+	DestinationUrl      string     `json:"destinationUrl"`
+	EndpointID          string     `json:"endpointId"`
+	KeyID               string     `json:"keyId"`
+	KeyFingerprint      string     `json:"keyFingerprint"`
+	InitiatedBy         uuid.UUID  `json:"initiatedBy"`
+	Body                []byte     `json:"body"`
+	BodyHash            string     `json:"bodyHash"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	State               string     `json:"state"`
+	Revision            int64      `json:"revision"`
+	Cycle               int32      `json:"cycle"`
+	AttemptsInCycle     int32      `json:"attemptsInCycle"`
+	TotalAttempts       int32      `json:"totalAttempts"`
+	NextAttemptAt       time.Time  `json:"nextAttemptAt"`
+	LeaseToken          *uuid.UUID `json:"leaseToken"`
+	LeaseUntil          *time.Time `json:"leaseUntil"`
+	CancelledAt         *time.Time `json:"cancelledAt"`
+	DeliveredAt         *time.Time `json:"deliveredAt"`
+	LastError           string     `json:"lastError"`
+	LastHttpStatus      *int32     `json:"lastHttpStatus"`
+	RetryableExhaustion bool       `json:"retryableExhaustion"`
+}
+
+type CapabilityDeliveryAttempt struct {
+	ID                uuid.UUID  `json:"id"`
+	ProjectID         uuid.UUID  `json:"projectId"`
+	DeliveryID        uuid.UUID  `json:"deliveryId"`
+	Ordinal           int32      `json:"ordinal"`
+	Cycle             int32      `json:"cycle"`
+	LeaseToken        uuid.UUID  `json:"leaseToken"`
+	StartedAt         time.Time  `json:"startedAt"`
+	FinishedAt        *time.Time `json:"finishedAt"`
+	HttpStatus        *int32     `json:"httpStatus"`
+	Outcome           string     `json:"outcome"`
+	Retryable         bool       `json:"retryable"`
+	ReceiptDeliveryID *uuid.UUID `json:"receiptDeliveryId"`
+	ReceiptBodyHash   *string    `json:"receiptBodyHash"`
+	NextAttemptAt     *time.Time `json:"nextAttemptAt"`
+}
+
+type CapabilityDeliveryAudit struct {
+	ID          int64      `json:"id"`
+	ProjectID   uuid.UUID  `json:"projectId"`
+	DeliveryID  *uuid.UUID `json:"deliveryId"`
+	TargetID    uuid.UUID  `json:"targetId"`
+	Event       string     `json:"event"`
+	Source      string     `json:"source"`
+	ActorID     *uuid.UUID `json:"actorId"`
+	InitiatedBy *uuid.UUID `json:"initiatedBy"`
+	Reason      string     `json:"reason"`
+	Revision    int64      `json:"revision"`
+	CreatedAt   time.Time  `json:"createdAt"`
+}
+
+type CapabilityDeliveryTarget struct {
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"projectId"`
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	Environment   string    `json:"environment"`
+	EndpointID    string    `json:"endpointId"`
+	Url           string    `json:"url"`
+	Fingerprint   string    `json:"fingerprint"`
+	Enabled       bool      `json:"enabled"`
+	Revision      int64     `json:"revision"`
+	ChangedBy     uuid.UUID `json:"changedBy"`
+	ChangedAt     time.Time `json:"changedAt"`
+}
+
 type CapabilityRequest struct {
 	ID                  uuid.UUID  `json:"id"`
 	ProjectID           uuid.UUID  `json:"projectId"`

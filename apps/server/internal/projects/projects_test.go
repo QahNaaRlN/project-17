@@ -67,7 +67,7 @@ func errCode(err error) string {
 
 func TestBootstrap(t *testing.T) {
 	e := setup(t)
-	if len(e.admin.Rights) != len(auth.AllRights) || e.admin.ProjectSlug != "store" || e.admin.DisplayName != "bootstrap-admin" {
+	if len(e.admin.Rights) != len(auth.AllRights)-1 || e.admin.Rights.Has(auth.CapabilityDeliver) || e.admin.ProjectSlug != "store" || e.admin.DisplayName != "bootstrap-admin" {
 		t.Errorf("администратор: %+v", e.admin)
 	}
 	envs, err := projects.ListEnvironments(context.Background(), store.New(e.pool), e.admin.ProjectID)

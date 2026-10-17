@@ -107,7 +107,9 @@ React 73 и 60 браузерных сценариев. Полный M4/IR-044 �
 семантические инструменты, серверный OpenRouter и шаги с отменой (STU-120…125).
 Для живого вызова нужны серверный ключ, модель и вход пользователя с agent.delegate.
 Пакет M5 — [Missing Capability и context pack](../studio-missing-capability.md),
-STU-255…274: **реализован в feature/studio-missing-capability; ещё не слит в dev**.
+STU-255…274: **реализован и слит в dev 2026-10-17 в
+[PR #60](https://github.com/QahNaaRlN/project-17/pull/60)**,
+merge `9259d6272471cba057c0625bd554bb730ae64660`.
 Первый срез: запрос недостающего action в CODE-зоне, проверенная загрузка индекса,
 детерминированный pack, scoped MCP draft, ручная передача разработчику и явная
 замена pending после появления совместимого действия в активном manifest.
@@ -115,15 +117,41 @@ STU-255…274: **реализован в feature/studio-missing-capability; ещ
 точного commit, capability.request/code.propose и отдельные права изменения IR,
 CLI/приложение и два OIDC-пользователя для приёмки. Figma и ключ LLM не нужны
 для ручного пути; встроенный Agent требует своей действующей конфигурации.
-Полный M5 ещё не завершён: webhook/доставка, проверенные PR/CI факты,
+Полный M5 ещё не завершён: проверенные PR/CI факты,
 автоматическое fulfillment/requiredBy и preview/<ref>, другие виды запросов
 и условные политики остаются следующими пакетами. CLI уже строит индекс кода;
 его серверное хранение/неизменяемая связь с manifest реализованы в STU-263…264.
 Локальная приёмка 2026-10-17: настоящий CMS/PostgreSQL/OIDC, формы двух людей,
 точный retry после потери ответа, безопасный export, реальная сборка/CLI push,
 явный resolve, независимое согласование и выполнение на опубликованной странице
-в новом браузере. Мобильная ширина 375 px проверена. Полные тесты/CI итогового
-SHA остаются обязательным условием слияния; локально Go race недоступен без C toolchain.
+в новом браузере. Мобильная ширина 375 px проверена. При ревью исправлены
+одиночные обработчики/заглушки, подтверждение замены, состав pack, многочастные
+ключи и ограничения text. [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39027310418)
+и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39028004513)
+пройдены: Check (TS + Go), Go race/coverage 95%, Studio 328 тестов,
+60 браузерных сценариев и Docker image.
+
+Пакет M5 — [подписанная доставка context pack](../studio-capability-delivery.md),
+STU-275…294: **реализован в `feature/studio-capability-delivery`,
+[черновой PR #61](https://github.com/QahNaaRlN/project-17/pull/61); ещё не слит в dev**.
+Отдельное согласие на внешнего получателя, HMAC-SHA256, transactional outbox/River,
+ограниченные повторы/dedup, текущие права и журнал доставки. Delivered не меняет
+инженерный статус запроса, IR или публикацию. Зависимости: пакет #60, новая
+миграция/worker, capability.deliver, операторский endpoint/keyring, доступный
+получатель с durable receipt/dedup и синхронизированные часы. Для приёмки —
+изолированный PostgreSQL/OIDC и HTTP receiver; Figma и LLM key не требуются.
+Внешний кодовый агент и production endpoints настраиваются отдельно.
+Локальная [приёмка](../studio-capability-delivery-acceptance.md) 2026-10-17 пройдена:
+реальные формы, отдельный SQLite receiver, потеря квитанции после commit,
+рестарт CMS, тот же ID/body и одна запись inbox; две попытки и delivered в Studio.
+Проверены отзыв прав, отмена в полёте, смена target, stale pack, два проекта,
+блокировка публикации pending и EN/375 px. Администратор без design.read
+может настраивать получателя. Статусы запроса и CS не меняются от доставки.
+[Актуальный CI пакета](https://github.com/QahNaaRlN/project-17/pull/61/checks)
+проверяется по конечному SHA PR; слияние пока не выполнено.
+После этого остаются доверенные факты PR/CI, preview/<ref>, автоматическое
+fulfillment/requiredBy, другие kinds и условные policies. Полный M5 и шаг 10 MVP
+пока не закрыты. Автоматической отправки старых запросов новый пакет не включает.
 Конструкторы данных (STU-219…236) и поведения/условий (STU-237…254) слиты в dev.
 Advanced bindings, component.extract, буфер/wrap и NFR-приёмка остаются отдельными задачами.
 

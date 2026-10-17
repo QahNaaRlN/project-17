@@ -41,9 +41,9 @@ func TestCapabilityQueriesAreScopedBoundedAndNoStore(t *testing.T) {
 	upload := command("upload-code-index", map[string]any{"manifestHash": hash, "indexHash": indexHash, "index": index})
 	command("register-manifest", map[string]any{"manifest": app, "environment": "staging", "codeIndexUploadId": upload["uploadId"]})
 	fixture := cmstest.Env{T: t, Pool: e.pool, Q: q, Admin: admin}
-	human := fixture.Human("request-author", auth.DesignRead, auth.CapabilityRequest, auth.DesignCompose, auth.BehaviorUse)
+	human := fixture.Human("request-author", auth.DesignRead, auth.CapabilityRequest, auth.CapabilityDeliver, auth.ProjectAdmin, auth.DesignCompose, auth.BehaviorUse)
 	secret, digest := auth.NewToken(auth.ServiceTokenPrefix)
-	caps := []string{string(auth.DesignRead), string(auth.CapabilityRequest), string(auth.DesignCompose), string(auth.BehaviorUse)}
+	caps := []string{string(auth.DesignRead), string(auth.CapabilityRequest), string(auth.CapabilityDeliver), string(auth.ProjectAdmin), string(auth.DesignCompose), string(auth.BehaviorUse)}
 	if _, err = q.CreateAPIToken(ctx, store.CreateAPITokenParams{ID: uuid.New(), ProjectID: admin.ProjectID, ActorID: human.ID, TokenHash: digest, Scopes: caps, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +82,41 @@ func TestCapabilityQueriesAreScopedBoundedAndNoStore(t *testing.T) {
 			t.Fatal(path, response.StatusCode, value)
 		}
 	}
+	// Delivery uses separate consent and does not change the engineering request.
+	for _, route := range []string{"capability-delivery-endpoints", "capability-delivery-target"} {
+		response, value := e.do(t, "GET", "/api/v1/"+route+"?environment=staging", "", e.authed(nil))
+		if response.StatusCode != 200 || response.Header.Get("Cache-Control") != "private, no-store" {
+			t.Fatal(value)
+		}
+	}
+	command("set-capability-delivery-target", map[string]any{"environment": "staging", "endpointId": "engineering", "enabled": true, "expectedRevision": 0})
+	response, preview := e.do(t, "GET", root+"/delivery-preview?environment=staging", "", e.authed(nil))
+	if response.StatusCode != 200 {
+		t.Fatal(preview)
+	}
+	target := preview["target"].(map[string]any)
+	sent := command("send-capability-context", map[string]any{"requestId": id, "expectedRequestRevision": preview["requestRevision"], "expectedPackRevision": preview["packRevision"], "expectedPackHash": preview["packHash"], "expectedSeq": preview["seq"], "expectedManifestHash": preview["manifestHash"], "expectedTargetRevision": target["revision"], "expectedTargetFingerprint": target["fingerprint"], "confirmExternalShare": true})
+	item := sent["delivery"].(map[string]any)
+	deliveryRoot := "/api/v1/capability-deliveries/" + item["id"].(string)
+	for _, path := range []string{root + "/deliveries?environment=staging&limit=1", deliveryRoot + "?environment=staging"} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode != 200 || value["body"] != nil || value["keyId"] != nil {
+			t.Fatal(path, value)
+		}
+	}
+	for _, path := range []string{root + "/delivery-preview?environment=production", root + "/deliveries?environment=production", deliveryRoot + "?environment=production", "/api/v1/capability-deliveries/" + uuid.NewString()} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode != 404 || value["code"] != "CAPABILITY_DELIVERY_NOT_FOUND" {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
+	for _, path := range []string{"/api/v1/capability-delivery-target", "/api/v1/capability-delivery-target?environment=staging&unknown=1", root + "/deliveries?environment=staging&limit=bad", root + "/deliveries?limit=101", deliveryRoot + "?environment=staging&environment=staging", "/api/v1/capability-deliveries/invalid"} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode < 400 || response.StatusCode >= 500 {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
+	command("cancel-capability-delivery", map[string]any{"deliveryId": item["id"], "expectedDeliveryRevision": item["revision"]})
 	// Upload's larger envelope does not expand ordinary commands' body limits.
 	large := strings.Repeat(" ", 1024*1024+1) + `{"payload":{}}`
 	response, _ = e.do(t, "POST", "/api/v1/commands/create-capability-request", large, e.authed(map[string]string{"Idempotency-Key": "large"}))

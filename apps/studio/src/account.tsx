@@ -122,7 +122,9 @@ export function StudioApp({
           setStatus(
             user.authenticated
               ? user.hasAccess &&
-                (user.rights.includes("design.read") || user.rights.includes("content.read"))
+                user.rights.some((right) =>
+                  ["design.read", "content.read", "project.admin", "code.propose"].includes(right),
+                )
                 ? "ready"
                 : "noAccess"
               : "anonymous",

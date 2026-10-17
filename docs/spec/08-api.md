@@ -326,3 +326,29 @@ Query `/api/v1/capability-requests` поддерживает фильтры и �
 Ответы no-store; скачивание — attachment с X-Context-Hash. Права проверяются
 по текущей сессии; code.propose не открывает живые страницы/CS.
 Точные payload, ошибки и состояния: [контракт пакета](../studio-missing-capability.md).
+
+### Подписанная доставка context pack
+
+Команды `set-capability-delivery-target`, `send-capability-context`,
+`retry-capability-delivery`, `cancel-capability-delivery` используют Command Bus,
+reason и Idempotency-Key. Настройка доступна human project.admin; отправка/повтор
+— владельцу исходного CS с capability.request + design.read + capability.deliver.
+Агенты и сервисы не могут отправлять, повторять, отменять или менять target.
+Human project.admin может аварийно отменить доставку без доступа к pack.
+
+Query (все private, no-store, RepeatableRead):
+`/api/v1/capability-delivery-endpoints?environment=`,
+`/api/v1/capability-delivery-target?environment=`,
+`/api/v1/capability-requests/{id}/delivery-preview`,
+`/api/v1/capability-requests/{id}/deliveries?limit=25&cursor=`,
+`/api/v1/capability-deliveries/{id}`. Параметр environment фиксирует окружение;
+Studio всегда передаёт его и проверяет scope перед записью. Внешние URL/секреты
+не принимаются в командах. Проекции не содержат body/keyring/lease или живую
+страницу для code.propose. Повтор той же identity возвращает прежний delivery,
+включая terminal, и не пересылает пакет.
+
+Ошибка `CAPABILITY_DELIVERY_` с суффиксом REVISION_CONFLICT, CONTEXT_STALE,
+TARGET_CHANGED, STATE_INVALID, RETRY_EXHAUSTED — 409; FORBIDDEN — 403,
+NOT_FOUND — 404, LIMIT_EXCEEDED — 413, UNAVAILABLE — 503.
+Точные payload, HMAC bytes, квитанция и controlled outcomes —
+[STU-275…294](../studio-capability-delivery.md).

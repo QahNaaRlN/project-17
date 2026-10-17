@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilitywebhook"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"log/slog"
@@ -13,21 +14,22 @@ import (
 
 // Config — конфигурация процесса cms.
 type Config struct {
-	OpenRouterKey   string
-	OpenRouterModel string
-	Identity        identity.Config
-	HTTPAddr        string        // CMS_HTTP_ADDR, по умолчанию ":8080"
-	DatabaseURL     string        // CMS_DATABASE_URL, обязательно
-	LogLevel        slog.Level    // CMS_LOG_LEVEL: debug | info | warn | error
-	ShutdownTimeout time.Duration // CMS_SHUTDOWN_TIMEOUT, по умолчанию 15s
-	CDNPurgeURL     string        // CMS_CDN_PURGE_URL — вебхук purge CDN; пусто — purge только в журнал
-	CDNPurgeToken   string        // CMS_CDN_PURGE_TOKEN — Bearer-токен вебхука
-	S3Endpoint      string
-	S3AccessKey     string
-	S3SecretKey     string
-	S3Bucket        string
-	S3Secure        bool
-	Images          imagedelivery.Config
+	CapabilityWebhooks *capabilitywebhook.Catalog
+	OpenRouterKey      string
+	OpenRouterModel    string
+	Identity           identity.Config
+	HTTPAddr           string        // CMS_HTTP_ADDR, по умолчанию ":8080"
+	DatabaseURL        string        // CMS_DATABASE_URL, обязательно
+	LogLevel           slog.Level    // CMS_LOG_LEVEL: debug | info | warn | error
+	ShutdownTimeout    time.Duration // CMS_SHUTDOWN_TIMEOUT, по умолчанию 15s
+	CDNPurgeURL        string        // CMS_CDN_PURGE_URL — вебхук purge CDN; пусто — purge только в журнал
+	CDNPurgeToken      string        // CMS_CDN_PURGE_TOKEN — Bearer-токен вебхука
+	S3Endpoint         string
+	S3AccessKey        string
+	S3SecretKey        string
+	S3Bucket           string
+	S3Secure           bool
+	Images             imagedelivery.Config
 }
 
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
@@ -47,6 +49,11 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		S3Secure:        getenv("CMS_S3_SECURE") != "false",
 	}
 	var errs []error
+	var webhookErr error
+	cfg.CapabilityWebhooks, webhookErr = capabilitywebhook.FromEnv(getenv)
+	if webhookErr != nil {
+		errs = append(errs, webhookErr)
+	}
 	cfg.Identity = identity.Config{Issuer: getenv("CMS_OIDC_ISSUER"), ClientID: getenv("CMS_OIDC_CLIENT_ID"), ClientSecret: getenv("CMS_OIDC_CLIENT_SECRET"), PublicOrigin: getenv("CMS_STUDIO_PUBLIC_URL"), AllowLoopbackHTTP: getenv("CMS_OIDC_ALLOW_LOOPBACK_HTTP") == "true"}
 	if err := cfg.Identity.Validate(); err != nil {
 		errs = append(errs, err)

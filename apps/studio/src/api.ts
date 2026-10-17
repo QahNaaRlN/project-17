@@ -17,6 +17,16 @@ import { jsonValue } from "@cms/runtime";
 import { canonicalJson } from "@cms/manifest";
 import { capability, type CapabilityRequest, type CapabilityResult } from "./capabilities.js";
 import {
+  delivery,
+  deliveryTarget,
+  deliveryPreview,
+  type Delivery,
+  type DeliveryResult,
+  type DeliveryTarget,
+  type DeliveryEndpoint,
+  type DeliveryPreview,
+} from "./capability-delivery.js";
+import {
   StudioError,
   type Api,
   type Changeset,
@@ -127,6 +137,103 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async deliveryEndpoints(signal) {
+      const config = await api.config(signal);
+      const value = await request<{ items: DeliveryEndpoint[] }>(
+        "/api/v1/capability-delivery-endpoints?" +
+          new URLSearchParams({ environment: config.environment }),
+        signal,
+      );
+      if (
+        !Array.isArray(value?.items) ||
+        value.items.some(
+          (e) =>
+            !e ||
+            typeof e.endpointId !== "string" ||
+            typeof e.url !== "string" ||
+            !/^sha256:[a-f0-9]{64}$/.test(e.fingerprint) ||
+            typeof e.ready !== "boolean",
+        )
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return value;
+    },
+    async deliveryTarget(signal) {
+      const config = await api.config(signal);
+      return deliveryTarget(
+        await request<DeliveryTarget>(
+          "/api/v1/capability-delivery-target?" +
+            new URLSearchParams({ environment: config.environment }),
+          signal,
+        ),
+      );
+    },
+    async deliveryPreview(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      return deliveryPreview(
+        await request<DeliveryPreview>(
+          "/api/v1/capability-requests/" +
+            id +
+            "/delivery-preview?" +
+            new URLSearchParams({ environment: config.environment }),
+          signal,
+        ),
+      );
+    },
+    async deliveries(id, cursor, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      const value = await request<List<Delivery>>(
+        "/api/v1/capability-requests/" +
+          id +
+          "/deliveries?" +
+          new URLSearchParams({
+            environment: config.environment,
+            limit: "25",
+            ...(cursor ? { cursor } : {}),
+          }),
+        signal,
+      );
+      if (
+        !Array.isArray(value?.items) ||
+        (value.nextCursor != null && typeof value.nextCursor !== "string")
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return { ...value, items: value.items.map((v) => delivery(v)) };
+    },
+    async delivery(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      return delivery(
+        await request<Delivery>(
+          "/api/v1/capability-deliveries/" +
+            id +
+            "?" +
+            new URLSearchParams({ environment: config.environment }),
+          signal,
+        ),
+      );
+    },
+    async deliveryCommand(attempt) {
+      if (attempt.actor) {
+        const account = await api.account();
+        if (!account.authenticated || account.user?.id !== attempt.actor)
+          throw new StudioError("SESSION_CHANGED", true);
+      }
+      const value = await request<{ result: DeliveryResult | DeliveryTarget }>(
+        "/api/v1/commands/" + attempt.name,
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      if (attempt.name === "set-capability-delivery-target")
+        return deliveryTarget(value?.result as DeliveryTarget, true);
+      const result = value?.result as DeliveryResult;
+      delivery(result?.delivery, true);
+      if (typeof result.deduplicated !== "boolean") throw new StudioError("RESPONSE_INVALID", true);
+      return result;
+    },
     async capabilities(filters, signal) {
       const config = await api.config(signal);
       const query = new URLSearchParams({

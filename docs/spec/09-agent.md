@@ -29,6 +29,7 @@
 | `behavior.use` | Назначение зарегистрированных действий событиям |
 | `behavior.propose` | Предложение контракта нового действия |
 | `capability.request` | Создание запросов Missing Capability |
+| `capability.deliver` | Отдельно выданное человеку право подтверждать внешнюю передачу context pack; не делегируется агентам и не входит в типовые человеческие роли |
 | `code.propose` | Получение context pack и отправка ссылок на PR по запросам |
 | `schema.read` / `schema.propose` / `schema.apply` | Чтение схем / создание CS со схемными изменениями / согласование и применение |
 | `manifest.register` | Регистрация manifest, создание preview-окружений |
@@ -43,7 +44,7 @@
 | `designer` | `editor` без `content.publish` + `design.compose`, `component.write`, `behavior.use`, `capability.request`, `schema.read` |
 | `lead-designer` | `designer` + `design.zones.manage`, `design.components.certify`, `content.publish` |
 | `developer` | `content.read`, `design.read`, `schema.*`, `behavior.propose`, `code.propose`, `manifest.register` |
-| `admin` | все |
+| `admin` | все обычные права; `capability.deliver` выдаётся отдельной ролью после явного решения |
 | `ci` (сервис) | `manifest.register`, `schema.propose` |
 
 ### 2.3. Документ политики
@@ -170,12 +171,20 @@ MCP-сервер встроен в CMS (`/mcp`, транспорт Streamable HT
 
 Реализованный первый пакет описан отдельно:
 [Studio: Missing Capability и context pack](../studio-missing-capability.md),
-STU-255…274, feature/studio-missing-capability, на основе dev после PR #59.
+STU-255…274 слиты в dev в [PR #60](https://github.com/QahNaaRlN/project-17/pull/60),
+merge `9259d6272471cba057c0625bd554bb730ae64660`; CI merge пройден.
 Реализованы scoped draft/read tools, неизменяемые версии context pack и индекс
 кода. Встроенный Agent после создания draft останавливается для проверки человеком.
 Первый срез ограничен action-запросами, ручной передачей и явным применением;
-webhook, автоматическое fulfillment и preview/<ref> ниже остаются целевой
-архитектурой последующих пакетов.
+автоматическое fulfillment и preview/<ref> ниже остаются целевой архитектурой
+последующих пакетов.
+
+Пакет [подписанной доставки context pack](../studio-capability-delivery.md),
+STU-275…294 реализован в [черновом PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
+локальная приёмка пройдена; до слияния пакет не считается доступным в dev.
+Доставка с отдельным
+согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
+автоматические шаги жизненного цикла ниже по-прежнему целевые.
 
 ### 5.1. Жизненный цикл
 
@@ -191,7 +200,7 @@ draft ─submit─▶ submitted ─accept─▶ accepted ─▶ in_progress ─�
 | Формализация | CMS (или агент) предлагает ключ, вид (`action`, `component`, `dataSource`, `token`) и контракт; проверяет дубли среди открытых запросов и похожие существующие элементы manifest |
 | Заглушка | В черновике узел получает действие `pending:<requestId>`; Studio показывает узел со значком; публикация блокируется (IR-053) |
 | Context pack | Детерминированная сборка контекста (§6) |
-| Передача | Webhook проекта (`codeAgent.webhookUrl`, подпись HMAC) или создание задачи в трекере через интеграцию; статус `accepted` выставляет разработчик или сервис |
+| Передача | Подписанный webhook из операторского каталога после отдельного согласия владельца CS (STU-275…294); delivered подтверждает сохранение пакета. Статус `accepted` выставляет разработчик или сервис отдельно; интеграция с трекером остаётся последующим пакетом |
 | Реализация | Агент или разработчик работает в репозитории, открывает PR; сервис CI сообщает ссылку (`update-capability-request`, статус `pr_open`) |
 | Preview | Сборка PR регистрирует manifest в `preview/<ref>`; Studio позволяет посмотреть CS на этом окружении, где `pending:<id>` разрешается в реализованный ключ |
 | Выполнение | При регистрации manifest в стандартное окружение, содержащего ключ, запрос получает статус `fulfilled`; CMS добавляет в CS из `requiredBy` операцию замены `pending:<id>` на реальное действие (актор `service: cms-system`) и уведомляет владельца CS |

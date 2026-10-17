@@ -21,6 +21,7 @@ const (
 	BehaviorUse             Right = "behavior.use"
 	BehaviorPropose         Right = "behavior.propose"
 	CapabilityRequest       Right = "capability.request"
+	CapabilityDeliver       Right = "capability.deliver"
 	CodePropose             Right = "code.propose"
 	SchemaRead              Right = "schema.read"
 	SchemaPropose           Right = "schema.propose"
@@ -34,7 +35,7 @@ const (
 var AllRights = []Right{
 	ContentRead, ContentWrite, ContentDelete, ContentPublish, AssetWrite,
 	DesignRead, DesignCompose, DesignZonesManage, DesignComponentsCertify, DesignTokensModify,
-	ComponentWrite, BehaviorUse, BehaviorPropose, CapabilityRequest, CodePropose,
+	ComponentWrite, BehaviorUse, BehaviorPropose, CapabilityRequest, CapabilityDeliver, CodePropose,
 	SchemaRead, SchemaPropose, SchemaApply, ManifestRegister, AgentDelegate, ProjectAdmin,
 }
 

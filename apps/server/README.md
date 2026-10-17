@@ -200,5 +200,32 @@ claim-schema-changeset. После исправлений и согласова�
 `register-manifest` связывает upload с точным hash в одной транзакции.
 Запросы создаёт capability.request; разработчик с code.propose видит отправленные
 карточки и ограниченный pack. Применение действия выполняет владелец CS отдельно
-после его появления в активном manifest. Автоматической доставки/проверки PR нет.
+после его появления в активном manifest. Проверки фактов PR пока нет.
 [Команды, Query API, права и приёмка](../../docs/studio-missing-capability.md).
+
+### Подписанная доставка context pack
+
+Миграция 00021 добавляет отдельный журнал доставки. Отсутствие
+`CMS_CAPABILITY_WEBHOOK_CONFIG_FILE` оставляет ручной workflow доступным.
+Для доставки оператор указывает абсолютный путь к приватному JSON-файлу
+`{"endpoints":[{"endpointId":"engineering","projectId":"<UUID>","environment":"staging","url":"https://receiver.example/context","activeKeyId":"v1","keys":{"v1":"<base64 от 32–128 случайных байт>"}}]}`.
+Файл и ключи не включать в репозиторий/публичные артефакты. CMS валидирует
+структуру и scope при запуске. URL только HTTPS/443 с публичными DNS-ответами;
+redirect, proxy, IP literals и закрытые адреса запрещены. Тестовый флаг
+`CMS_CAPABILITY_WEBHOOK_ALLOW_LOOPBACK_HTTP=true` разрешает только literal
+127.0.0.1/::1 с явным портом HTTP и не связан с настройками OIDC.
+
+Human project.admin отдельно выбирает получателя; автору нужны capability.request,
+design.read и явно выданное capability.deliver. Типовые человеческие роли и
+AgentRights этого права не получают. Submit, refresh и включение target не
+отправляют пакеты. Автор отдельно подтверждает URL и сохранённый pack.
+Delivered означает только durable receipt, не инженерное принятие запроса.
+River использует очередь capability_delivery (2 workers), lease 30 с,
+восстановление раз в 30 с, до 6 попыток за цикл и до 3 явно подтверждённых циклов.
+Ротация: новый activeKeyId с сохранением прежних ключей до окончания старых
+доставок. Старый keyId нельзя назначать новому секрету; hot reload отсутствует.
+Логи попыток содержат ID/project, cycle/attempt, duration, HTTP/outcome;
+периодический журнал очереди — depth/oldest_age_seconds. Body/подписи/секреты
+и raw response в них не попадают.
+[Протокол, DTO и ошибки](../../docs/studio-capability-delivery.md),
+[локальная приёмка](../../docs/studio-capability-delivery-acceptance.md).

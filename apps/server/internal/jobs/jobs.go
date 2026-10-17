@@ -113,7 +113,7 @@ func NewProcessor(pool *pgxpool.Pool, purger Purger, log *slog.Logger, register 
 		}
 	}
 	return river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
+		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}, "capability_delivery": {MaxWorkers: 2}},
 		Workers: workers,
 		Logger:  log,
 	})
