@@ -1,8 +1,10 @@
 # Серверная авторизация GitHub App
 
 Расширение чтения фактов [STU-295…314](studio-capability-github.md), необходимое
-для приватных Checks. Серверная реализация подготовлена; внешняя регистрация,
-установка и приёмка App пока не выполнены. Полный STU-314 остаётся открытым.
+для приватных Checks. Серверная реализация и разрешённая установка App выполнены. Настоящий CMS
+прочитал приватные PR и Checks; новый head прошёл pending → failure,
+следующий head — pending → success. Итог независимого merge CI и остальные
+результаты приведены в [отчёте приёмки](studio-capability-github-acceptance.md).
 
 ## Граница доступа
 
@@ -77,10 +79,17 @@ Retry-After сохраняют прежнюю обработку. Общие lea
 Локальные тесты проверяют настоящий RSA/JWT, ограниченное тело POST, полный
 Observe через HTTP boundary, cache/refresh/revocation, конкуренцию/отмену,
 излишние права и репозитории, некорректные ответы и небезопасные PEM-файлы.
-Это не внешняя приёмка GitHub App. После регистрации и отдельного разрешения
-на установку нужны реальные private PR200/Checks200, переходы CI и независимый
-CI merge SHA, сохранение инвариантов и pending publication block.
-Ограничение запуска приватного GitHub Actions проверяется отдельно от авторизации.
+Внешняя проверка выполняется отдельно от этих тестов: разрешённый App,
+приватные PR/Checks, реальные переходы CI, независимый CI merge SHA,
+сохранение инвариантов и pending publication block. Результаты и граница
+между проверкой и слиянием пакета — в [отчёте приёмки](studio-capability-github-acceptance.md).
+
+Приватные синтетические задания исполняются отдельными одноразовыми
+self-hosted runner из официального образа GitHub, закреплённого по digest.
+Каждый контейнер работает без root, host mounts, Docker socket и ключа CMS;
+ограничены CPU, память, процессы и время. Регистрация ephemeral принимает
+одно задание, затем регистрация и контейнер удаляются. Этот приёмочный
+инструмент не входит в CMS: сама CMS не получает полномочий запуска CI.
 
 Источники: [JWT GitHub App](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app),
 [installation token](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app),
