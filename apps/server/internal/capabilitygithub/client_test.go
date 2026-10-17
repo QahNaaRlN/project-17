@@ -519,3 +519,15 @@ func TestSTU301HeadChecksDoNotProveSyntheticMergeChecks(t *testing.T) {
 		t.Fatal(o)
 	}
 }
+
+func TestSTU302KnownInconclusiveResultsRemainAuditable(t *testing.T) {
+	rule := repoFixture().RequiredChecks[0]
+	for _, conclusion := range []string{"neutral", "skipped", "stale"} {
+		var rows []check
+		json.Unmarshal([]byte(fmt.Sprintf(`[{"id":1,"name":"Check","head_sha":"aaa","status":"completed","conclusion":"%s","app":{"id":7},"check_suite":{"id":1}}]`, conclusion)), &rows)
+		got := chooseCheck(rows, rule, "aaa")
+		if got.Outcome != "unknown" || got.Conclusion != conclusion {
+			t.Fatal("known inconclusive result lost", got)
+		}
+	}
+}

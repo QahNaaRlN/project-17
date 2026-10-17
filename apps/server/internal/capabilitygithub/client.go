@@ -404,6 +404,8 @@ func chooseCheck(rows []check, r Rule, sha string) Result {
 			out.Outcome = "failure"
 		case "cancelled":
 			out.Outcome = "cancelled"
+		case "neutral", "skipped", "stale":
+			// Known provider conclusions remain auditable, never successful.
 		default:
 			out.Conclusion = "unknown"
 		}
