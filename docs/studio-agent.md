@@ -58,6 +58,7 @@ STU-255…274 реализован и слит в dev в PR #60; CI merge про
 Первый срез включает action-запросы, server-side index/pack, scoped draft tool
 и ручную передачу разработчику с явной заменой pending.
 Следующий пакет — [подписанная доставка](studio-capability-delivery.md),
-STU-275…294: спецификация готова, реализация ещё не начата. Это ещё не весь M5:
+STU-275…294: реализованы в [черновом PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
+локальная приёмка пройдена; слияние в dev ещё не выполнено. Это ещё не весь M5:
 произвольная условная policy, code-agent webhook, автоматическое fulfillment,
 advanced bindings, component.extract/wrap и NFR-приёмка остаются отдельными задачами.
