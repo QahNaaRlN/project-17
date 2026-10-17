@@ -1,6 +1,10 @@
 # Studio: действия и условия показа
 
-Статус: STU-237…254 реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); ещё не слиты в dev.
+Статус: STU-237…254 реализованы и слиты в dev 2026-10-16 в
+[PR #59](https://github.com/QahNaaRlN/project-17/pull/59), merge `35ccee4`.
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/38922047905)
+пройден. Следующий пакет — [Missing Capability и context pack](studio-missing-capability.md),
+STU-255…274: спецификация готова, реализация не начата.
 Проверки и границы подтверждения — в [отчёте реализации](studio-behavior-conditions-evidence.md).
 Дата: 2026-10-16. Проверенная основа: `origin/dev` на
 `c4b8286df779dbf1f41f0c23f46d73e7c7249f84`, после слияния

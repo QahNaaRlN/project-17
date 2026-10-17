@@ -14,3 +14,9 @@ agentId, changesetIds, rights, ttlSeconds и opsQuota. Ответ содержи
 Сервер не требует SSE GET или `Mcp-Session-Id`; сообщения POST возвращают JSON.
 Повтор того же tools/call с тем же JSON-RPC id и аргументами идемпотентен внутри
 agent session. Используйте новый request id для нового вызова.
+
+`report_missing_capability` создаёт только action draft в делегированном
+CS/document/environment: нужны capability.request/design.read, reason, текущие
+seq/manifest и одна доступная операция квоты. Человек отдельно проверяет pack
+и отправляет запрос. `get_capability_request` читает только ту же привязку;
+инструменты не дают прав разработчика, submit/resolve или внешней доставки.

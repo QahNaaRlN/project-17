@@ -78,6 +78,7 @@ func NewRouter(d Deps) http.Handler {
 		agentRoutes(r, d)
 		r.Get("/events", eventsHandler(d))
 		workspaceRoutes(r, d)
+		capabilityRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))
 		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -308,11 +309,15 @@ type commandEnvelope struct {
 
 func commandHandler(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxCommandBody))
+		limit := int64(MaxCommandBody)
+		if chi.URLParam(r, "name") == "upload-code-index" {
+			limit = 2 * MaxCommandBody
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			writeError(w, r, d.Log, commandbus.NewError(http.StatusRequestEntityTooLarge, "LIMIT_EXCEEDED",
-				"Слишком большой запрос", fmt.Sprintf("Тело команды больше %d байт", MaxCommandBody)))
+				"Слишком большой запрос", fmt.Sprintf("Тело команды больше %d байт", limit)))
 			return
 		}
 		if err != nil {

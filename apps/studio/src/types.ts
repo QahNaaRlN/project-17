@@ -22,6 +22,7 @@ export interface DocumentRecord {
   body: IrDocument;
 }
 export interface WorkContext {
+  codeIndexAvailable?: boolean;
   work?: WorkQueueCard;
   diffSnapshot?: string;
   review: Review;
@@ -89,6 +90,22 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  capabilities?(
+    filters: { status?: string; key?: string; cursor?: string },
+    signal?: AbortSignal,
+  ): Promise<List<import("./capabilities.js").CapabilityRequest>>;
+  capability?(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<import("./capabilities.js").CapabilityRequest>;
+  capabilityContext?(
+    id: string,
+    version?: number,
+    signal?: AbortSignal,
+  ): Promise<{ hash?: string; pack: Record<string, unknown> }>;
+  capabilityCommand?(
+    attempt: import("./capabilities.js").CapabilityAttempt,
+  ): Promise<import("./capabilities.js").CapabilityResult>;
   createWork?(attempt: import("./work-creation.js").WorkCreationAttempt): Promise<Changeset>;
   workQueue?(
     filters: WorkQueueFilters,
@@ -206,7 +223,7 @@ export interface AgentRun {
   steps: {
     seq: number;
     kind: string;
-    data: { name?: string; text?: string; isError?: boolean; code?: string };
+    data: { name?: string; text?: string; isError?: boolean; code?: string; requestId?: string };
   }[];
   tokens: number;
   reserved: number;
@@ -321,6 +338,7 @@ export const workflowActions = [
 ] as const;
 export type WorkflowAction = (typeof workflowActions)[number];
 export interface Review {
+  capabilityPolicy?: { defaultMode: string; maxMode: string };
   canEdit: boolean;
   canEditBehavior?: boolean;
   canEditCondition?: boolean;

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 
@@ -30,6 +31,7 @@ type ReviewObject struct {
 
 // A null reason enables an action. Reasons are advisory; commands repeat authorization.
 type StudioReview struct {
+	CapabilityPolicy map[string]any `json:"capabilityPolicy,omitempty"`
 	ReviewDetail
 	Objects          []ReviewObject     `json:"objects"`
 	Actions          map[string]*string `json:"actions"`
@@ -65,6 +67,22 @@ func GetStudioReview(ctx context.Context, q *store.Queries, actor auth.Actor, id
 	editable := cs.OwnerID == actor.ID && cs.State == "open" && cs.Kind == "standard"
 	out.CanEditBehavior = editable && actor.Rights.Has(auth.BehaviorUse)
 	out.CanEditCondition = editable && actor.Rights.Has(auth.DesignCompose)
+	if editable && actor.Kind == auth.ActorHuman && actor.Rights.Has(auth.CapabilityRequest) && actor.Rights.Has(auth.DesignRead) {
+		settings, err := q.GetProjectSettings(ctx, actor.ProjectID)
+		if err != nil {
+			return StudioReview{}, err
+		}
+		var project map[string]any
+		if err = json.Unmarshal(settings, &project); err != nil {
+			return StudioReview{}, err
+		}
+		out.CapabilityPolicy = map[string]any{"defaultMode": "SYSTEM", "maxMode": "SYSTEM"}
+		for _, key := range []string{"defaultMode", "maxMode"} {
+			if value, ok := project[key]; ok {
+				out.CapabilityPolicy[key] = value
+			}
+		}
+	}
 	set := func(action, reason string) {
 		if reason == "" {
 			out.Actions[action] = nil

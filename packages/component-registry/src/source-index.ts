@@ -5,17 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { SourceRef } from "@cms/manifest";
 import type { Registry } from "./registry.js";
 
-export interface CodeElement {
-  definition: { file: string; line: number };
-  implementation: SourceRef;
-  dependencies: string[];
-  tests: string[];
-}
-export interface CodeIndex {
-  repo: { root: "."; commit: string };
-  elements: Record<string, CodeElement>;
-  conventions: { registry: string; testCommand: string; manifestCommand: string };
-}
+import type { CodeElement, CodeIndex } from "@cms/manifest";
+export type { CodeElement, CodeIndex } from "@cms/manifest";
 export interface SourceIndexResult {
   index: CodeIndex;
   refs: Record<string, SourceRef>;

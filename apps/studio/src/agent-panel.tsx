@@ -3,6 +3,9 @@ import { useStore } from "zustand";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StudioError, type Api } from "./types.js";
 import type { Editor } from "./editor.js";
+import { Dialog } from "./components.js";
+import { CapabilityCard } from "./capability-panel.js";
+import type { CapabilityRequest } from "./capabilities.js";
 
 const stepNames: Record<string, [string, string]> = {
   started: ["Задача запущена", "Task started"],
@@ -11,6 +14,11 @@ const stepNames: Record<string, [string, string]> = {
   get_page_structure: ["Чтение структуры страницы", "Reading page structure"],
   list_schemas: ["Чтение схем данных", "Reading data schemas"],
   get_capabilities: ["Проверка доступных возможностей", "Checking available capabilities"],
+  report_missing_capability: [
+    "Создан черновик запроса. Передача контекста требует вашего подтверждения.",
+    "Request draft created. Sharing context requires your confirmation.",
+  ],
+  get_capability_request: ["Чтение запроса возможности", "Reading capability request"],
   insert_node: ["Добавление элемента", "Adding element"],
   move_node: ["Перенос элемента", "Moving element"],
   remove_node: ["Удаление элемента", "Removing element"],
@@ -56,6 +64,7 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
   const [prompt, setPrompt] = useState(""),
     [pending, setPending] = useState(false),
     [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState<CapabilityRequest | null>(null);
   const attempt = useRef<{
     name: "start-agent-run" | "cancel-agent-run";
     payload: Record<string, unknown>;
@@ -227,6 +236,18 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
                   stepNames[step.data.name ?? step.kind]?.[ru ? 0 : 1] ??
                   (ru ? "Действие агента" : "Agent action")}
                 {step.data.isError ? " · " + (ru ? "ошибка" : "error") : ""}
+                {step.data.requestId && api.capability && (
+                  <button
+                    disabled={busy || dirty}
+                    onClick={() => {
+                      void api.capability!(step.data.requestId!)
+                        .then(setRequest)
+                        .catch(() => setError("CAPABILITY_REQUEST_UNAVAILABLE"));
+                    }}
+                  >
+                    {ru ? "Открыть черновик запроса" : "Open request draft"}
+                  </button>
+                )}
               </li>
             ))}
           </ol>
@@ -255,6 +276,15 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
       >
         {ru ? "Отменить последнюю группу правок" : "Undo last change group"}
       </button>
+      {request && (
+        <Dialog
+          title={ru ? "Запрос возможности" : "Capability request"}
+          locked={["saving", "uncertain"].includes(state.status)}
+          onDismiss={() => setRequest(null)}
+        >
+          <CapabilityCard {...{ api, editor }} initial={request} onClose={() => setRequest(null)} />
+        </Dialog>
+      )}
     </section>
   );
 }

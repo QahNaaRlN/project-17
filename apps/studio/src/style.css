@@ -605,3 +605,43 @@ footer button {
   max-height: 320px;
   overflow: auto;
 }
+/* Capability context is bounded JSON and stays readable on narrow screens. */
+.capability-panel,
+.capability-card,
+.capability-queue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.capability-card pre,
+.capability-context {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+.capability-card fieldset,
+.capability-panel fieldset,
+.capability-queue form {
+  min-width: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.capability-card label,
+.capability-panel label,
+.capability-queue label {
+  display: grid;
+  gap: 0.35rem;
+}
+.capability-card input,
+.capability-panel input,
+.capability-card textarea,
+.capability-panel textarea,
+.capability-queue input {
+  max-width: 100%;
+  min-width: 0;
+}
+.capability-card button,
+.capability-queue button {
+  margin: 0.25rem;
+}

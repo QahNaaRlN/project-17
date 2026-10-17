@@ -413,6 +413,10 @@ CREATE TABLE asset_files (
 );
 
 -- Missing Capability и агенты -------------------------------------------
+-- Ниже целевая схема. Реализованный action v1 использует миграцию 00020:
+-- одна привязка в capability_requests; отдельные capability_context_packs,
+-- capability_request_audit и code_index_uploads. code_index_key хранит UUID
+-- подтверждённой загрузки, не путь к исходникам/объектному хранилищу.
 CREATE TABLE capability_requests (
   id                     uuid PRIMARY KEY,
   project_id             uuid NOT NULL REFERENCES projects(id),

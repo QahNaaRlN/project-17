@@ -122,19 +122,21 @@ const command = async (name, payload) => {
 const reviewManifest = JSON.parse(
   readFileSync(join(repo, "examples", "react-store", ".cms", "manifest.json"), "utf8"),
 );
-reviewManifest.schemas = {
-  ...reviewManifest.schemas,
-  Article: {
-    version: 1,
-    title: "Article",
-    fields: {
-      title: { type: "text", localized: true },
-      ...(process.env.CMS_REVIEW_BINDINGS === "true"
-        ? { cover: { type: "asset", assetKind: "image" }, alt: { type: "text", localized: true } }
-        : {}),
+const capabilityStand = process.env.CMS_REVIEW_CAPABILITIES === "true";
+if (!capabilityStand)
+  reviewManifest.schemas = {
+    ...reviewManifest.schemas,
+    Article: {
+      version: 1,
+      title: "Article",
+      fields: {
+        title: { type: "text", localized: true },
+        ...(process.env.CMS_REVIEW_BINDINGS === "true"
+          ? { cover: { type: "asset", assetKind: "image" }, alt: { type: "text", localized: true } }
+          : {}),
+      },
     },
-  },
-};
+  };
 if (process.env.CMS_REVIEW_DATA_SOURCES === "true")
   reviewManifest.schemas.Collection = {
     version: 1,
@@ -144,7 +146,32 @@ if (process.env.CMS_REVIEW_DATA_SOURCES === "true")
       handle: { type: "string", required: true, localized: true, maxLength: 64 },
     },
   };
-await command("register-manifest", { environment: "staging", manifest: reviewManifest });
+let tokenFile;
+if (capabilityStand) {
+  tokenFile = join(local, "studio-code-index-token.private.txt");
+  writeFileSync(tokenFile, credential);
+  const push = spawnSync(
+    process.execPath,
+    [
+      join(repo, "packages/component-registry/bin/cms.mjs"),
+      "manifest",
+      "push",
+      "--dir",
+      join(repo, "examples/react-store/.cms"),
+      "--base-url",
+      baseUrl,
+      "--project",
+      project,
+      "--env",
+      "staging",
+      "--token-file",
+      tokenFile,
+    ],
+    { env, encoding: "utf8", windowsHide: true },
+  );
+  if (push.status !== 0)
+    throw Error("Initial CLI index/manifest registration failed: " + push.stderr.slice(0, 300));
+} else await command("register-manifest", { environment: "staging", manifest: reviewManifest });
 const author = await command("create-role", {
   name: "studio-author",
   capabilities: [
@@ -152,6 +179,7 @@ const author = await command("create-role", {
     "content.read",
     "design.compose",
     ...(process.env.CMS_REVIEW_BEHAVIOR === "true" ? ["behavior.use"] : []),
+    ...(capabilityStand ? ["behavior.use", "capability.request", "design.zones.manage"] : []),
     "content.write",
     "asset.write",
     "content.publish",
@@ -159,7 +187,12 @@ const author = await command("create-role", {
 });
 const reviewer = await command("create-role", {
   name: "studio-reviewer",
-  capabilities: ["design.read", "content.read", "content.publish"],
+  capabilities: [
+    "design.read",
+    "content.read",
+    "content.publish",
+    ...(capabilityStand ? ["code.propose"] : []),
+  ],
 });
 const studioFile = join(local, "studio-work-ui.private.json");
 writeFileSync(
@@ -221,6 +254,7 @@ writeFileSync(
     reviewerRole: reviewer.id,
     studioOrigin,
     appOrigin,
+    ...(tokenFile ? { tokenFile } : {}),
   }),
 );
 writeFileSync(

@@ -35,6 +35,7 @@ type Registration struct {
 
 func Register(bus *commandbus.Bus) {
 	schemaflow.Register(bus)
+	registerIndex(bus)
 	commandbus.Register(bus, commandbus.Command[Payload, Registration]{Name: "register-manifest", Authorize: authorize, Validate: validate, Handle: handle})
 }
 func authorize(actor auth.Actor, _ Payload) error {
@@ -47,9 +48,6 @@ func validate(p Payload) error {
 	if p.Environment == "" {
 		return commandbus.Validation(map[string]string{"environment": "укажите окружение"})
 	}
-	if p.CodeIndexUploadID != nil {
-		return commandbus.NewError(http.StatusConflict, "CODE_INDEX_UPLOAD_NOT_READY", "Загрузка code index ещё не подключена", "Регистрация с codeIndexUploadId пока недоступна")
-	}
 	app, err := manifest.ParseJSON(p.Manifest)
 	if err != nil {
 		return commandbus.Validation(map[string]string{"manifest": err.Error()})
@@ -58,7 +56,7 @@ func validate(p Payload) error {
 	if !r.Valid {
 		return commandbus.NewError(http.StatusUnprocessableEntity, "MANIFEST_INVALID", "Некорректный manifest", "Контракт не прошёл проверку").WithParams(map[string]any{"diagnostics": r.Diagnostics})
 	}
-	if index, ok := app.(map[string]any)["codeIndex"].(map[string]any); ok && index["uploaded"] == true {
+	if index, ok := app.(map[string]any)["codeIndex"].(map[string]any); ok && index["uploaded"] == true && p.CodeIndexUploadID == nil {
 		return commandbus.NewError(http.StatusConflict, "CODE_INDEX_UPLOAD_NOT_READY", "Загрузка code index ещё не подключена", "Нельзя подтверждать uploaded без сохранённого файла")
 	}
 	return nil
@@ -132,12 +130,24 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload) (Regist
 	if err != nil {
 		return Registration{}, err
 	}
-	if err := q.InsertManifest(ctx, store.InsertManifestParams{ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, Hash: hash, AppVersion: fmt.Sprint(app.(map[string]any)["app"].(map[string]any)["version"]), Body: body, RegisteredBy: actor.ID}); err != nil {
+	indexKey, err := registrationIndex(ctx, q, actor, p, hash, app.(map[string]any))
+	if err != nil {
+		return Registration{}, err
+	}
+	if err := q.InsertManifest(ctx, store.InsertManifestParams{ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, Hash: hash, AppVersion: fmt.Sprint(app.(map[string]any)["app"].(map[string]any)["version"]), Body: body, CodeIndexKey: indexKey, RegisteredBy: actor.ID}); err != nil {
 		return Registration{}, err
 	}
 	m, err := q.GetManifestByHash(ctx, store.GetManifestByHashParams{ProjectID: actor.ProjectID, Hash: hash})
 	if err != nil {
 		return Registration{}, err
+	}
+	if indexKey != nil {
+		if m.CodeIndexKey == nil || *m.CodeIndexKey != *indexKey {
+			return Registration{}, indexError("CODE_INDEX_IMMUTABLE")
+		}
+		if err := q.LinkCodeIndexUpload(ctx, store.LinkCodeIndexUploadParams{ProjectID: actor.ProjectID, ID: uuid.MustParse(*indexKey)}); err != nil {
+			return Registration{}, err
+		}
 	}
 	result := Registration{ManifestHash: hash, Activation: "active", Changes: changes, Impact: impact}
 	if env.Kind == "standard" && manifest.SchemasChanged(changes) {
@@ -223,8 +233,9 @@ func Refresh(ctx context.Context, q *store.Queries, project uuid.UUID, environme
 }
 
 type Active struct {
-	ManifestHash string          `json:"manifestHash"`
-	Manifest     json.RawMessage `json:"manifest"`
+	ManifestHash       string          `json:"manifestHash"`
+	Manifest           json.RawMessage `json:"manifest"`
+	CodeIndexAvailable bool            `json:"codeIndexAvailable"`
 }
 
 func GetActive(ctx context.Context, q *store.Queries, project uuid.UUID, environment string) (Active, error) {
@@ -245,7 +256,7 @@ func GetActive(ctx context.Context, q *store.Queries, project uuid.UUID, environ
 	if err != nil {
 		return Active{}, err
 	}
-	return Active{m.Hash, m.Body}, nil
+	return Active{ManifestHash: m.Hash, Manifest: m.Body, CodeIndexAvailable: m.CodeIndexKey != nil}, nil
 }
 func GetSchemas(ctx context.Context, q *store.Queries, project uuid.UUID, environment string) (map[string]any, error) {
 	active, err := GetActive(ctx, q, project, environment)

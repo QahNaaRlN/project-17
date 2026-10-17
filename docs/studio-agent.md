@@ -53,6 +53,9 @@ data_collection=deny и allow_fallbacks=false. Реальный ключ, мод
 вызов провайдера относятся к настройке окружения; тесты используют HTTP boundary.
 MCP: [Streamable HTTP 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
 
-Следующий пакет — Missing Capability/context pack. Это ещё не весь M5:
+Следующий пакет — [Missing Capability/context pack](studio-missing-capability.md),
+STU-255…274: спецификация готова по dev после PR #59, реализация ещё не начата.
+Первый срез включает action-запросы, server-side index/pack, scoped draft tool
+и ручную передачу разработчику с явной заменой pending. Это ещё не весь M5:
 произвольная условная policy, code-agent webhook, автоматическое fulfillment,
 advanced bindings, component.extract/wrap и NFR-приёмка остаются отдельными задачами.

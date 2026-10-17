@@ -377,7 +377,11 @@ export function createEditor(
       store.setState({ error: "JSON_DRAFT_PENDING" });
       return;
     }
-    if (store.getState().dirtyFields["property-behavior"]) {
+    if (
+      store.getState().dirtyFields["property-behavior"] ||
+      store.getState().dirtyFields["property-capability"] ||
+      store.getState().dirtyFields["property-capability-card"]
+    ) {
       store.setState({ error: "FIELD_DRAFT_PENDING" });
       return;
     }

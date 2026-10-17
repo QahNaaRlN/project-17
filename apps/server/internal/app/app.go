@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/agents"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilities"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
@@ -138,6 +139,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	publishing.Register(bus)
 	delivery.Register(bus)
 	manifestregistry.Register(bus)
+	capabilities.Register(bus)
 	assetService.Register(bus)
 	if err := queue.Start(ctx); err != nil {
 		return err

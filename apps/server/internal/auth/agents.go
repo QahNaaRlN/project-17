@@ -109,7 +109,7 @@ func GuardAgent(ctx context.Context, q *store.Queries, actor Actor, name, reason
 	if current.ID != actor.ID {
 		return Actor{}, s, 0, ErrUnauthenticated
 	}
-	if !slices.Contains([]string{"apply-operations", "create-changeset", "create-preview-token", "submit-changeset"}, name) || strings.TrimSpace(reason) == "" || len(reason) > 2000 {
+	if !slices.Contains([]string{"apply-operations", "create-changeset", "create-preview-token", "submit-changeset", "create-capability-request"}, name) || strings.TrimSpace(reason) == "" || len(reason) > 2000 {
 		return current, s, 0, ErrAgentPolicy
 	}
 	var p struct {

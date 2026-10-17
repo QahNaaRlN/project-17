@@ -142,12 +142,17 @@ export function planEvents(
   nodes: Record<string, Node>,
   prefix: string,
   sourceKeys: string[],
+  onPending?: () => void,
 ): PlannedEvents | undefined {
   if (!node.on || !Object.keys(node.on).length) return undefined;
   const result: PlannedEvents = Object.create(null);
   for (const [event, value] of Object.entries(node.on)) {
-    if (!events.includes(event)) throw new Error("CMS_EVENT_UNKNOWN");
     const chain = Array.isArray(value) ? value : [value];
+    if (chain.some((item) => item.action.startsWith("pending:"))) {
+      onPending?.();
+      continue;
+    }
+    if (!events.includes(event)) throw new Error("CMS_EVENT_UNKNOWN");
     if (!chain.length || chain.length > 8) throw new Error("CMS_ACTION_CHAIN_INVALID");
     result[event] = chain.map((item) => {
       if (sourceError(item.args, scope)) throw new Error("CMS_ACTION_SOURCE_UNAVAILABLE");
@@ -188,6 +193,17 @@ export async function executeActions(
   } = {},
 ): Promise<boolean> {
   if (options.mode === "design") return false;
+  // Preflight the entire event before the first side effect, including retained
+  // callers that hold a chain prepared before a request was submitted.
+  if (chain.some((item) => item.action.startsWith("pending:"))) {
+    options.onError?.({
+      code: "CMS_ACTION_PENDING_CAPABILITY",
+      action: "pending",
+      node: context.node,
+      instance: context.instance,
+    });
+    return false;
+  }
   for (const item of chain) {
     if (options.isActive && !options.isActive()) return false;
     try {

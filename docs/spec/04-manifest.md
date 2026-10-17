@@ -44,7 +44,7 @@
   "formatters": {},
   "schemas": {},
   "capabilities": {},
-  "codeIndex": { "hash": "sha256:…", "uploaded": true }
+  "codeIndex": { "hash": "sha256:…", "uploaded": false }
 }
 ```
 
@@ -190,9 +190,10 @@ export default createRegistry({
 обычных функций и React-компонентов (MF-012), ожидание deployment hash (MF-005).
 `defineAction`/`defineDataSource` используют ту же DSL и входят в manifest/sourceRef
 и индекс. Их контракты проверяются до исполнения в приложении.
-Серверная загрузка code-index ещё не реализована. Границы описаны
-[в контракте CLI](../registry-dsl-cli.md) и [пакете действий и данных](../runtime-actions-data.md);
-требования выше сохранены.
+Серверная загрузка code-index реализована через upload-code-index и атомарную
+связь при register-manifest. Подтверждение возвращается как codeIndexAvailable
+в Query; исходное uploaded в immutable body/hash не меняется. Границы описаны
+[в контракте CLI](../registry-dsl-cli.md) и [Missing Capability](../studio-missing-capability.md).
 
 Одна система типов используется для свойств компонентов, входов Composed-компонентов, полей схем контента, аргументов действий и параметров/результатов источников данных.
 

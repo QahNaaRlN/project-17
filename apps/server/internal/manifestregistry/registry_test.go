@@ -84,7 +84,7 @@ func TestRegistrationAndAuthorization(t *testing.T) {
 		code string
 	}{
 		{payload(base, ""), "VALIDATION_FAILED"}, {payload(`null`, "staging"), "MANIFEST_INVALID"}, {payload(`{}`, "staging"), "MANIFEST_INVALID"}, {payload(strings.Replace(base, `"test"`, `"\ud800"`, 1), "staging"), "VALIDATION_FAILED"},
-		{manifestregistry.Payload{Manifest: json.RawMessage(base), Environment: "staging", CodeIndexUploadID: new(string)}, "CODE_INDEX_UPLOAD_NOT_READY"},
+		{manifestregistry.Payload{Manifest: json.RawMessage(base), Environment: "staging", CodeIndexUploadID: new(string)}, "CODE_INDEX_INVALID"},
 		{payload(strings.TrimSuffix(base, "}")+`,"codeIndex":{"uploaded":true,"hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}`, "staging"), "CODE_INDEX_UPLOAD_NOT_READY"},
 		{payload(base, "unknown"), "NOT_FOUND"},
 	} {

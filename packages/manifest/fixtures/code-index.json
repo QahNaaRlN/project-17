@@ -1,0 +1,16 @@
+{
+  "repo": { "root": ".", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  "elements": {
+    "action:store.favorite": {
+      "definition": { "file": "src/registry.ts", "line": 7 },
+      "implementation": { "file": "src/actions.ts", "export": "favorite", "line": 12 },
+      "dependencies": ["src/model.ts"],
+      "tests": ["test/actions.test.ts"]
+    }
+  },
+  "conventions": {
+    "registry": "src/registry.ts",
+    "testCommand": "pnpm test",
+    "manifestCommand": "cms manifest build"
+  }
+}

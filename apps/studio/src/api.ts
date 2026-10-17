@@ -15,6 +15,7 @@ import type { WorkQueueItem, WorkQueueCard, WorkContext } from "./types.js";
 import { validateDocument } from "@cms/ir";
 import { jsonValue } from "@cms/runtime";
 import { canonicalJson } from "@cms/manifest";
+import { capability, type CapabilityRequest, type CapabilityResult } from "./capabilities.js";
 import {
   StudioError,
   type Api,
@@ -126,6 +127,81 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async capabilities(filters, signal) {
+      const config = await api.config(signal);
+      const query = new URLSearchParams({
+        environment: config.environment,
+        kind: "action",
+        limit: "25",
+        ...filters,
+      });
+      const list = await request<List<CapabilityRequest>>(
+        "/api/v1/capability-requests?" + query,
+        signal,
+      );
+      if (
+        !Array.isArray(list?.items) ||
+        (list.nextCursor !== null &&
+          list.nextCursor !== undefined &&
+          typeof list.nextCursor !== "string")
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return { ...list, items: list.items.map((v) => capability(v)) };
+    },
+    async capability(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      return capability(
+        await request<CapabilityRequest>(
+          "/api/v1/capability-requests/" +
+            id +
+            "?environment=" +
+            encodeURIComponent(config.environment),
+          signal,
+        ),
+      );
+    },
+    async capabilityContext(id, version, signal) {
+      if (
+        !uuid.test(id) ||
+        (version !== undefined && (!Number.isSafeInteger(version) || version < 1))
+      )
+        throw new StudioError("IDENTIFIER_INVALID");
+      const config = await api.config(signal);
+      const value = await request<Record<string, unknown>>(
+        "/api/v1/capability-requests/" +
+          id +
+          (version === undefined ? "/context-preview" : "/context-pack") +
+          "?" +
+          new URLSearchParams({
+            environment: config.environment,
+            ...(version === undefined ? {} : { version: String(version) }),
+          }),
+        signal,
+      );
+      const pack = version === undefined ? value.pack : value;
+      if (
+        !pack ||
+        typeof pack !== "object" ||
+        Array.isArray(pack) ||
+        new TextEncoder().encode(canonicalJson(pack)).length > 512 * 1024
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      return {
+        pack: pack as Record<string, unknown>,
+        ...(typeof value.hash === "string" ? { hash: value.hash } : {}),
+      };
+    },
+    async capabilityCommand(attempt) {
+      const value = await request<{ result: CapabilityResult }>(
+        "/api/v1/commands/" + attempt.name,
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      capability(value?.result?.request, true);
+      return value.result;
+    },
     async createWork(attempt) {
       let config: Config;
       try {
@@ -335,7 +411,8 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
                 typeof step.data !== "object" ||
                 !step.data ||
                 (step.data.text !== undefined && typeof step.data.text !== "string") ||
-                (step.data.name !== undefined && typeof step.data.name !== "string"),
+                (step.data.name !== undefined && typeof step.data.name !== "string") ||
+                (step.data.requestId !== undefined && !uuid.test(step.data.requestId)),
             ),
         )
       )

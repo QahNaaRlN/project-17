@@ -267,7 +267,16 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
         : scope;
       const declaredEvents =
         native?.events ?? (node.type === "Link" || node.type === "Button" ? ["click"] : []);
-      if (node.on && Object.keys(node.on).length && !declaredEvents.length)
+      if (
+        node.on &&
+        Object.values(node.on).some(
+          (value) =>
+            !(Array.isArray(value) ? value : [value]).some((call) =>
+              call.action.startsWith("pending:"),
+            ),
+        ) &&
+        !declaredEvents.length
+      )
         return reject("CMS_ACTION_UNSUPPORTED", id);
       let events: PlannedEvents | undefined;
       try {
@@ -279,6 +288,7 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           doc.nodes,
           prefix,
           Object.keys(doc.dataSources ?? {}),
+          () => diagnostics.push({ code: "CMS_ACTION_PENDING_CAPABILITY", nodeId: id }),
         );
       } catch (error) {
         const code =

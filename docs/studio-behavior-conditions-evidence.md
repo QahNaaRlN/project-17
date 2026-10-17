@@ -1,7 +1,8 @@
 # Studio: проверка действий и условий показа
 
 2026-10-16. Реализация STU-237…254 в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), ветка `feature/studio-behavior`, от
-`origin/dev c4b8286`. В dev пакет ещё не слит; полный M4/IR-044/M5 не закрыт.
+`origin/dev c4b8286`. Пакет слит в dev 2026-10-16, merge `35ccee4`.
+Полный M4/IR-044/M5 не закрыт.
 Контракт и ограничения: [спецификация](studio-behavior-conditions.md).
 
 ## Реализовано
@@ -53,7 +54,10 @@ favorite с item args, реальный anchor, RU/EN, точный повтор
 partitioned preview cookie, а не подменяет его запросом из API-контекста.
 Отчёт behavior-acceptance.json сохраняет SHA/dirty, CS/seq, manifest hash,
 pageVersionId и версии primary content без credentials/приватных args.
-CI проверяется для последнего head [PR #59](https://github.com/QahNaaRlN/project-17/pull/59/checks).
+[CI итогового head `7d31eba`](https://github.com/QahNaaRlN/project-17/actions/runs/38920401345)
+и [CI merge-коммита `35ccee4`](https://github.com/QahNaaRlN/project-17/actions/runs/38922047905)
+пройдены: Check (TS + Go) и Docker image, включая Go race/coverage 95%,
+генерацию, формат, lint/typecheck/build и 60 браузерных сценариев.
 
 Локальные TypeScript-наборы проходят пороги покрытия: Studio 316 тестов,
 React 73; существующая браузерная регрессия — 60 сценариев.
@@ -76,4 +80,5 @@ C-компилятора для race: полный pnpm check остановил
 Advanced bindings, вложенные Repeat, event payload/Form/Input, Modal/track/loadMore
 редакторы, page resolver, component.extract, Missing Capability, Figma и production.
 Дата/datetime в новых ordered comparisons не поддерживаются. Следующий M5-пакет
-Missing Capability/context pack требует отдельной спеки по актуальному dev.
+[Missing Capability/context pack](studio-missing-capability.md) описан в
+STU-255…274 по актуальному dev; реализация следующего пакета ещё не начата.
