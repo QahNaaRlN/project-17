@@ -90,7 +90,9 @@ func (s *session) get(ctx context.Context, path string, out any) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+s.repo.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	// API 2026-03-10 removed merge_commit_sha. Keep the supported wire
+	// contract used to verify both test and actual merge commits.
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	resp, e := s.client.Do(req)
 	if e != nil {
 		return &Failure{Code: "temporary_unavailable", Retryable: true}

@@ -117,6 +117,15 @@ Contents — read. Contents нужен для проверки родителе�
 с новым credentialId; никаких секретов в БД, Studio, pack или идемпотентном ответе.
 GitHub App installation authentication остаётся отдельным последующим расширением.
 
+Проверка 2026-10-18 выявила расхождение этого принятого контракта с доступными
+правами GitHub: экран fine-grained PAT не предлагает Checks/read, чтение
+приватного PR проходит (200), приватных Checks — отклоняется (403).
+Публичный сценарий работает. Это блокер приватной части STU-314; указанное выше
+требование не считается реализуемым/проверенным лишь по документации endpoint.
+Изменение способа аутентификации требует отдельного технического решения;
+приватное требование и границы пакета этой записью не снимаются.
+Подробности — [отчёт приёмки](studio-capability-github-acceptance.md).
+
 Правило проверки: `{source: check_run|commit_status, name, target: head|integration,
 appId? , creatorId?}`. Для check_run обязателен appId; для commit_status — creatorId.
 Имена точные, без regex/wildcards. Для Project 17 исходная операторская политика —
@@ -199,7 +208,13 @@ Query в проектном scope:
 ## 6. Получение и достоверность фактов
 
 Worker использует только `https://api.github.com`, Accept GitHub JSON и
-`X-GitHub-Api-Version: 2026-03-10`. Все пути конструируются сервером из каталога,
+`X-GitHub-Api-Version: 2022-11-28`. Живая проверка выявила, что API
+2026-03-10 удалил необходимое `merge_commit_sha`; V1 закрепляет поддерживаемую
+версию 2022-11-28 (поддержка до 2028-03-10). Это исправление совместимости
+для принятого контракта exact SHA; фикстуры моделируют реальную зависимость
+поля от версии. Источники: [breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes?apiVersion=2026-03-10),
+[API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions).
+Все пути конструируются сервером из каталога,
 номера PR и проверенных SHA/ID; никаких переходов по url/details_url/Link из ответа.
 Repository GET сверяет числовой ID и owner/name. PR GET сверяет PR ID/number,
 base repo ID/ref, head repo ID/SHA. Fork допускается только как происхождение head:

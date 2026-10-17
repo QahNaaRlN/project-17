@@ -2,72 +2,115 @@
 
 Дата: 2026-10-18. Ветка: `feature/studio-capability-github` от `dev` `cf59c45`.
 [Спецификация STU-295…314](studio-capability-github.md) одобрена пользователем.
-Код реализован в [черновом PR #62](https://github.com/QahNaaRlN/project-17/pull/62);
-в dev ещё не слит. Полная внешняя приёмка STU-314 не завершена.
+Реализация и исправления находятся в [черновом PR #62](https://github.com/QahNaaRlN/project-17/pull/62),
+в dev не слиты. Публичная внешняя проверка выполнена; приватная часть STU-314
+заблокирована способом аутентификации. Весь пакет и M5 не считаются принятыми.
 
 ## Реализовано
 
-- Миграция 00022, sqlc, scoped config/link/observations/audit и общий credential
-  budget. Данные GitHub отделены от request revision/status, IR, CS, pack и доставки.
-- Серверный каталог с токеном чтения, явная настройка администратором,
-  human-only link/unlink/refresh с optimistic gates, exact retry и outbox.
-- Фиксированный GitHub REST API: проверка числового repository ID/base branch,
-  PR ID/head/base, родителей test merge и отдельного фактического merge SHA.
-  Checks/Statuses пагинируются и оцениваются по точному SHA и доверенному издателю.
-- Повторы CI не наследуют старый success. Отсутствие/неполные/пропущенные проверки,
-  конфликтующие ответы и неоднозначные suites не считаются успехом.
-- River worker, lease/recovery, конечное polling window, ручной cooldown,
-  project/credential limits, отзыв прав и generation gates перед/после сети.
-  Запоздалый результат аудируется без применения к новой связи.
-- Query API/BFF, отдельные настройки GitHub и карточка фактов в Studio, RU/EN,
-  история наблюдений, dirty guards, exact retry, время актуальности и last-known.
-- Инструкция оператора в README сервера; секреты не входят в БД/DTO/pack/логи.
+- Миграция 00022, sqlc, scoped config/link/observations/audit, River worker,
+  lease/recovery, конечное polling window и общий credential budget.
+- Серверный каталог с ключом чтения, явная настройка оператором,
+  human-only link/unlink/refresh, optimistic gates, exact retry и outbox.
+- GitHub REST API с проверкой repository/base/PR identity, точных head и
+  integration SHA, родителей test merge, trusted publisher, pagination и rerun.
+  Неполные, пропущенные и неоднозначные проверки не считаются успехом.
+- Query API/BFF и отдельная карточка Studio: история, свежесть, last-known,
+  RU/EN, dirty guards; серверные секреты не выдаются клиентам и pack.
 
-## Проверено локально
+## Независимое ревью и исправления
 
-- Go build/vet и sqlc/codegen выполняются. Тесты нового поведения проходят на
-  настоящем PostgreSQL; есть прогон с Go race detector.
-- HTTP boundary fixtures проверяют pagination, exact SHA, test merge, fork,
-  повтор CI, издателя, rate limits, DNS/IP/peer guards, malformed/oversize ответы.
-  Покрытие пакета capabilitygithub — 99,0% операторов.
-- 354 теста Studio проходят с сохранёнными порогами; форматирование, ESLint,
-  типы и сборка проверяются. Все TS-пакеты прошли установленный набор тестов.
-- Все 61 Playwright-сценарий прошли локально. Новый STU-312 в реальном Chromium на 375 px:
-  отдельные факты GitHub, exact SHA, отсутствие горизонтального скролла, команда
-  обновления, история и защита Escape при несохранённом вводе. Его CMS/GitHub
-  данные моделируются на HTTP-границе; это не внешняя GitHub-приёмка.
-- Через настоящий GitHub REST API для PR #62 отдельно подтверждено: app 15368
-  публикует Check (TS + Go)/Docker image на head SHA; на test merge SHA проверок
-  нет. Рекомендованная политика Project 17 — head. Это чтение метаданных через
-  подключённый источник, не приёмка собственного HTTP-клиента/CMS с операторским
-  токеном; STU-314 этим не закрывается.
-- Исправление конфликтующего дубликата check ID сначала воспроизведено падающим
-  тестом, затем проверено регрессией. Тестовая HTTP-обвязка теперь отклоняет
-  неизвестные GET без попытки разобрать их как JSON команды.
+На исходном `c60e629` воспроизведены два дефекта интерфейса: ошибка повторного
+чтения оставляла старый success актуальным, а запоздалый ответ мог заменить
+новое disabled-состояние. Исправление `0fb66c6` вводит порядок применения
+чтений, инвалидирует незавершённые чтения при смене контекста и сохраняет
+старые факты только как last-known при ошибке. Три регрессии проверяют также
+восстановление после успешного чтения.
 
-## Что пока не подтверждено
+Живая проверка выявила третий дефект: запросы API `2026-03-10` не содержат
+`merge_commit_sha`. Два реальных запроса одним ключом подтвердили отличие от
+`2022-11-28`; версия fixture ранее не учитывалась. Обновлённые fixtures сначала
+дали RED на exact test/actual merge, затем PASS после закрепления совместимой
+версии `2022-11-28`. После пересборки тот же CMS получил настоящий merge SHA
+и его независимые Checks. Причина документирована в
+[GitHub breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes?apiVersion=2026-03-10).
+Версия поддерживается до 2028-03-10 по [GitHub API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions).
 
-Полный локальный серверный прогон требует Docker для двух существующих тестов
-настоящих MinIO/imgproxy. Docker в этой среде недоступен. Отдельный прогон остальных
-Go-тестов с PostgreSQL и race выполнен с явным исключением только этих двух тестов;
-он прошёл с покрытием 95% при обязательном пороге 95%. Это не замена полного CI. В первом полном CI на `abec462` все Go-тесты,
-включая Docker-сценарии, прошли, но глобальное покрытие 94,8% не достигло порога 95%.
-Добавлены проверки отсутствующей конфигурации, актуальных прав, сбоев чтения/
-записи/commit/очереди и недоступности GitHub между чтениями снимка. Порог не менялся.
-[Полный CI на `d4e14ff`](https://github.com/QahNaaRlN/project-17/actions/runs/39069028287)
-прошёл: глобальное покрытие Go 95,1%, все Docker-тесты, 354 теста Studio,
-61 браузерный сценарий, сборка и Docker image. Последующая правка явно
-подписывает PR/репозиторий у наблюдения в истории;
-[проверки итогового SHA](https://github.com/QahNaaRlN/project-17/pull/62/checks).
-Тесты в репозитории не отключены и не ослаблены.
+## Внешняя проверка собственным клиентом CMS
 
-Внешний GitHub receiver/токен оператора, реальный CMS/OIDC/Studio с разрешённым
-репозиторием и приватный GitHub-сценарий STU-314 в этой сессии не настроены.
-Fixtures, существующие зелёные PR проекта и новый draft PR реализации не являются
-доказательством такой приёмки. Нельзя объявлять весь пакет принятым либо весь M5
-завершённым до этого шага. Для приёмки нужны разрешённые наблюдаемые переходы
-реального PR/CI и сохранение pending publication block до явного resolve.
+С разрешения владельца подготовлен синтетический
+[публичный тестовый PR](https://github.com/QahNaaRlN/project-17-acceptance-public/pull/1).
+Использованы настоящий GitHub, PostgreSQL, River, подписанный локальный OIDC,
+Studio/BFF и тестовые человеческие учётные записи автора и разработчика.
+GitHub факты не подменялись SQL, fixtures или CLI-ответами: CMS сама выполнила
+GET своим production HTTP-клиентом с отдельным серверным ключом чтения.
 
-После пакета отдельно остаются preview/<ref> mapping, automatic fulfillment/
-requiredBy, новые kinds и условные политики агента. GitHub merged/success не
-является подтверждением развёртывания или совместимости manifest.
+| Переход | Точный SHA | Результат CMS |
+|---|---|---|
+| Исходный PR | `c866da93d847b5607a5c1e11c68a0d29890e3ba0` | success |
+| Новый коммит, затем ошибка проверки | `4afd07702b585e5d57451d0c6915915a264288c1` | pending → failure |
+| Следующий коммит | `cfa23c5dac3c633540bba58479cd69f76ce6ef51` | pending → success |
+| Реальное squash merge | `d9415d0b698d3ce09396846d3726408cc09a3b02` | merged_commit; отдельный integration check success |
+
+Политика доверяет GitHub Actions app 15368 и точному имени `Acceptance check`.
+После merge явно включены оба правила, head и integration; итог success получен
+из двух результатов на разных точных SHA. Для наблюдения pending тестовый
+workflow имеет ограниченное окно 45 секунд. Штатный cooldown 60 секунд,
+лимиты и поколения CMS не менялись.
+
+Проверки GitHub: [failure](https://github.com/QahNaaRlN/project-17-acceptance-public/actions/runs/39072808612),
+[новый head success](https://github.com/QahNaaRlN/project-17-acceptance-public/actions/runs/39072905945),
+[merge success](https://github.com/QahNaaRlN/project-17-acceptance-public/actions/runs/39073045795).
+История CMS сохранила разные SHA и исходные unknown-наблюдения до исправления
+API version. Последующее исправление не переписало старую историю.
+
+После наблюдений, включая merge/success и отказ приватного доступа, совпали
+request status/revision, external_refs, CS seq/state и хэши context pack с
+начальным снимком. Автоматического fulfillment не произошло.
+Отдельная реальная подача CS дала failed с `ACTION_PENDING_CAPABILITY`;
+последующий publish отклонён 409 `CHANGESET_STATE_INVALID`, опубликованных
+указателей страницы — 0. Причина failed подтверждена диагностикой pending,
+а не только общим отказом publish. Эти команды проверки изменили workflow
+состояние уже после сравнения инвариантов; GitHub-наблюдения его не меняли.
+
+## Приватная часть: BLOCKED
+
+Созданный с явным подтверждением ключ ограничен одним разрешённым приватным
+тестовым репозиторием и чтением Contents, Metadata, Pull requests, Commit statuses;
+срок — до 25 октября 2026. Экран GitHub не предлагает Checks/read.
+Прямое чтение приватного PR этим ключом даёт 200, приватных Checks — 403.
+Штатный CMS worker повторил `permission_denied`: current отсутствует,
+last-known сохранён, Studio показывает отсутствие актуального подтверждения.
+Публичные Checks доступны; этот результат не закрывает приватный сценарий.
+
+[Общий раздел ограничений PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+также указывает ограничение Checks API, хотя документация отдельного endpoint
+перечисляет fine-grained PAT. Вывод основан на реальном ответе и доступных
+правах интерфейса. Приватные идентификаторы, ключи и данные окружения здесь
+не публикуются. Широкий классический PAT не использован.
+
+Для полного STU-314 требуется отдельное техническое решение по серверной
+GitHub App installation authentication с выбранным репозиторием и Checks/read,
+обновлением краткоживущих токенов, безопасными ошибками и ротацией. Это расширение
+не реализовано данным исправлением; затем приватная проверка должна быть повторена.
+
+## Проверки реализации
+
+- Go capabilitygithub/capabilities/httpapi: PASS `-race -count=1` с настоящим
+  изолированным PostgreSQL, повторено после исправления API version.
+- Studio: 357 тестов в 40 файлах; statements 92.44%, branches 85.65%,
+  functions 91.59%, lines 94.04%, штатные пороги сохранены. Полный локальный
+  прогон использовал maxWorkers=2; тесты и таймауты не ослаблялись.
+- ESLint, TypeScript, сборка Studio и Chromium STU-312 на 375 px — PASS.
+  Этот браузерный сценарий использует HTTP boundary fixtures; живая проверка
+  описана отдельно выше. Реальный интерфейс также проверен в браузере.
+- [Полный CI исправления UI `0fb66c6`](https://github.com/QahNaaRlN/project-17/actions/runs/39071606758)
+  прошёл Check (TS + Go) и Docker image, включая штатные Docker-тесты,
+  пороги покрытия и браузерный набор. Предыдущие полные CI также прошли.
+- Состояние полного CI нового исправления совместимости и этого отчёта:
+  [проверки текущего SHA PR](https://github.com/QahNaaRlN/project-17/pull/62/checks).
+  Новый результат нельзя выводить только из CI прежнего SHA.
+
+Отдельно остаются preview/<ref> mapping, automatic fulfillment/requiredBy,
+новые kinds и условные политики агента. GitHub merged/success не подтверждает
+развёртывание, совместимость manifest или выполнение Missing Capability.

@@ -250,7 +250,7 @@ River использует очередь capability_delivery (2 workers), lease
     "name": "<repo>",
     "baseBranch": "dev",
     "credentialId": "github-read-v1",
-    "token": "<read-only fine-grained token>",
+    "token": "<read-only token; verify endpoint access>",
     "requiredChecks": [{
       "source": "check_run",
       "name": "Check (TS + Go)",
@@ -267,7 +267,15 @@ River использует очередь capability_delivery (2 workers), lease
 пробное слияние; поэтому исходная политика использует head. Для проверок
 фактического merge-коммита отдельно выбрать integration; отсутствие результатов
 на нём остаётся unknown. Токен ограничить выбранным репозиторием:
-Metadata/Pull requests/Checks/Commit statuses/Contents — read. Contents используется
+Metadata/Pull requests/Checks/Commit statuses/Contents — read.
+Проверка 2026-10-18 выявила ограничение текущего V1-контракта: интерфейс
+fine-grained PAT не предлагает Checks/read; тот же ключ читает приватный PR
+(200), но его Checks endpoint возвращает 403. Публичные Checks читаются, что
+не доказывает пригодность ключа для приватного репозитория. Не заменять ключ
+на широкий классический PAT; приватный Checks-сценарий остаётся заблокированным
+до отдельного решения об аутентификации (например, GitHub App).
+[Результаты живой проверки](../../docs/studio-capability-github-acceptance.md).
+Contents используется
 только для проверки родителей commit, исходники не читаются. Файл/токен не
 коммитить, не выдавать браузеру/агенту; для ротации изменить credentialId,
 перезапустить CMS и явно подтвердить новую настройку. Горячей перезагрузки нет.

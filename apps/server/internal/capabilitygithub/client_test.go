@@ -105,7 +105,14 @@ func TestSTU299_304ObserveExactCommit(t *testing.T) {
 					if mode == "fork" {
 						fork = 99
 					}
-					return response(200, map[string]any{"id": 123, "number": 1, "state": state, "draft": false, "merged": merged, "mergeable": true, "merge_commit_sha": merge, "head": map[string]any{"sha": sha, "repo": map[string]any{"id": fork}}, "base": map[string]any{"sha": base, "ref": "dev", "repo": map[string]any{"id": 42}}}), nil
+					payload := map[string]any{"id": 123, "number": 1, "state": state, "draft": false, "merged": merged, "mergeable": true, "head": map[string]any{"sha": sha, "repo": map[string]any{"id": fork}}, "base": map[string]any{"sha": base, "ref": "dev", "repo": map[string]any{"id": 42}}}
+					// GitHub removed merge_commit_sha from API 2026-03-10.
+					// Model the versioned wire response rather than returning
+					// the old field for every requested API version.
+					if req.Header.Get("X-GitHub-Api-Version") == "2022-11-28" {
+						payload["merge_commit_sha"] = merge
+					}
+					return response(200, payload), nil
 				case strings.Contains(path, "/git/commits/"):
 					parent := base
 					if mode == "parents" {
