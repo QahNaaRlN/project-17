@@ -777,3 +777,50 @@ it("STU-156: diff proxy bounds query context and guarded workflow payloads", asy
   ).toBe(400);
   expect(fetcher.mock.calls.some(([url]) => String(url).includes("/diff/"))).toBe(true);
 });
+
+it("STU-295/308: GitHub routes enforce human writes and environment scope", async () => {
+  const { origin, post, fetcher } = await setup(true);
+  for (const route of [
+    "capability-github-config",
+    `capability-requests/${documentId}/github`,
+    `capability-requests/${documentId}/github-observations`,
+  ]) {
+    const p = origin + "/api/studio/api/v1/" + route;
+    expect((await fetch(p + "?environment=staging")).status).toBe(200);
+    expect((await fetch(p + "?environment=production")).status).toBe(403);
+    expect((await fetch(p + "?environment=staging&unknown=x")).status).toBe(400);
+  }
+  const prefix = "/api/studio/api/v1/commands/";
+  expect(
+    (
+      await post(prefix + "set-capability-github-config", {
+        payload: { environment: "staging", configId: "repo" },
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await post(prefix + "set-capability-github-config", {
+        payload: { environment: "production" },
+      })
+    ).status,
+  ).toBe(403);
+  for (const name of [
+    "link-capability-github-pr",
+    "unlink-capability-github-pr",
+    "refresh-capability-github-pr",
+  ]) {
+    expect((await post(prefix + name, { payload: { requestId: documentId } })).status).toBe(200);
+    expect((await post(prefix + name, { payload: { requestId: "bad" } })).status).toBe(400);
+    fetcher.mockResolvedValueOnce(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
+    expect((await post(prefix + name, { payload: { requestId: documentId } })).status).toBe(404);
+  }
+  const legacy = await setup();
+  expect(
+    (
+      await legacy.post(prefix + "link-capability-github-pr", {
+        payload: { requestId: documentId },
+      })
+    ).status,
+  ).toBe(403);
+});

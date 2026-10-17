@@ -51,6 +51,15 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 		return nil, e
 	}
 	out := projection(r)
+	if r.Status != "draft" {
+		link, err := q.GetCapabilityGithubLink(ctx, store.GetCapabilityGithubLinkParams{ProjectID: a.ProjectID, RequestID: id})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		if err == nil {
+			out["github"] = object{"link": githubLinkView(link), "verification": "use_scoped_github_query"}
+		}
+	}
 	packs, e := q.CapabilityPacks(ctx, store.CapabilityPacksParams{ProjectID: a.ProjectID, RequestID: id})
 	if e != nil {
 		return nil, e

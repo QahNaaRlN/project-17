@@ -1,3 +1,4 @@
+import { githubCommands } from "./capability-github.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
@@ -116,7 +117,11 @@ export function createStudioHandler(
         const deliveryRoute = new RegExp(
           `^/api/v1/(?:capability-delivery-(?:endpoints|target)|capability-deliveries/${uuid}|capability-requests/${uuid}/(?:delivery-preview|deliveries))$`,
         ).test(path);
+        const githubRoute = new RegExp(
+          `^/api/v1/(?:capability-github-config|capability-requests/${uuid}/github(?:-observations)?)$`,
+        ).test(path);
         const allowedGet =
+          githubRoute ||
           queueRoute ||
           capabilityRoute ||
           deliveryRoute ||
@@ -135,6 +140,7 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          ...githubCommands.map((name) => "/api/v1/commands/" + name),
           ...deliveryCommands.map((name) => "/api/v1/commands/" + name),
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
@@ -171,10 +177,10 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (capabilityRoute || deliveryRoute) {
+          if (capabilityRoute || deliveryRoute || githubRoute) {
             const allowed = path.endsWith("capability-requests")
               ? ["environment", "status", "kind", "key", "cursor", "limit"]
-              : path.endsWith("/deliveries")
+              : path.endsWith("/deliveries") || path.endsWith("/github-observations")
                 ? ["environment", "limit", "cursor"]
                 : path.endsWith("/context-pack")
                   ? ["environment", "version"]
@@ -358,6 +364,28 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (githubCommands.some((name) => path.endsWith("/" + name))) {
+            if (config.authMode !== "oidc") return error(403, "CAPABILITY_GITHUB_FORBIDDEN");
+            const p = envelope.payload;
+            if (path.endsWith("/set-capability-github-config")) {
+              if (p.environment !== config.environment)
+                return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            } else {
+              if (!new RegExp(`^${uuid}$`).test(String(p.requestId)))
+                return error(400, "PAYLOAD_INVALID");
+              const check = await fetcher(
+                new URL(
+                  "/api/v1/capability-requests/" +
+                    p.requestId +
+                    "?environment=" +
+                    encodeURIComponent(config.environment),
+                  config.baseUrl,
+                ),
+                { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+              );
+              if (!check.ok) return error(check.status, "CAPABILITY_GITHUB_NOT_FOUND");
+            }
+          }
           if (deliveryCommands.some((name) => path.endsWith("/" + name))) {
             if (config.authMode !== "oidc") return error(403, "CAPABILITY_DELIVERY_FORBIDDEN");
             const p = envelope.payload;

@@ -1,3 +1,4 @@
+import { GithubConfigPanel } from "./capability-github-panel.js";
 import { useEffect, useRef, useState, lazy, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { useQuery } from "@tanstack/react-query";
@@ -354,7 +355,13 @@ export function Studio({
   const documentId = saved.get("document") ?? "",
     changesetId = saved.get("changeset") ?? "";
   const [screen, setScreenValue] = useState<
-    "pages" | "editor" | "work" | "publications" | "capabilities" | "delivery-target"
+    | "pages"
+    | "editor"
+    | "work"
+    | "publications"
+    | "capabilities"
+    | "delivery-target"
+    | "github-config"
   >(
     saved.has("publication")
       ? "publications"
@@ -610,6 +617,16 @@ export function Studio({
                 {state.locale === "ru" ? "Запросы возможностей" : "Capability requests"}
               </Button>
             )}
+          {api.githubConfig && api.githubCommand && rights?.includes("project.admin") && (
+            <Button
+              variant="ghost"
+              aria-current={screen === "github-config" ? "page" : undefined}
+              disabled={navigationLocked}
+              onClick={() => setScreen("github-config")}
+            >
+              {state.locale === "ru" ? "Интеграция GitHub" : "GitHub integration"}
+            </Button>
+          )}
           {api.deliveryEndpoints &&
             api.deliveryTarget &&
             api.deliveryCommand &&
@@ -627,6 +644,7 @@ export function Studio({
         <section className="studio-content" id="studio-content" tabIndex={-1}>
           {screen === "capabilities" && <CapabilityQueue {...{ api, editor }} />}
           {screen === "delivery-target" && <DeliveryTargetPanel {...{ api, editor }} />}
+          {screen === "github-config" && <GithubConfigPanel {...{ api, editor }} />}
           {screen === "publications" && api.publications && (
             <PublicationHistory api={api} editor={editor} />
           )}
