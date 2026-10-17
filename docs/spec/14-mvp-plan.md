@@ -132,7 +132,8 @@ CLI/приложение и два OIDC-пользователя для приё
 60 браузерных сценариев и Docker image.
 
 Пакет M5 — [подписанная доставка context pack](../studio-capability-delivery.md),
-STU-275…294: **реализован в `feature/studio-capability-delivery`; ещё не слит в dev**.
+STU-275…294: **реализован в `feature/studio-capability-delivery`,
+[черновой PR #61](https://github.com/QahNaaRlN/project-17/pull/61); ещё не слит в dev**.
 Отдельное согласие на внешнего получателя, HMAC-SHA256, transactional outbox/River,
 ограниченные повторы/dedup, текущие права и журнал доставки. Delivered не меняет
 инженерный статус запроса, IR или публикацию. Зависимости: пакет #60, новая
@@ -146,7 +147,8 @@ STU-275…294: **реализован в `feature/studio-capability-delivery`; �
 Проверены отзыв прав, отмена в полёте, смена target, stale pack, два проекта,
 блокировка публикации pending и EN/375 px. Администратор без design.read
 может настраивать получателя. Статусы запроса и CS не меняются от доставки.
-CI и слияние этого пакета пока не отмечены завершёнными.
+[Актуальный CI пакета](https://github.com/QahNaaRlN/project-17/pull/61/checks)
+проверяется по конечному SHA PR; слияние пока не выполнено.
 После этого остаются доверенные факты PR/CI, preview/<ref>, автоматическое
 fulfillment/requiredBy, другие kinds и условные policies. Полный M5 и шаг 10 MVP
 пока не закрыты. Автоматической отправки старых запросов новый пакет не включает.

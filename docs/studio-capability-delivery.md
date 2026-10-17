@@ -1,7 +1,9 @@
 # Studio: подписанная доставка context pack
 
 Статус: STU-275…294 реализованы в `feature/studio-capability-delivery`;
-локальная сквозная приёмка пройдена. Слияние в dev и CI этой ветки ещё не подтверждены.
+локальная сквозная приёмка пройдена. [Черновой PR #61](https://github.com/QahNaaRlN/project-17/pull/61)
+подготовлен в dev; [актуальные проверки](https://github.com/QahNaaRlN/project-17/pull/61/checks).
+Слияние в dev не выполнено.
 Дата: 2026-10-17. Основа — `origin/dev`
 `9259d6272471cba057c0625bd554bb730ae64660`, после
 [PR #60](https://github.com/QahNaaRlN/project-17/pull/60).

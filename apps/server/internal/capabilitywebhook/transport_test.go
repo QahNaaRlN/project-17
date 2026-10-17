@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -118,12 +120,15 @@ func TestURLAndAddressBoundary(t *testing.T) {
 	}
 }
 func TestSignedDeliveryAndReceipts(t *testing.T) {
+	var mu sync.Mutex
 	var mode string
 	var first []byte
 	var stamps []string
 	key := []byte(strings.Repeat("k", 32))
 	now := time.Now().UTC().Truncate(time.Second)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		b, _ := io.ReadAll(r.Body)
 		if !Verify(key, r.Header, b, now) || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Content-Type") != "application/json" {
 			t.Error("signature or isolation")
@@ -161,24 +166,31 @@ func TestSignedDeliveryAndReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	e, _ := c.Find(testProject, "staging", "receiver")
-	transport := &Transport{Catalog: c, Now: func() time.Time { return now }}
+	transport := &Transport{Catalog: c, Now: func() time.Time { mu.Lock(); defer mu.Unlock(); return now }}
 	msg := Message{DeliveryID: uuid.NewString(), KeyID: "key_1", Body: []byte(`{"immutable":true}`)}
 	msg.BodyHash = Hash(msg.Body)
 	for _, tc := range []struct {
 		mode, code string
 		retry, ack bool
 	}{{"", "STORED", false, true}, {"redirect", "HTTP_PERMANENT", false, false}, {"retry", "HTTP_RETRYABLE", true, false}, {"permanent", "HTTP_PERMANENT", false, false}, {"missing", "ACK_INVALID", true, false}, {"large", "ACK_INVALID", true, false}, {"wrong", "ACK_INVALID", true, false}, {"duplicate", "ACK_INVALID", true, false}} {
+		mu.Lock()
 		mode = tc.mode
+		mu.Unlock()
 		o := transport.Send(context.Background(), e, msg)
 		if o.Code != tc.code || o.Retryable != tc.retry || o.Acknowledged != tc.ack {
 			t.Fatal(tc, o)
 		}
-		if mode == "retry" && o.RetryAfter != 2*time.Minute {
+		if tc.mode == "retry" && o.RetryAfter != 2*time.Minute {
 			t.Fatal(o)
 		}
+		mu.Lock()
 		now = now.Add(time.Second)
+		mu.Unlock()
 	}
-	if stamps[0] == stamps[1] {
+	mu.Lock()
+	sameStamp := stamps[0] == stamps[1]
+	mu.Unlock()
+	if sameStamp {
 		t.Fatal("timestamp not refreshed")
 	}
 	msg.KeyID = "missing"
@@ -263,14 +275,22 @@ type pinnedConn struct {
 
 func (c pinnedConn) RemoteAddr() net.Addr { return c.peer }
 func TestPublicDNSPinnedDialTLSAndRebinding(t *testing.T) {
+	var mu sync.Mutex
 	var host, sni string
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		host = r.Host
+		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]string{"deliveryId": r.Header.Get("X-CMS-Delivery-Id"), "bodyHash": r.Header.Get("X-CMS-Body-Hash"), "status": "stored"})
 	}))
 	server.StartTLS()
 	defer server.Close()
-	server.TLS.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) { sni = info.ServerName; return nil, nil }
+	server.TLS.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+		mu.Lock()
+		sni = info.ServerName
+		mu.Unlock()
+		return nil, nil
+	}
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
 	catalog, err := Parse(configJSON("https://example.com/context"), false)
@@ -281,9 +301,9 @@ func TestPublicDNSPinnedDialTLSAndRebinding(t *testing.T) {
 	msg := Message{DeliveryID: uuid.NewString(), KeyID: "key_1", Body: []byte(`{}`)}
 	msg.BodyHash = Hash(msg.Body)
 	peer := netip.MustParseAddr("8.8.8.8")
-	dials := 0
+	var dials atomic.Int32
 	transport := &Transport{Catalog: catalog, Resolver: fakeResolver{addresses: []netip.Addr{peer}}, roots: roots, dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-		dials++
+		dials.Add(1)
 		if address != "8.8.8.8:443" {
 			t.Error("DNS result was not pinned", address)
 		}
@@ -293,14 +313,18 @@ func TestPublicDNSPinnedDialTLSAndRebinding(t *testing.T) {
 		}
 		return pinnedConn{Conn: conn, peer: &net.TCPAddr{IP: net.IP(peer.AsSlice()), Port: 443}}, nil
 	}}
-	if o := transport.Send(context.Background(), endpoint, msg); !o.Acknowledged || host != "example.com" || sni != "example.com" {
-		t.Fatal(o, host, sni)
+	o := transport.Send(context.Background(), endpoint, msg)
+	mu.Lock()
+	gotHost, gotSNI := host, sni
+	mu.Unlock()
+	if !o.Acknowledged || gotHost != "example.com" || gotSNI != "example.com" {
+		t.Fatal(o, gotHost, gotSNI)
 	}
 	// A new DNS decision is required on every attempt. A public/private mixed
 	// response must fail before any connection, even after a successful attempt.
 	transport.Resolver = fakeResolver{addresses: []netip.Addr{peer, netip.MustParseAddr("127.0.0.1")}}
-	if o := transport.Send(context.Background(), endpoint, msg); o.Code != "ADDRESS_BLOCKED" || dials != 1 {
-		t.Fatal(o, dials)
+	if o := transport.Send(context.Background(), endpoint, msg); o.Code != "ADDRESS_BLOCKED" || dials.Load() != 1 {
+		t.Fatal(o, dials.Load())
 	}
 	transport.Resolver = fakeResolver{addresses: []netip.Addr{peer}}
 	transport.roots = nil

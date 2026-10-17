@@ -372,8 +372,11 @@ func TestDeliveryLostClaimsBudgetAndRiverWorker(t *testing.T) {
 
 func TestDeliveryRealSignedHTTPReceiptAndJournal(t *testing.T) {
 	f := deliverySetup(t)
+	var mu sync.Mutex
 	var messages []capabilitywebhook.Message
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		body, _ := io.ReadAll(r.Body)
 		if !capabilitywebhook.Verify([]byte(strings.Repeat("k", 32)), r.Header, body, time.Now()) {
 			t.Error("signature")
@@ -397,6 +400,8 @@ func TestDeliveryRealSignedHTTPReceiptAndJournal(t *testing.T) {
 	}
 	f.e.Exec(`UPDATE capability_deliveries SET next_attempt_at=now()-interval '1 second' WHERE id=$1`, d.ID)
 	d = f.deliver(d)
+	mu.Lock()
+	defer mu.Unlock()
 	if d.State != "delivered" || len(messages) != 2 || string(messages[0].Body) != string(messages[1].Body) || messages[0].DeliveryID != messages[1].DeliveryID {
 		t.Fatal("HTTP receipt and immutable retry")
 	}

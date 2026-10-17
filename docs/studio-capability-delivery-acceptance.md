@@ -2,7 +2,8 @@
 
 Дата: 2026-10-17. Пакет STU-275…294 реализован в
 `feature/studio-capability-delivery`, от `dev` после PR #60. Слияние в dev
-не выполнено. Статус CI фиксируется отдельно по конечному SHA PR.
+не выполнено. [Черновой PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
+[CI конечного SHA](https://github.com/QahNaaRlN/project-17/pull/61/checks).
 
 ## Реальный локальный сценарий
 
@@ -38,11 +39,13 @@ Request revision/status, CS seq, manifest, число pack и request audit не
 - English и ширина 375 px: внешнее согласие и журнал остаются отдельными от
   инженерного статуса, горизонтального переполнения страницы нет.
 
-Первый завершённый прогон выполнен на рабочем дереве поверх `586f00c`;
-JSON-отчёт явно содержит worktreeDirty=true. Артефакты локального стенда лежат
-в `local/delivery-acceptance/` родительского workspace: delivery-acceptance.json
+Финальный повтор на новой БД выполнен с коммитом
+`1d35041dd8f93451d21d573670ba8266704a702c`; JSON-отчёт содержит worktreeDirty=false.
+После этого менялись только документация и синхронизация тестовых fixtures.
+Артефакты локального стенда лежат в `local/delivery-final-acceptance/`
+родительского workspace: delivery-acceptance.json
 и delivery-mobile.png. Приватные конфигурации, журналы с окружением и SQLite
-не включаются в Git/PR. Повтор финального прогона фиксируется вместе с SHA ниже.
+не включаются в Git/PR.
 
 ## Воспроизведение
 
@@ -84,6 +87,8 @@ rebinding между попытками, несовпадение peer IP, за�
 React/DOM и BFF проверяют отдельное согласие, frozen payload/key после потери
 ответа, reconsent при conflict, сохранение ввода, dirty/focus/Escape, polling и
 cleanup, права инженера, admin-only вход, environment pin и закрытые маршруты.
+Полный локальный прогон: Studio 343 теста, store example 117, все девять
+TS/React/runtime пакетов; Go build/vet и полный PostgreSQL-набор с покрытием 95%.
 Пороги Studio 90/80/90/90 и Go 95% не снижены; race выполняется в Linux CI.
 
 ## Оставшиеся границы
