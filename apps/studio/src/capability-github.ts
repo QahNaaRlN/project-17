@@ -151,6 +151,7 @@ export function githubView(v: GithubView): GithubView {
     if (
       o &&
       (!o.facts ||
+        !["test_merge", "merged_commit", "unavailable"].includes(o.facts.integrationType) ||
         !Array.isArray(o.facts.results) ||
         !Number.isFinite(Date.parse(o.observedAt)) ||
         !Number.isFinite(Date.parse(o.freshUntil)) ||

@@ -10,6 +10,7 @@
 [подписанную доставку](studio-capability-delivery.md) и
 [архитектуру агента](spec/09-agent.md#5-missing-capability).
 Одобрение получено; итоговая приёмка и слияние в dev ещё не выполнены.
+[Черновой PR #62](https://github.com/QahNaaRlN/project-17/pull/62).
 [Реализация, проверки и ограничения](studio-capability-github-acceptance.md).
 
 ## 1. Результат и границы

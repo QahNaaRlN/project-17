@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -102,6 +103,9 @@ func FromEnv(getenv func(string) string) (*Catalog, error) {
 	path := getenv("CMS_CAPABILITY_GITHUB_CONFIG_FILE")
 	if path == "" {
 		return &Catalog{}, nil
+	}
+	if !filepath.IsAbs(path) {
+		return nil, ErrConfig
 	}
 	f, e := os.Open(path)
 	if e != nil {
