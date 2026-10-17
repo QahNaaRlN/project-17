@@ -118,7 +118,8 @@ export function CapabilityGithubPanel({
     [error, setError] = useState(""),
     [history, setHistory] = useState<GithubObservation[]>([]),
     [cursor, setCursor] = useState<string | null>(null);
-  const alive = useRef(true);
+  const alive = useRef(true),
+    readSequence = useRef(0);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000);
@@ -126,15 +127,28 @@ export function CapabilityGithubPanel({
   }, []);
   const current = view?.current && Date.parse(view.current.freshUntil) > now ? view.current : null;
   async function read(signal?: AbortSignal) {
+    const sequence = ++readSequence.current;
     try {
       const v = await api.github!(request.id, signal);
-      if (alive.current && !signal?.aborted) {
+      if (alive.current && !signal?.aborted && sequence === readSequence.current) {
         setView(v);
         setError("");
       }
     } catch (e) {
-      if (alive.current && !signal?.aborted)
+      if (alive.current && !signal?.aborted && sequence === readSequence.current) {
+        setView((previous) =>
+          previous
+            ? {
+                ...previous,
+                current: null,
+                lastKnown: previous.current ?? previous.lastKnown,
+                syncState: "unavailable",
+                canManage: false,
+              }
+            : null,
+        );
         setError(e instanceof StudioError ? e.code : "CAPABILITY_GITHUB_UNAVAILABLE");
+      }
     }
   }
   const command = useGithubAction(api, editor, async () => {
@@ -151,6 +165,7 @@ export function CapabilityGithubPanel({
     void read(c.signal);
     return () => {
       alive.current = false;
+      readSequence.current++;
       c.abort();
     };
   }, [api, request.id, request.revision]);

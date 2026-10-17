@@ -15,6 +15,7 @@ afterEach(async () => {
   editor?.dispose();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 const card: CapabilityRequest = {
   id: documentId,
@@ -298,4 +299,56 @@ it("STU-295/312: empty operator catalogue explains the disabled setup", async ()
   });
   expect(document.body.textContent).toContain("Каталог репозиториев пуст");
   expect(button("Сохранить настройки").disabled).toBe(true);
+});
+
+it("STU-304/312: failed reload downgrades cached current facts to last-known", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-17T12:01:00Z"));
+  const api = await setup();
+  expect(document.body.textContent).toContain("Обновлено");
+  expect(document.body.textContent).not.toContain("Последние известные данные");
+  vi.mocked(api.github!).mockRejectedValueOnce(new StudioError("CAPABILITY_GITHUB_UNAVAILABLE"));
+  await click("Обновить отображение");
+  expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  expect(document.body.textContent).toContain(
+    "Последние известные данные — не актуальное подтверждение.",
+  );
+});
+it("STU-304/312: delayed earlier reload cannot replace newer disabled state", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-17T12:01:00Z"));
+  const api = await setup();
+  let completeEarlier!: (value: GithubView) => void;
+  vi.mocked(api.github!)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeEarlier = resolve;
+        }),
+    )
+    .mockResolvedValueOnce({
+      ...structuredClone(view),
+      current: null,
+      syncState: "disabled",
+      canManage: false,
+    });
+  await click("Обновить отображение");
+  await click("Обновить отображение");
+  expect(document.body.textContent).toContain("Не настроено");
+  await act(async () => completeEarlier(structuredClone(view)));
+  expect(document.body.textContent).toContain("Не настроено");
+  expect(document.body.textContent).toContain(
+    "Последние известные данные — не актуальное подтверждение.",
+  );
+});
+
+it("STU-304/312: a successful reload restores current facts and management", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-17T12:01:00Z"));
+  const api = await setup();
+  vi.mocked(api.github!).mockRejectedValueOnce(new StudioError("CAPABILITY_GITHUB_UNAVAILABLE"));
+  await click("Обновить отображение");
+  expect(document.querySelector("form")).toBeNull();
+  await click("Обновить отображение");
+  expect(document.querySelector('[role="alert"]')).toBeNull();
+  expect(document.body.textContent).toContain("Обновлено");
+  expect(document.body.textContent).not.toContain("Последние известные данные");
+  expect(document.querySelector("form")).not.toBeNull();
 });
