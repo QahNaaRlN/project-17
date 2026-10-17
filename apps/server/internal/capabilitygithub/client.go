@@ -415,12 +415,17 @@ func chooseCheck(rows []check, r Rule, sha string) Result {
 func chooseStatus(rows []commitStatus, r Rule, sha string) Result {
 	out := Result{Source: r.Source, Name: r.Name, Target: r.Target, CreatorID: r.CreatorID, ExactSHA: sha, Outcome: "unknown"}
 	var latest *commitStatus
+	seen := map[string]commitStatus{}
 	for i := range rows {
 		v := &rows[i]
 		if v.Context == r.Name && v.Creator.ID.String() == r.CreatorID {
 			if !positive(v.ID.String()) || v.CreatedAt.IsZero() {
 				return out
 			}
+			if old, ok := seen[v.ID.String()]; ok && Digest(old) != Digest(*v) {
+				return out
+			}
+			seen[v.ID.String()] = *v
 			if latest == nil || v.CreatedAt.After(latest.CreatedAt) || v.CreatedAt.Equal(latest.CreatedAt) && bigger(v.ID, latest.ID) {
 				latest = v
 			}

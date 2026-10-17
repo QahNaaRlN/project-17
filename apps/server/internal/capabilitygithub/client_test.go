@@ -480,3 +480,12 @@ func TestSTU303ConflictingDuplicateCheckCannotPass(t *testing.T) {
 		t.Fatal("conflicting duplicate was trusted")
 	}
 }
+
+func TestSTU303ConflictingDuplicateStatusCannotPass(t *testing.T) {
+	rule := Rule{Source: "commit_status", Name: "Build", Target: "head", CreatorID: "8"}
+	var rows []commitStatus
+	json.Unmarshal([]byte(`[{"id":10,"context":"Build","state":"success","created_at":"2026-10-17T00:00:00Z","creator":{"id":8}},{"id":10,"context":"Build","state":"pending","created_at":"2026-10-17T00:00:00Z","creator":{"id":8}}]`), &rows)
+	if chooseStatus(rows, rule, "aaa").Outcome != "unknown" {
+		t.Fatal("conflicting commit status was trusted")
+	}
+}
