@@ -283,14 +283,14 @@ func TestPublicDNSPinnedDialTLSAndRebinding(t *testing.T) {
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]string{"deliveryId": r.Header.Get("X-CMS-Delivery-Id"), "bodyHash": r.Header.Get("X-CMS-Body-Hash"), "status": "stored"})
 	}))
-	server.StartTLS()
-	defer server.Close()
-	server.TLS.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+	server.TLS = &tls.Config{GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 		mu.Lock()
 		sni = info.ServerName
 		mu.Unlock()
 		return nil, nil
-	}
+	}}
+	server.StartTLS()
+	defer server.Close()
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
 	catalog, err := Parse(configJSON("https://example.com/context"), false)
