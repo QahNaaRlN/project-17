@@ -380,8 +380,16 @@ export function GithubConfigPanel({ api, editor }: { api: Api; editor: Editor })
     return () => editor.formDirty("property-github-config", false);
   }, [editor, dirty]);
   return (
-    <section>
+    <section className="capability-queue">
       <h1>{text("Интеграция GitHub", "GitHub integration")}</h1>
+      {config && !config.choices?.length && (
+        <p>
+          {text(
+            "Каталог репозиториев пуст. Обратитесь к администратору сервера для подключения GitHub.",
+            "The repository catalogue is empty. Contact the server administrator to connect GitHub.",
+          )}
+        </p>
+      )}
       <p>
         {text(
           "Включение разрешает участникам проекта с доступом к запросу видеть ограниченные метаданные настроенного репозитория, включая приватные PR. Код и журналы CI не передаются.",

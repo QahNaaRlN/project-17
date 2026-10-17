@@ -30,7 +30,7 @@
 - HTTP boundary fixtures проверяют pagination, exact SHA, test merge, fork,
   повтор CI, издателя, rate limits, DNS/IP/peer guards, malformed/oversize ответы.
   Покрытие пакета capabilitygithub — 96,2% операторов.
-- 353 теста Studio проходят с сохранёнными порогами; форматирование, ESLint,
+- 354 теста Studio проходят с сохранёнными порогами; форматирование, ESLint,
   типы и сборка проверяются. Все TS-пакеты прошли установленный набор тестов.
 - Все 61 Playwright-сценарий прошли локально. Новый STU-312 в реальном Chromium на 375 px:
   отдельные факты GitHub, exact SHA, отсутствие горизонтального скролла, команда

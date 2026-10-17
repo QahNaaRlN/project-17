@@ -604,3 +604,27 @@ func TestSTU305AutomaticPollingConsumesProjectBudget(t *testing.T) {
 		t.Fatal("completed fresh observation lost at budget boundary", view, e)
 	}
 }
+
+func TestSTU308CapabilitySummaryExposesOnlyHistoricalGithubFacts(t *testing.T) {
+	f := githubSetup(t)
+	f.link()
+	f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) { return observed(r, n), nil })
+	f.sync()
+	view, e := Get(context.Background(), f.e.Q, f.a, f.request.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	summary := obj(view["github"])
+	if summary["verification"] != "last_known_only" || summary["lastKnown"] == nil {
+		t.Fatal("MCP cannot distinguish historical GitHub evidence", summary)
+	}
+	last := obj(summary["lastKnown"])
+	facts := obj(last["facts"])
+	if facts["ci"] != "success" || facts["headSha"] != strings.Repeat("a", 40) || facts["results"] != nil || last["observedAt"] == nil {
+		t.Fatal("not a bounded historical summary", summary)
+	}
+	q := store.New(faultDB{DBTX: f.e.Pool, needle: "FROM capability_github_observations"})
+	if _, e = Get(context.Background(), q, f.a, f.request.ID); !errors.Is(e, storageFailure) {
+		t.Fatal("failed evidence read hidden", e)
+	}
+}

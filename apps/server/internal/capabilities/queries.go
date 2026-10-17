@@ -57,7 +57,22 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 			return nil, err
 		}
 		if err == nil {
-			out["github"] = object{"link": githubLinkView(link), "verification": "use_scoped_github_query"}
+			summary := object{"link": githubLinkView(link), "verification": "last_known_only", "lastKnown": nil}
+			observation, readErr := q.LatestCapabilityGithubObservation(ctx, store.LatestCapabilityGithubObservationParams{ProjectID: a.ProjectID, RequestID: id})
+			if readErr != nil && !errors.Is(readErr, pgx.ErrNoRows) {
+				return nil, readErr
+			}
+			if readErr == nil {
+				stored := parse(observation.Body)
+				facts := object{}
+				for _, key := range []string{"repositoryId", "prId", "number", "state", "draft", "headSha", "baseSha", "integrationSha", "integrationType", "ci", "policyDigest"} {
+					if value, ok := stored[key]; ok {
+						facts[key] = value
+					}
+				}
+				summary["lastKnown"] = object{"id": observation.ID, "generation": observation.Generation, "configRevision": observation.ConfigRevision, "observedAt": observation.ObservedAt, "freshUntil": observation.FreshUntil, "facts": facts}
+			}
+			out["github"] = summary
 		}
 	}
 	packs, e := q.CapabilityPacks(ctx, store.CapabilityPacksParams{ProjectID: a.ProjectID, RequestID: id})

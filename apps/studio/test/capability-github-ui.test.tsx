@@ -283,3 +283,16 @@ it("STU-295/312: disabled config error, English labels and failed initial query"
   expect(document.body.textContent).toContain("Insufficient permissions");
   expect(document.querySelector("form")).toBeNull();
 });
+
+it("STU-295/312: empty operator catalogue explains the disabled setup", async () => {
+  await setup("config", (api) => {
+    api.githubConfig = vi.fn(async () => ({
+      configured: false,
+      revision: 0,
+      ready: false,
+      choices: [],
+    }));
+  });
+  expect(document.body.textContent).toContain("Каталог репозиториев пуст");
+  expect(button("Сохранить настройки").disabled).toBe(true);
+});
