@@ -1,7 +1,8 @@
 # Studio: проверенные факты GitHub PR и CI
 
 Статус: **одобрена пользователем 2026-10-18; код реализован в
-`feature/studio-capability-github`; полный CI и внешняя приёмка STU-314 ещё не подтверждены**.
+`feature/studio-capability-github`; внешняя приёмка STU-314 ещё не завершена**.
+[CI актуального SHA PR #62](https://github.com/QahNaaRlN/project-17/pull/62/checks).
 Дата: 2026-10-18. Требования: STU-295…314.
 Основа: `origin/dev` на `cf59c4568cf276800922d80ee73e9c15650d25d7`,
 после [PR #61](https://github.com/QahNaaRlN/project-17/pull/61).

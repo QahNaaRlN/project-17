@@ -531,3 +531,57 @@ func TestSTU302KnownInconclusiveResultsRemainAuditable(t *testing.T) {
 		}
 	}
 }
+
+func TestSTU304OutagesBetweenProviderReadsNeverPublishPartialFacts(t *testing.T) {
+	for _, phase := range []string{"pull", "commit", "checks", "statuses", "after", "suite"} {
+		t.Run(phase, func(t *testing.T) {
+			r := repoFixture()
+			if phase == "statuses" {
+				r.RequiredChecks = []Rule{{Source: "commit_status", Name: "Build", Target: "head", CreatorID: "8"}}
+			}
+			head, base, merge := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40)
+			reads := 0
+			c := &Client{client: &http.Client{Transport: roundtrip(func(req *http.Request) (*http.Response, error) {
+				p := req.URL.Path
+				switch {
+				case p == "/repos/owner/repo":
+					return response(200, map[string]any{"id": 42, "full_name": "owner/repo"}), nil
+				case strings.Contains(p, "/pulls/"):
+					reads++
+					if phase == "pull" || phase == "after" && reads > 1 {
+						return response(503, nil), nil
+					}
+					return response(200, map[string]any{"id": 123, "number": 1, "state": "open", "mergeable": phase == "commit", "merge_commit_sha": merge, "head": map[string]any{"sha": head, "repo": map[string]any{"id": 42}}, "base": map[string]any{"sha": base, "ref": "dev", "repo": map[string]any{"id": 42}}}), nil
+				case strings.Contains(p, "/git/commits/"), strings.Contains(p, "/statuses"), strings.Contains(p, "/check-suites/"):
+					return response(503, nil), nil
+				case strings.Contains(p, "/check-runs"):
+					if phase == "checks" {
+						return response(503, nil), nil
+					}
+					rows := []any{}
+					if phase == "suite" {
+						for i := 1; i <= 2; i++ {
+							rows = append(rows, map[string]any{"id": i, "name": "Check", "head_sha": head, "status": "completed", "conclusion": "success", "app": map[string]any{"id": 7}, "check_suite": map[string]any{"id": i}})
+						}
+					}
+					return response(200, map[string]any{"total_count": len(rows), "check_runs": rows}), nil
+				default:
+					t.Fatal("unexpected provider request")
+					return nil, errors.New("unexpected")
+				}
+			})}}
+			o, e := c.Observe(context.Background(), r, 1)
+			if e == nil || o.RepositoryID != "" {
+				t.Fatal("provider outage produced a partial observation", o, e)
+			}
+		})
+	}
+}
+func TestSTU295OperatorPathMustBeAbsoluteAndReadable(t *testing.T) {
+	if _, e := FromEnv(func(string) string { return "relative-config.json" }); e != ErrConfig {
+		t.Fatal(e)
+	}
+	if _, e := FromEnv(func(string) string { return t.TempDir() }); e != ErrConfig {
+		t.Fatal("directory accepted as config", e)
+	}
+}

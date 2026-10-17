@@ -628,3 +628,238 @@ func TestSTU308CapabilitySummaryExposesOnlyHistoricalGithubFacts(t *testing.T) {
 		t.Fatal("failed evidence read hidden", e)
 	}
 }
+
+func TestSTU308GithubUnconfiguredAndDraftScopes(t *testing.T) {
+	f := setup(t)
+	f.create()
+	s := &GithubService{Pool: f.e.Pool}
+	ctx := context.Background()
+	if _, e := s.GithubGet(ctx, f.e.Q, f.a, f.request.ID); e == nil {
+		t.Fatal("draft GitHub data exposed")
+	}
+	if _, e := s.GithubHistory(ctx, f.e.Q, f.a, f.request.ID, 0, ""); e == nil {
+		t.Fatal("draft history exposed")
+	}
+	must(f.e, f.a, "submit-capability-request", Action{ID: f.request.ID, ExpectedRevision: 1, ExpectedSeq: 1, ExpectedManifestHash: f.hash})
+	v, e := s.GithubGet(ctx, f.e.Q, f.a, f.request.ID)
+	if e != nil || v["syncState"] != "disabled" {
+		t.Fatal(v, e)
+	}
+	cfg, e := s.GithubConfig(ctx, f.e.Q, f.a, "staging")
+	if e != nil || cfg["configured"] != false || cfg["revision"] != int64(0) {
+		t.Fatal(cfg, e)
+	}
+	if _, e = s.GithubGet(ctx, f.e.Q, f.a, uuid.New()); e == nil {
+		t.Fatal("unknown request")
+	}
+}
+func TestSTU296GithubMissingLinksAndCurrentRevisions(t *testing.T) {
+	f := githubSetup(t)
+	ctx := context.Background()
+	v, e := f.s.GithubGet(ctx, f.e.Q, f.a, f.request.ID)
+	if e != nil || v["syncState"] != "unlinked" {
+		t.Fatal(v, e)
+	}
+	p := GithubAction{RequestID: f.request.ID, ExpectedRequestRevision: 2, ExpectedConfigRevision: 1}
+	if _, e = f.call(f.engineer, "refresh-capability-github-pr", p, ""); e == nil {
+		t.Fatal("refresh absent link")
+	}
+	p.ExpectedConfigRevision = 0
+	if _, e = f.call(f.engineer, "unlink-capability-github-pr", p, ""); e == nil {
+		t.Fatal("unlink absent link")
+	}
+	f.link()
+	p = f.input
+	p.ExpectedLinkRevision = 99
+	if _, e = f.call(f.engineer, "link-capability-github-pr", p, ""); e == nil {
+		t.Fatal("stale link revision")
+	}
+	catalog := f.s.Catalog
+	f.s.Catalog = nil
+	p = f.input
+	p.PullNumber = 2
+	p.ConfirmReplace = true
+	p.ExpectedLinkRevision = 1
+	if _, e = f.call(f.engineer, "link-capability-github-pr", p, ""); e == nil {
+		t.Fatal("missing operator catalogue")
+	}
+	f.s.Catalog = catalog
+	f.e.Exec(`UPDATE capability_requests SET status='cancelled'`)
+	p = f.input
+	p.ExpectedLinkRevision = 1
+	if _, e = f.call(f.engineer, "link-capability-github-pr", p, ""); e == nil {
+		t.Fatal("terminal request accepted new link")
+	}
+}
+func TestSTU307GithubCommandsRecheckRevokedGrants(t *testing.T) {
+	for _, mode := range []string{"admin", "engineer", "observed"} {
+		t.Run(mode, func(t *testing.T) {
+			f := githubSetup(t)
+			ctx := context.Background()
+			switch mode {
+			case "admin":
+				f.e.Exec(`DELETE FROM role_bindings WHERE actor_id=$1 AND project_id=$2`, f.admin.ID, f.a.ProjectID)
+				if _, e := f.call(f.admin, "set-capability-github-config", SetGithubConfig{Environment: "staging", ConfigID: "repo", ExpectedConfigRevision: 1}, ""); e == nil {
+					t.Fatal("revoked admin grant used")
+				}
+			case "engineer":
+				f.e.Exec(`DELETE FROM role_bindings WHERE actor_id=$1 AND project_id=$2`, f.engineer.ID, f.a.ProjectID)
+				if _, e := f.call(f.engineer, "link-capability-github-pr", f.input, ""); e == nil {
+					t.Fatal("revoked engineering grant used")
+				}
+			case "observed":
+				f.link()
+				f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) { return observed(r, n), nil })
+				f.sync()
+				f.e.Exec(`DELETE FROM role_bindings WHERE actor_id=$1 AND project_id=$2`, f.engineer.ID, f.a.ProjectID)
+				v, e := f.s.GithubGet(ctx, f.e.Q, f.a, f.request.ID)
+				if e != nil || v["current"] != nil || v["lastKnown"] == nil || v["syncState"] != "unavailable" {
+					t.Fatal(v, e)
+				}
+			}
+		})
+	}
+}
+func TestSTU298GithubWriteFailuresPreservePriorAssociation(t *testing.T) {
+	for _, mode := range []string{"config_insert", "link_insert", "unlink_update", "refresh_count"} {
+		t.Run(mode, func(t *testing.T) {
+			f := githubSetup(t)
+			needle := ""
+			name := "link-capability-github-pr"
+			p := f.input
+			if mode == "unlink_update" || mode == "refresh_count" {
+				f.link()
+				p = GithubAction{RequestID: f.request.ID, ExpectedRequestRevision: 2, ExpectedLinkRevision: 1}
+				if mode == "refresh_count" {
+					p.ExpectedConfigRevision = 1
+					f.e.Exec(`UPDATE capability_github_links SET state='idle',refresh_after=now()-interval '1 minute'`)
+				}
+			}
+			switch mode {
+			case "config_insert":
+				needle = "INSERT INTO capability_github_configs"
+			case "link_insert":
+				needle = "INSERT INTO capability_github_links"
+			case "unlink_update":
+				needle = "UPDATE capability_github_links SET active=false"
+				name = "unlink-capability-github-pr"
+			case "refresh_count":
+				needle = "FROM capability_github_audit"
+				name = "refresh-capability-github-pr"
+			}
+			commandbus.Register(f.e.Bus, commandbus.Command[GithubAction, object]{Name: "test-github-write-error", Right: auth.CodePropose, Handle: func(ctx context.Context, tx pgx.Tx, a auth.Actor, p GithubAction) (object, error) {
+				ft := faultTx{Tx: tx, needle: needle}
+				if mode == "config_insert" {
+					return f.s.setGithubConfig(ctx, ft, f.admin, SetGithubConfig{Environment: "staging", ConfigID: "repo", ExpectedConfigRevision: 1})
+				}
+				return f.s.githubAction(ctx, ft, a, p, name)
+			}})
+			if _, e := f.call(f.engineer, "test-github-write-error", p, ""); !errors.Is(e, storageFailure) {
+				t.Fatal(mode, e)
+			}
+			if mode == "unlink_update" || mode == "refresh_count" {
+				l := f.row()
+				if !l.Active || l.Revision != 1 {
+					t.Fatal("association changed despite rollback", l)
+				}
+			}
+		})
+	}
+}
+func TestSTU306GithubDatabaseOutagesNeverBecomeSuccess(t *testing.T) {
+	f := githubSetup(t)
+	f.link()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	args := GithubArgs{ProjectID: f.a.ProjectID, RequestID: f.request.ID}
+	if e := f.s.SyncGithub(ctx, args); e == nil {
+		t.Fatal("cancelled claim succeeded")
+	}
+	if e := f.s.finishGithub(ctx, args, f.row(), gh.Repository{}, gh.Observation{}, nil); e == nil {
+		t.Fatal("cancelled completion succeeded")
+	}
+	recovery := &GithubRecoveryWorker{Service: f.s}
+	if e := recovery.Work(ctx, &river.Job[GithubRecoveryArgs]{}); e == nil {
+		t.Fatal("failed recovery read reported success")
+	}
+	for _, phase := range []string{"claim", "complete_config", "complete_credential"} {
+		t.Run(phase, func(t *testing.T) {
+			f := githubSetup(t)
+			f.link()
+			if phase == "claim" {
+				f.e.Exec(`ALTER TABLE capability_github_configs RENAME COLUMN environment TO broken`)
+			}
+			f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) {
+				if phase == "claim" {
+					t.Fatal("network after failed claim")
+				}
+				if phase == "complete_config" {
+					f.e.Exec(`ALTER TABLE capability_github_configs RENAME COLUMN environment TO broken`)
+				} else {
+					f.e.Exec(`ALTER TABLE capability_github_credentials RENAME COLUMN credential_id TO broken`)
+				}
+				return observed(r, n), nil
+			})
+			if e := f.s.SyncGithub(context.Background(), GithubArgs{ProjectID: f.a.ProjectID, RequestID: f.request.ID}); e == nil {
+				t.Fatal("database outage hidden")
+			}
+		})
+	}
+}
+
+func TestSTU306GithubRecoveryReportsQueueStorageOutage(t *testing.T) {
+	f := githubSetup(t)
+	f.link()
+	queue, e := jobs.NewInserter(f.e.Pool)
+	if e != nil {
+		t.Fatal(e)
+	}
+	f.e.Exec(`DROP TABLE river_job CASCADE`)
+	w := &GithubRecoveryWorker{Service: f.s, Queue: queue}
+	if e = w.Work(context.Background(), &river.Job[GithubRecoveryArgs]{}); e == nil {
+		t.Fatal("queue outage reported success")
+	}
+	if f.row().State != "queued" {
+		t.Fatal("lost queued ledger entry")
+	}
+}
+func TestSTU306GithubStopAndDeferredCommitAreAtomic(t *testing.T) {
+	for _, mode := range []string{"stop_write", "credential_insert", "claim_commit", "late_audit"} {
+		t.Run(mode, func(t *testing.T) {
+			f := githubSetup(t)
+			f.link()
+			calls := 0
+			switch mode {
+			case "stop_write":
+				f.e.Exec(`UPDATE capability_requests SET status='cancelled'`)
+				f.e.Break("capability_github_links", "UPDATE")
+			case "credential_insert":
+				f.e.Break("capability_github_credentials", "INSERT")
+			case "claim_commit":
+				f.e.Exec(`CREATE FUNCTION github_deferred_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected deferred commit failure'; END $$`)
+				f.e.Exec(`CREATE CONSTRAINT TRIGGER github_deferred_failure AFTER INSERT ON capability_github_audit DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION github_deferred_failure()`)
+			}
+			f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) {
+				calls++
+				if mode != "late_audit" {
+					t.Fatal("network before successful claim commit")
+				}
+				l := f.row()
+				f.command(f.engineer, "unlink-capability-github-pr", GithubAction{RequestID: f.request.ID, ExpectedRequestRevision: 2, ExpectedLinkRevision: l.Revision})
+				f.e.Break("capability_github_audit", "INSERT")
+				return observed(r, n), nil
+			})
+			if e := f.s.SyncGithub(context.Background(), GithubArgs{ProjectID: f.a.ProjectID, RequestID: f.request.ID}); e == nil {
+				t.Fatal("storage outage reported success")
+			}
+			l := f.row()
+			if mode == "late_audit" {
+				if calls != 1 || l.Active {
+					t.Fatal("failed late audit resurrected association", l)
+				}
+			} else if calls != 0 || l.State != "queued" || l.Attempts != 0 {
+				t.Fatal("partial claim committed", l, calls)
+			}
+		})
+	}
+}
