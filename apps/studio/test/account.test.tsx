@@ -19,6 +19,25 @@ const user: Account = {
   hasAccess: true,
   expiresAt: "2099-01-01T00:00:00Z",
 };
+it("STU-286: an admin with no design/content rights can configure a recipient independently of request access", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  window.history.replaceState({}, "", "/editor");
+  const { api, session } = mockApi();
+  session.config.authMode = "oidc";
+  vi.mocked(api.account).mockResolvedValue({ ...user, rights: ["project.admin"] });
+  api.deliveryTarget = vi.fn(async () => ({ configured: false, revision: 0, ready: false }));
+  api.deliveryEndpoints = vi.fn(async () => ({ items: [] }));
+  api.deliveryCommand = vi.fn();
+  document.body.innerHTML = '<div id="root"></div>';
+  root = createRoot(document.getElementById("root")!);
+  await act(async () => root.render(<StudioApp makeApi={() => api} />));
+  expect(button("Получатель запросов")).toBeDefined();
+  expect(button("Запросы возможностей")).toBeUndefined();
+  expect(api.pages).not.toHaveBeenCalled();
+  await click("Получатель запросов");
+  expect(document.body.textContent).toContain("Каталог получателей пуст");
+  expect(api.deliveryEndpoints).toHaveBeenCalledTimes(1);
+});
 async function setup(account: Account | Error = user, service = false) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   window.history.replaceState({}, "", "/editor");

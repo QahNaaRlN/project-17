@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/capabilities"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilitywebhook"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
@@ -74,13 +76,19 @@ func setup(t *testing.T) env {
 	delivery.Register(bus)
 	manifestregistry.Register(bus)
 	capabilities.Register(bus)
+	catalog, err := capabilitywebhook.Parse([]byte(fmt.Sprintf(`{"endpoints":[{"endpointId":"engineering","projectId":"%s","environment":"staging","url":"https://engineering.example/context","activeKeyId":"key1","keys":{"key1":"%s"}}]}`, actor.ProjectID, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capDelivery := &capabilities.DeliveryService{Pool: pool, Catalog: catalog}
+	capDelivery.Register(bus)
 	commandbus.Register(bus, commandbus.Command[panicPayload, string]{
 		Name: "test-panic", Right: auth.ContentRead,
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
 	})
 	logs := &bytes.Buffer{}
 	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
-		Pool: pool, Bus: bus, Log: slog.New(slog.NewJSONHandler(logs, nil)), Version: "test",
+		Pool: pool, Bus: bus, Log: slog.New(slog.NewJSONHandler(logs, nil)), Version: "test", CapabilityDelivery: capDelivery,
 	}))
 	t.Cleanup(srv.Close)
 	return env{srv, pool, res.Token, logs}

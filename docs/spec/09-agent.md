@@ -29,6 +29,7 @@
 | `behavior.use` | Назначение зарегистрированных действий событиям |
 | `behavior.propose` | Предложение контракта нового действия |
 | `capability.request` | Создание запросов Missing Capability |
+| `capability.deliver` | Отдельно выданное человеку право подтверждать внешнюю передачу context pack; не делегируется агентам и не входит в типовые человеческие роли |
 | `code.propose` | Получение context pack и отправка ссылок на PR по запросам |
 | `schema.read` / `schema.propose` / `schema.apply` | Чтение схем / создание CS со схемными изменениями / согласование и применение |
 | `manifest.register` | Регистрация manifest, создание preview-окружений |
@@ -43,7 +44,7 @@
 | `designer` | `editor` без `content.publish` + `design.compose`, `component.write`, `behavior.use`, `capability.request`, `schema.read` |
 | `lead-designer` | `designer` + `design.zones.manage`, `design.components.certify`, `content.publish` |
 | `developer` | `content.read`, `design.read`, `schema.*`, `behavior.propose`, `code.propose`, `manifest.register` |
-| `admin` | все |
+| `admin` | все обычные права; `capability.deliver` выдаётся отдельной ролью после явного решения |
 | `ci` (сервис) | `manifest.register`, `schema.propose` |
 
 ### 2.3. Документ политики

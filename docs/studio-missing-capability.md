@@ -382,7 +382,8 @@ Go/PostgreSQL и TS/DOM/runtime тестами. Пороги покрытия с
 `baba754101d0075bcad1487f9ec3e5883f37d0b1`, затем CI merge прошли.
 
 Следующий пакет — [подписанная доставка context pack](studio-capability-delivery.md),
-STU-275…294: спецификация готова, реализация ещё не начата.
+STU-275…294: реализованы в отдельной feature-ветке, локальная сквозная
+приёмка пройдена; слияние в dev ещё не подтверждено.
 Далее остаются источник достоверных PR/CI фактов, automatic fulfillment с группами
 requiredBy, preview/<ref> mapping, component/dataSource/token kinds и условные agent policies.
 Сквозной шаг 10 MVP закрывается после этих интеграций; M4/M5 целиком не закрыты.

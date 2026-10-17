@@ -14,6 +14,62 @@ const config: ServerConfig = {
   credential: "cms_svc_protected_test",
 };
 const cleanups: (() => Promise<void>)[] = [];
+it("STU-288: signed-delivery routes pin environment, require human mode and preflight scope", async () => {
+  const { origin, post, fetcher } = await setup(true);
+  for (const route of [
+    "capability-delivery-endpoints",
+    "capability-delivery-target",
+    "capability-deliveries/" + documentId,
+    "capability-requests/" + documentId + "/delivery-preview",
+    "capability-requests/" + documentId + "/deliveries",
+  ]) {
+    const path = origin + "/api/studio/api/v1/" + route;
+    expect((await fetch(path + "?environment=staging")).status).toBe(200);
+    expect((await fetch(path + "?environment=production")).status).toBe(403);
+    expect((await fetch(path + "?environment=staging&environment=staging")).status).toBe(400);
+    expect((await fetch(path + "?environment=staging&url=https://unexpected.example")).status).toBe(
+      400,
+    );
+  }
+  const base = "/api/studio/api/v1/commands/";
+  expect(
+    (
+      await post(base + "set-capability-delivery-target", {
+        payload: {
+          environment: "staging",
+          endpointId: "receiver",
+          enabled: true,
+          expectedRevision: 0,
+        },
+        reason: "Configure",
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await post(base + "set-capability-delivery-target", {
+        payload: { environment: "production" },
+      })
+    ).status,
+  ).toBe(403);
+  for (const [name, idField] of [
+    ["send-capability-context", "requestId"],
+    ["retry-capability-delivery", "deliveryId"],
+    ["cancel-capability-delivery", "deliveryId"],
+  ]) {
+    expect(
+      (await post(base + name, { payload: { [idField!]: documentId }, reason: "Explicit" })).status,
+    ).toBe(200);
+    expect((await post(base + name, { payload: { [idField!]: "invalid" } })).status).toBe(400);
+    fetcher.mockResolvedValueOnce(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
+    expect((await post(base + name, { payload: { [idField!]: documentId } })).status).toBe(404);
+  }
+  const legacy = await setup();
+  expect(
+    (await legacy.post(base + "send-capability-context", { payload: { requestId: documentId } }))
+      .status,
+  ).toBe(403);
+});
 it("STU-266: capability proxy pins environment and checks request scope before writes", async () => {
   const { origin, post, fetcher } = await setup();
   const root = "/api/studio/api/v1/capability-requests";
@@ -474,7 +530,7 @@ it("STU-040/041/042: адаптер ограничивает каталог/ку
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });
-async function setup() {
+async function setup(oidc = false) {
   const directory = await mkdtemp(join(tmpdir(), "studio-test-"));
   await writeFile(join(directory, "index.html"), "<h1>Studio</h1>");
   await writeFile(join(directory, "client.js"), "export const studio=true");
@@ -487,7 +543,14 @@ async function setup() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as { port: number };
   const origin = `http://127.0.0.1:${address.port}`;
-  const handler = createStudioHandler({ ...config, studioOrigin: origin }, directory, fetcher);
+  const { credential: _credential, ...humanConfig } = config;
+  const handler = createStudioHandler(
+    oidc
+      ? { ...humanConfig, studioOrigin: origin, authMode: "oidc" }
+      : { ...config, studioOrigin: origin },
+    directory,
+    fetcher,
+  );
   cleanups.push(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });

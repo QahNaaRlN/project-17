@@ -23,6 +23,7 @@ import { ContentBindingsPanel } from "./content-bindings-panel.js";
 import { DataSourcesPanel } from "./data-sources-panel.js";
 import { BehaviorPanel } from "./behavior-panel.js";
 import { CapabilityComposer, CapabilityQueue } from "./capability-panel.js";
+import { DeliveryTargetPanel } from "./capability-delivery-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -353,7 +354,7 @@ export function Studio({
   const documentId = saved.get("document") ?? "",
     changesetId = saved.get("changeset") ?? "";
   const [screen, setScreenValue] = useState<
-    "pages" | "editor" | "work" | "publications" | "capabilities"
+    "pages" | "editor" | "work" | "publications" | "capabilities" | "delivery-target"
   >(
     saved.has("publication")
       ? "publications"
@@ -609,9 +610,23 @@ export function Studio({
                 {state.locale === "ru" ? "Запросы возможностей" : "Capability requests"}
               </Button>
             )}
+          {api.deliveryEndpoints &&
+            api.deliveryTarget &&
+            api.deliveryCommand &&
+            rights?.includes("project.admin") && (
+              <Button
+                variant="ghost"
+                aria-current={screen === "delivery-target" ? "page" : undefined}
+                disabled={navigationLocked}
+                onClick={() => setScreen("delivery-target")}
+              >
+                {state.locale === "ru" ? "Получатель запросов" : "Request recipient"}
+              </Button>
+            )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
           {screen === "capabilities" && <CapabilityQueue {...{ api, editor }} />}
+          {screen === "delivery-target" && <DeliveryTargetPanel {...{ api, editor }} />}
           {screen === "publications" && api.publications && (
             <PublicationHistory api={api} editor={editor} />
           )}

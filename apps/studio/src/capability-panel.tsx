@@ -10,6 +10,7 @@ import { Argument } from "./behavior-panel.js";
 import { behaviorFields, editableChain } from "./behavior.js";
 import type { CapabilityAttempt, CapabilityCommand, CapabilityRequest } from "./capabilities.js";
 import { capabilityMessage, capabilityURL } from "./capabilities.js";
+import { CapabilityDeliveryPanel } from "./capability-delivery-panel.js";
 
 const types = ["string", "text", "number", "boolean", "enum", "reference", "link"] as const;
 type Arg = {
@@ -587,7 +588,8 @@ export function CapabilityCard({
     expectedSeq: session?.changeset.seq ?? request.seq,
     expectedManifestHash: session?.manifestHash,
   };
-  const locked = command.pending || command.uncertain;
+  const locked =
+    command.pending || command.uncertain || !!state.dirtyFields["property-capability-delivery"];
   const act = (name: CapabilityCommand, extra: Record<string, unknown> = {}) =>
     command.send(name, { ...actionPayload, ...extra });
   const transitions = request.transitions ?? [];
@@ -640,6 +642,9 @@ export function CapabilityCard({
   return (
     <article className="capability-card">
       <h3>{request.title}</h3>
+      {api.deliveryCommand && api.deliveries && api.delivery && api.deliveryPreview && (
+        <CapabilityDeliveryPanel {...{ api, editor, request }} />
+      )}
       <p>
         {request.key} · {request.status} · v{request.revision}
       </p>
@@ -1045,12 +1050,18 @@ export function CapabilityQueue({ api, editor }: { api: Api; editor: Editor }) {
         <Dialog
           title={text("Запрос возможности", "Capability request")}
           onDismiss={() => {
-            if (!["saving", "uncertain"].includes(editor.store.getState().status)) {
+            if (
+              !["saving", "uncertain"].includes(editor.store.getState().status) &&
+              !editor.store.getState().dirtyFields["property-capability-delivery"]
+            ) {
               setSelected(null);
               void read();
             }
           }}
-          locked={["saving", "uncertain"].includes(state.status)}
+          locked={
+            ["saving", "uncertain"].includes(state.status) ||
+            !!state.dirtyFields["property-capability-delivery"]
+          }
         >
           <CapabilityCard
             {...{ api, editor }}

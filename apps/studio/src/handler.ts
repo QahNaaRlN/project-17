@@ -5,6 +5,7 @@ import type { Config } from "./types.js";
 import { problemDiagnostics } from "./review.js";
 import { identityCookies, proxyIdentity } from "./identity-proxy.js";
 import { capabilityCommands } from "./capabilities.js";
+import { deliveryCommands } from "./capability-delivery.js";
 export interface ServerConfig extends Config {
   baseUrl: string;
   studioOrigin: string;
@@ -112,9 +113,13 @@ export function createStudioHandler(
         const capabilityRoute = new RegExp(
           `^/api/v1/capability-requests(?:/${uuid}(?:/context-preview|/context-pack)?)?$`,
         ).test(path);
+        const deliveryRoute = new RegExp(
+          `^/api/v1/(?:capability-delivery-(?:endpoints|target)|capability-deliveries/${uuid}|capability-requests/${uuid}/(?:delivery-preview|deliveries))$`,
+        ).test(path);
         const allowedGet =
           queueRoute ||
           capabilityRoute ||
+          deliveryRoute ||
           publicationRoute ||
           diffRoute ||
           path === "/api/v1/agent-config" ||
@@ -130,6 +135,7 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
+          ...deliveryCommands.map((name) => "/api/v1/commands/" + name),
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
           "/api/v1/commands/start-agent-run",
@@ -165,12 +171,14 @@ export function createStudioHandler(
           "X-CMS-Project": config.project,
         };
         if (req.method === "GET") {
-          if (capabilityRoute) {
+          if (capabilityRoute || deliveryRoute) {
             const allowed = path.endsWith("capability-requests")
               ? ["environment", "status", "kind", "key", "cursor", "limit"]
-              : path.endsWith("/context-pack")
-                ? ["environment", "version"]
-                : ["environment"];
+              : path.endsWith("/deliveries")
+                ? ["environment", "limit", "cursor"]
+                : path.endsWith("/context-pack")
+                  ? ["environment", "version"]
+                  : ["environment"];
             if (
               [...url.searchParams.keys()].some(
                 (k) => !allowed.includes(k) || url.searchParams.getAll(k).length !== 1,
@@ -350,6 +358,30 @@ export function createStudioHandler(
           const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           if (!envelope?.payload || typeof envelope.payload !== "object")
             return error(400, "PAYLOAD_INVALID");
+          if (deliveryCommands.some((name) => path.endsWith("/" + name))) {
+            if (config.authMode !== "oidc") return error(403, "CAPABILITY_DELIVERY_FORBIDDEN");
+            const p = envelope.payload;
+            if (path.endsWith("/set-capability-delivery-target")) {
+              if (p.environment !== config.environment)
+                return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            } else {
+              const sending = path.endsWith("/send-capability-context");
+              const id = sending ? p.requestId : p.deliveryId;
+              if (!new RegExp(`^${uuid}$`).test(String(id))) return error(400, "PAYLOAD_INVALID");
+              const check = await fetcher(
+                new URL(
+                  "/api/v1/" +
+                    (sending ? "capability-requests/" : "capability-deliveries/") +
+                    id +
+                    "?environment=" +
+                    encodeURIComponent(config.environment),
+                  config.baseUrl,
+                ),
+                { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+              );
+              if (!check.ok) return error(check.status, "CAPABILITY_DELIVERY_NOT_FOUND");
+            }
+          }
           if (capabilityCommands.some((name) => path.endsWith("/" + name))) {
             const p = envelope.payload;
             if (path.endsWith("/create-capability-request")) {

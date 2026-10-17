@@ -20,6 +20,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/agents"
 	"github.com/qahnaarln/project-17/apps/server/internal/assets"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilities"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
@@ -36,14 +37,15 @@ const MaxCommandBody = 1 << 20
 
 // Deps — зависимости HTTP-слоя.
 type Deps struct {
-	Agents   *agents.Service
-	Identity *identity.Service
-	Pool     *pgxpool.Pool
-	Bus      *commandbus.Bus
-	Log      *slog.Logger
-	Version  string
-	Assets   *assets.Service
-	Images   *imagedelivery.Service
+	CapabilityDelivery *capabilities.DeliveryService
+	Agents             *agents.Service
+	Identity           *identity.Service
+	Pool               *pgxpool.Pool
+	Bus                *commandbus.Bus
+	Log                *slog.Logger
+	Version            string
+	Assets             *assets.Service
+	Images             *imagedelivery.Service
 }
 
 // NewRouter собирает маршруты сервера.
@@ -79,6 +81,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/events", eventsHandler(d))
 		workspaceRoutes(r, d)
 		capabilityRoutes(r, d)
+		capabilityDeliveryRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))
 		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {

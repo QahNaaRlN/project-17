@@ -1,6 +1,7 @@
 # Studio: подписанная доставка context pack
 
-Статус: спецификация готова к реализации; STU-275…294 ещё не реализованы.
+Статус: STU-275…294 реализованы в `feature/studio-capability-delivery`;
+локальная сквозная приёмка пройдена. Слияние в dev и CI этой ветки ещё не подтверждены.
 Дата: 2026-10-17. Основа — `origin/dev`
 `9259d6272471cba057c0625bd554bb730ae64660`, после
 [PR #60](https://github.com/QahNaaRlN/project-17/pull/60).
@@ -88,14 +89,16 @@ JSON-файлу, доступному только процессу CMS/опер
 Файл не лежит в репозитории/публичном каталоге. Его содержимое, secret, путь
 и ошибки с исходным значением не возвращаются в API/логи или idempotent responses.
 
-Каталог содержит entries `{endpointId, projectId, environment, url, activeKeyId, keys}`.
+Корневой JSON имеет форму `{"endpoints":[...]}`. Каталог содержит entries
+`{endpointId, projectId, environment, url, activeKeyId, keys}`.
 endpointId/keyId — ASCII `[a-zA-Z0-9_-]{1,64}`; projectId — UUID; environment
 существует и standard. keys — отображение keyId → base64 от минимум 32 случайных
 байт, максимум 128 байт; activeKeyId обязан присутствовать в keys.
 Дубликаты, неизвестные поля, пустой/неполный каталог,
 некорректный URL или ключ при заданном файле — ошибка запуска. Файл ограничен
 1 MiB, каталог — 256 entries, URL — 2048 символов, keyring — 8 keys на endpoint.
-Секретов в БД нет.
+Секретов в БД нет. Delivery сохраняет SHA-256 отпечаток ключа; при запуске
+CMS отклоняет повторное использование сохранённого keyId с другим секретом.
 Ключ не является CMS service/agent token и не даёт доступа к API CMS.
 
 Команда project.admin выбирает endpointId своего project/environment и enabled.
@@ -371,7 +374,10 @@ CI: генерация/sqlc, Go build/vet/race, Go coverage ≥95%, TS/DOM/runti
 Spec-only проверка: локальные ссылки, уникальность STU-ID, согласованность DTO,
 прав/состояний/повторов и явные implemented/remaining/dependencies в roadmap.
 
-STU-275…294 закрываются только реализацией и этими доказательствами. Сейчас
-готов только контракт. После пакета отдельно специфицировать доверенные факты
+STU-275…294 реализованы: миграция 00021, отдельные target/delivery/attempt/audit,
+immutable bytea и key pin, четыре команды, пять Query-маршрутов, очередь с двумя
+workers и периодическим восстановлением, безопасный transport, Studio/BFF.
+Проверки реализации описаны в [отчёте приёмки](studio-capability-delivery-acceptance.md).
+После пакета отдельно специфицировать доверенные факты
 PR/CI, preview/<ref>, automatic fulfillment/requiredBy и остальные kinds/policies.
 Сквозной шаг 10 и полный M5 пока остаются частичными.

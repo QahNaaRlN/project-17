@@ -90,6 +90,26 @@ export interface Operation {
   payload: Record<string, unknown>;
 }
 export interface Api {
+  deliveryEndpoints?(
+    signal?: AbortSignal,
+  ): Promise<{ items: import("./capability-delivery.js").DeliveryEndpoint[] }>;
+  deliveryTarget?(signal?: AbortSignal): Promise<import("./capability-delivery.js").DeliveryTarget>;
+  deliveryPreview?(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<import("./capability-delivery.js").DeliveryPreview>;
+  deliveries?(
+    id: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<List<import("./capability-delivery.js").Delivery>>;
+  delivery?(id: string, signal?: AbortSignal): Promise<import("./capability-delivery.js").Delivery>;
+  deliveryCommand?(
+    attempt: import("./capability-delivery.js").DeliveryAttempt,
+  ): Promise<
+    | import("./capability-delivery.js").DeliveryResult
+    | import("./capability-delivery.js").DeliveryTarget
+  >;
   capabilities?(
     filters: { status?: string; key?: string; cursor?: string },
     signal?: AbortSignal,

@@ -3,7 +3,7 @@ const { fetch, AbortSignal } = globalThis;
 // Isolated development stand. Requires a migrated loopback PostgreSQL and built CMS/Studio/store.
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, openSync, existsSync, mkdirSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { createServer } from "node:net";
@@ -101,6 +101,48 @@ const boot = spawnSync(
 );
 if (boot.status !== 0) throw Error("Local bootstrap failed");
 const credential = boot.stdout.match(/cms_svc_[a-zA-Z0-9_-]+/)[0];
+const projectId = boot.stdout.match(/id ([a-f0-9-]{36})/)[1];
+const capabilityDeliveryStand = process.env.CMS_REVIEW_CAPABILITY_DELIVERY === "true";
+let receiverPid;
+if (capabilityDeliveryStand) {
+  const receiverPort = Number(process.env.CAPABILITY_RECEIVER_PORT ?? basePort + 4),
+    key = randomBytes(32).toString("base64");
+  const receiverConfig = join(local, "receiver.private.json"),
+    receiverDatabase = join(local, "receiver-inbox.sqlite"),
+    receiverMode = join(local, "receiver-mode.txt"),
+    webhookConfig = join(local, "webhooks.private.json");
+  writeFileSync(receiverConfig, JSON.stringify({ bindings: [], projectId, key }));
+  writeFileSync(receiverMode, "drop-first");
+  writeFileSync(
+    webhookConfig,
+    JSON.stringify({
+      endpoints: [
+        {
+          endpointId: "engineering",
+          projectId,
+          environment: "staging",
+          url: `http://127.0.0.1:${receiverPort}/context`,
+          activeKeyId: "local-v1",
+          keys: { "local-v1": key },
+        },
+      ],
+    }),
+  );
+  env.CMS_CAPABILITY_WEBHOOK_CONFIG_FILE = webhookConfig;
+  env.CMS_CAPABILITY_WEBHOOK_ALLOW_LOOPBACK_HTTP = "true";
+  receiverPid = start(
+    process.execPath,
+    [join(repo, "scripts/capability-receiver.mjs")],
+    {
+      CAPABILITY_RECEIVER_CONFIG_FILE: receiverConfig,
+      CAPABILITY_RECEIVER_DATABASE: receiverDatabase,
+      CAPABILITY_RECEIVER_MODE_FILE: receiverMode,
+      CAPABILITY_RECEIVER_PORT: String(receiverPort),
+    },
+    "receiver.log",
+  );
+  await ready(`http://127.0.0.1:${receiverPort}/healthz`);
+}
 const apiPid = start(binary, ["serve"], {}, "studio-work-api.log");
 await ready(apiOrigin + "/healthz");
 const baseUrl = apiOrigin;
@@ -180,6 +222,7 @@ const author = await command("create-role", {
     "design.compose",
     ...(process.env.CMS_REVIEW_BEHAVIOR === "true" ? ["behavior.use"] : []),
     ...(capabilityStand ? ["behavior.use", "capability.request", "design.zones.manage"] : []),
+    ...(capabilityDeliveryStand ? ["capability.deliver"] : []),
     "content.write",
     "asset.write",
     "content.publish",
@@ -194,6 +237,9 @@ const reviewer = await command("create-role", {
     ...(capabilityStand ? ["code.propose"] : []),
   ],
 });
+const deliveryAdmin = capabilityDeliveryStand
+  ? await command("create-role", { name: "delivery-operator", capabilities: ["project.admin"] })
+  : null;
 const studioFile = join(local, "studio-work-ui.private.json");
 writeFileSync(
   studioFile,
@@ -250,6 +296,8 @@ writeFileSync(
     baseUrl,
     project,
     credential,
+    projectId,
+    ...(deliveryAdmin ? { deliveryAdminRole: deliveryAdmin.id } : {}),
     authorRole: author.id,
     reviewerRole: reviewer.id,
     studioOrigin,
@@ -259,7 +307,7 @@ writeFileSync(
 );
 writeFileSync(
   join(local, "studio-work-review.processes.json"),
-  JSON.stringify({ oidcPid, apiPid, studioPid, storePid }),
+  JSON.stringify({ oidcPid, apiPid, studioPid, storePid, ...(receiverPid ? { receiverPid } : {}) }),
 );
 await ready(studioOrigin + "/api/studio/config");
 console.log("Live two-user stand ready at " + studioOrigin);

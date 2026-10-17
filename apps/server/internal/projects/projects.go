@@ -111,7 +111,7 @@ type BootstrapResult struct {
 	ExpiresAt time.Time
 }
 
-// Bootstrap создаёт проект, окружения staging и production, роль admin со всеми правами
+// Bootstrap создаёт проект, окружения staging и production, роль admin с обычными правами
 // и сервисного актора с токеном. Это единственная операция вне Command Bus: до неё в проекте
 // нет ни одного актора, от имени которого можно выполнить команду.
 func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, tokenTTL time.Duration) (BootstrapResult, error) {
@@ -132,9 +132,13 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, token
 				return err
 			}
 		}
-		rights := make([]string, len(auth.AllRights))
-		for i, r := range auth.AllRights {
-			rights[i] = string(r)
+		rights := make([]string, 0, len(auth.AllRights)-1)
+		for _, r := range auth.AllRights {
+			// External sharing always requires a separately granted role, even
+			// when a human is subsequently bound to this bootstrap admin role.
+			if r != auth.CapabilityDeliver {
+				rights = append(rights, string(r))
+			}
 		}
 		role, err := q.CreateRole(ctx, store.CreateRoleParams{ID: uuid.Must(uuid.NewV7()), ProjectID: project.ID, Name: "admin", Capabilities: rights})
 		if err != nil {
