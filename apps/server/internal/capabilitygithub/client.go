@@ -30,7 +30,10 @@ func failure(code string) error  { return &Failure{Code: code} }
 type Fetcher interface {
 	Observe(context.Context, Repository, int64) (Observation, error)
 }
-type Client struct{ client *http.Client }
+type Client struct {
+	client *http.Client
+	now    func() time.Time
+}
 
 func NewClient() *Client {
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, MaxResponseHeaderBytes: 32 << 10, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: "api.github.com"}, DialContext: githubDial}
@@ -77,18 +80,31 @@ type session struct {
 	client       *http.Client
 	repo         Repository
 	calls, bytes int
+	token        string
+	now          func() time.Time
 }
 
 func (s *session) get(ctx context.Context, path string, out any) error {
+	token := s.token
+	if token == "" {
+		token = s.repo.Token
+	}
+	return s.request(ctx, "GET", path, token, nil, http.StatusOK, out)
+}
+
+func (s *session) request(ctx context.Context, method, path, token string, body io.Reader, success int, out any) error {
 	s.calls++
 	if s.calls > 40 {
 		return failure("incomplete")
 	}
-	req, e := http.NewRequestWithContext(ctx, "GET", "https://api.github.com"+path, nil)
+	req, e := http.NewRequestWithContext(ctx, method, "https://api.github.com"+path, body)
 	if e != nil {
 		return failure("invalid_response")
 	}
-	req.Header.Set("Authorization", "Bearer "+s.repo.Token)
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	// API 2026-03-10 removed merge_commit_sha. Keep the supported wire
 	// contract used to verify both test and actual merge commits.
@@ -98,7 +114,7 @@ func (s *session) get(ctx context.Context, path string, out any) error {
 		return &Failure{Code: "temporary_unavailable", Retryable: true}
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != success {
 		code := "invalid_response"
 		retry := false
 		var at time.Time
@@ -134,6 +150,9 @@ func (s *session) get(ctx context.Context, path string, out any) error {
 			} else if t, err := http.ParseTime(resp.Header.Get("Retry-After")); err == nil && t.After(at) {
 				at = t
 			}
+		}
+		if code == "credential_unavailable" || code == "permission_denied" || code == "not_found_or_inaccessible" {
+			s.invalidateInstallationToken(token)
 		}
 		return &Failure{Code: code, RetryAt: at, Retryable: retry}
 	}
@@ -206,7 +225,12 @@ func (c *Client) Observe(ctx context.Context, r Repository, number int64) (Obser
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	s := session{client: c.client, repo: r}
+	s := session{client: c.client, repo: r, now: c.now}
+	var credentialErr error
+	s.token, credentialErr = s.credential(ctx)
+	if credentialErr != nil {
+		return o, credentialErr
+	}
 	root := "/repos/" + r.Owner + "/" + r.Name
 	var repository repoInfo
 	if e := s.get(ctx, root, &repository); e != nil {

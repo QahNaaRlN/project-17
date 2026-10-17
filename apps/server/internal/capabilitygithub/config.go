@@ -29,17 +29,18 @@ type Rule struct {
 	CreatorID string `json:"creatorId,omitempty"`
 }
 type Repository struct {
-	ConfigID       string    `json:"configId"`
-	ProjectID      uuid.UUID `json:"projectId"`
-	Environment    string    `json:"environment"`
-	RepositoryID   string    `json:"repositoryId"`
-	Owner          string    `json:"owner"`
-	Name           string    `json:"name"`
-	BaseBranch     string    `json:"baseBranch"`
-	CredentialID   string    `json:"credentialId"`
-	Token          string    `json:"token"`
-	RequiredChecks []Rule    `json:"requiredChecks"`
-	Fingerprint    string    `json:"-"`
+	ConfigID       string            `json:"configId"`
+	ProjectID      uuid.UUID         `json:"projectId"`
+	Environment    string            `json:"environment"`
+	RepositoryID   string            `json:"repositoryId"`
+	Owner          string            `json:"owner"`
+	Name           string            `json:"name"`
+	BaseBranch     string            `json:"baseBranch"`
+	CredentialID   string            `json:"credentialId"`
+	Token          string            `json:"token"`
+	Installation   *InstallationAuth `json:"installation,omitempty"`
+	RequiredChecks []Rule            `json:"requiredChecks"`
+	Fingerprint    string            `json:"-"`
 }
 type Catalog struct{ repositories []Repository }
 
@@ -77,13 +78,14 @@ func Parse(b []byte) (*Catalog, error) {
 	for i := range doc.Repositories {
 		r := &doc.Repositories[i]
 		key := r.ProjectID.String() + "/" + r.Environment
-		if !identifier.MatchString(r.ConfigID) || !identifier.MatchString(r.CredentialID) || r.ProjectID == uuid.Nil || !text(r.Environment, 100) || !positive(r.RepositoryID) || !segment.MatchString(r.Owner) || !segment.MatchString(r.Name) || r.Owner == "." || r.Owner == ".." || r.Name == "." || r.Name == ".." || !text(r.BaseBranch, 255) || !text(r.Token, 4096) || strings.Contains(r.Token, " ") || seen[r.ConfigID] || scope[key] || len(r.RequiredChecks) == 0 || len(r.RequiredChecks) > 32 {
+		if !identifier.MatchString(r.ConfigID) || !identifier.MatchString(r.CredentialID) || r.ProjectID == uuid.Nil || !text(r.Environment, 100) || !positive(r.RepositoryID) || !segment.MatchString(r.Owner) || !segment.MatchString(r.Name) || r.Owner == "." || r.Owner == ".." || r.Name == "." || r.Name == ".." || !text(r.BaseBranch, 255) || !validCredential(*r) || seen[r.ConfigID] || scope[key] || len(r.RequiredChecks) == 0 || len(r.RequiredChecks) > 32 {
 			return nil, ErrConfig
 		}
-		if old, ok := credentials[r.CredentialID]; ok && old != r.Token {
+		credential := credentialIdentity(*r)
+		if old, ok := credentials[r.CredentialID]; ok && old != credential {
 			return nil, ErrConfig
 		}
-		credentials[r.CredentialID] = r.Token
+		credentials[r.CredentialID] = credential
 		seen[r.ConfigID] = true
 		scope[key] = true
 		rules := map[string]bool{}
@@ -95,6 +97,9 @@ func Parse(b []byte) (*Catalog, error) {
 		}
 		public := *r
 		public.Token = ""
+		if r.Installation != nil {
+			public.Installation = &InstallationAuth{AppID: r.Installation.AppID, InstallationID: r.Installation.InstallationID}
+		}
 		r.Fingerprint = Digest(public)
 	}
 	return &Catalog{repositories: doc.Repositories}, nil
@@ -116,7 +121,21 @@ func FromEnv(getenv func(string) string) (*Catalog, error) {
 	if e != nil {
 		return nil, ErrConfig
 	}
-	return Parse(b)
+	catalog, e := Parse(b)
+	if e != nil {
+		return nil, e
+	}
+	for i := range catalog.repositories {
+		r := &catalog.repositories[i]
+		if r.Installation != nil {
+			key, err := readInstallationKey(r.Installation.PrivateKeyFile)
+			if err != nil {
+				return nil, ErrConfig
+			}
+			r.Installation.state = &installationState{key: key, scope: installationScope(*r)}
+		}
+	}
+	return catalog, nil
 }
 func (c *Catalog) Find(project uuid.UUID, env, id string) (Repository, bool) {
 	if c != nil {

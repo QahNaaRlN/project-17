@@ -34,7 +34,7 @@ PR-связь на request, ручные link/unlink/refresh, ограничен
 Checks и Commit Statuses, история наблюдений, формы Studio, RU/EN, миграция 00022.
 Доступ к публичному или приватному репозиторию задаёт оператор явно.
 
-Вне границ: входящие webhook, GitHub Enterprise Server, установка/OAuth GitHub App,
+Вне границ: входящие webhook, GitHub Enterprise Server, пользовательский OAuth GitHub App и входящие webhook App,
 чтение исходников/diff/логов/артефактов, запуск или перезапуск CI, открытие/изменение/
 слияние PR, отправка комментариев, выполнение кода, preview/<ref> mapping,
 автоматическое fulfillment, группы requiredBy, новые kinds, условные политики
@@ -115,14 +115,16 @@ Contents — read. Contents нужен для проверки родителе�
 использовать токен с правом изменения как основание для новых операций.
 Оператор отвечает за ограничение токена и срок действия. Ротация — перезапуск
 с новым credentialId; никаких секретов в БД, Studio, pack или идемпотентном ответе.
-GitHub App installation authentication остаётся отдельным последующим расширением.
+Серверное расширение [GitHub App installation authentication](studio-capability-github-app.md)
+подготовлено для приватных Checks. Внешняя регистрация/установка App требует
+отдельного разрешения; реальная приёмка App пока не выполнена.
 
 Проверка 2026-10-18 выявила расхождение этого принятого контракта с доступными
 правами GitHub: экран fine-grained PAT не предлагает Checks/read, чтение
 приватного PR проходит (200), приватных Checks — отклоняется (403).
 Публичный сценарий работает. Это блокер приватной части STU-314; указанное выше
 требование не считается реализуемым/проверенным лишь по документации endpoint.
-Изменение способа аутентификации требует отдельного технического решения;
+Контракт нового способа аутентификации описан в [расширении App](studio-capability-github-app.md);
 приватное требование и границы пакета этой записью не снимаются.
 Подробности — [отчёт приёмки](studio-capability-github-acceptance.md).
 
@@ -214,6 +216,8 @@ Worker использует только `https://api.github.com`, Accept GitHub
 для принятого контракта exact SHA; фикстуры моделируют реальную зависимость
 поля от версии. Источники: [breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes?apiVersion=2026-03-10),
 [API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions).
+Для App исключение из GET-only — фиксированный POST выпуска installation token
+и фиксированный GET проверки installation repositories, с теми же сетевыми бюджетами.
 Все пути конструируются сервером из каталога,
 номера PR и проверенных SHA/ID; никаких переходов по url/details_url/Link из ответа.
 Repository GET сверяет числовой ID и owner/name. PR GET сверяет PR ID/number,
