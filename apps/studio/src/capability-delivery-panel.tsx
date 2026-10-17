@@ -378,7 +378,7 @@ export function CapabilityDeliveryPanel({
           "Confirmation only means the recipient stored the pack. Engineering status changes separately.",
         )}
       </p>
-      {(error || command.error) && (
+      {!preview && (error || command.error) && (
         <p role="alert">{deliveryMessage(error || command.error, ru)}</p>
       )}
       {canSend && (
@@ -488,6 +488,9 @@ export function CapabilityDeliveryPanel({
             setConsent(false);
           }}
         >
+          {(error || command.error) && (
+            <p role="alert">{deliveryMessage(error || command.error, ru)}</p>
+          )}
           <p>
             {text("Точный адрес получателя", "Exact recipient address")}:{" "}
             <strong>{preview.target.url}</strong>
@@ -514,6 +517,11 @@ export function CapabilityDeliveryPanel({
           <button disabled={locked || !consent || !reviewed} onClick={send}>
             {text("Подтвердить передачу", "Confirm delivery")}
           </button>
+          {command.uncertain && (
+            <button disabled={command.pending} onClick={() => void command.send()}>
+              {text("Повторить тот же запрос", "Retry exact request")}
+            </button>
+          )}
           <button disabled={locked || loading} onClick={() => void review(retry)}>
             {text("Перечитать сведения", "Reload details")}
           </button>
@@ -528,7 +536,7 @@ export function CapabilityDeliveryPanel({
           </button>
         </Dialog>
       )}
-      {command.uncertain && (
+      {!preview && command.uncertain && (
         <button disabled={command.pending} onClick={() => void command.send()}>
           {text("Повторить тот же запрос", "Retry exact request")}
         </button>

@@ -275,6 +275,23 @@ func TestDeliveryFreshAuthorityAndInFlightCancellation(t *testing.T) {
 	}
 }
 
+func TestDeliveryCancelUsesCurrentAuthority(t *testing.T) {
+	f := deliverySetup(t)
+	d := f.send()
+	formerAdmin := f.e.Human("former-delivery-admin", auth.ProjectAdmin, auth.CapabilityRequest, auth.DesignRead, auth.CapabilityDeliver)
+	// The request actor was authenticated before the administrative right was
+	// revoked. Ordinary author rights still pass the live eligibility gate.
+	f.e.Exec(`UPDATE roles SET capabilities=array_remove(capabilities,'project.admin') WHERE project_id=$1 AND id IN (SELECT role_id FROM role_bindings WHERE actor_id=$2)`, f.a.ProjectID, formerAdmin.ID)
+	if _, err := f.call(formerAdmin, "cancel-capability-delivery", CancelDelivery{d.ID, d.Revision}, ""); cmstest.Code(err) != "CAPABILITY_DELIVERY_NOT_FOUND" {
+		t.Fatalf("revoked admin cancelled another author's delivery: %v", err)
+	}
+	saved, err := f.e.Q.GetCapabilityDelivery(context.Background(), store.GetCapabilityDeliveryParams{ProjectID: d.ProjectID, ID: d.ID})
+	if err != nil || saved.State != "queued" || saved.Revision != d.Revision {
+		t.Fatal("rejected cancellation changed the delivery", err)
+	}
+	f.command(f.a, "cancel-capability-delivery", CancelDelivery{d.ID, d.Revision}, "")
+}
+
 func TestDeliveryConcurrentClaimsExpiredLeaseAndRecovery(t *testing.T) {
 	f := deliverySetup(t)
 	d := f.send()

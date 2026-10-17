@@ -238,6 +238,17 @@ it("uncertain commands retain byte-equivalent payload and idempotency key while 
   await click("Подтвердить передачу");
   expect(button("Закрыть без передачи").disabled).toBe(true);
   expect(editor.store.getState().status).toBe("uncertain");
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.contains(button("Повторить тот же запрос"))).toBe(true);
+  expect(dialog.querySelector('[role="alert"]')).not.toBeNull();
+  const retry = button("Повторить тот же запрос");
+  retry.focus();
+  await act(async () => {
+    retry.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+    );
+  });
+  expect(document.activeElement).toBe(retry);
   const first = structuredClone(vi.mocked(api.deliveryCommand!).mock.calls[0]![0]);
   await click("Повторить тот же запрос");
   expect(vi.mocked(api.deliveryCommand!).mock.calls[1]![0]).toEqual(first);
@@ -252,6 +263,9 @@ it("conflicts retain the reviewed context and require refreshed details and fres
   await check("Разрешаю передать этот context pack");
   await click("Подтвердить передачу");
   expect(document.body.textContent).toContain("Получатель изменился");
+  expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain(
+    "Получатель изменился",
+  );
   expect(document.querySelector("pre")?.textContent).toContain("safeContext");
   expect(button("Подтвердить передачу").disabled).toBe(true);
   await check("Разрешаю передать этот context pack");

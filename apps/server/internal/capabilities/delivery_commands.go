@@ -305,7 +305,7 @@ func (s *DeliveryService) cancelDelivery(ctx context.Context, tx pgx.Tx, a auth.
 	if err != nil {
 		return result, err
 	}
-	if deliveryAdmin(a) != nil && (d.InitiatedBy != a.ID || deliveryAuthor(a) != nil) {
+	if deliveryAdmin(live) != nil && (d.InitiatedBy != live.ID || deliveryAuthor(live) != nil) {
 		return result, deliveryError("NOT_FOUND")
 	}
 	if d.Revision != p.ExpectedDeliveryRevision {
