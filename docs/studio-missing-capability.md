@@ -1,7 +1,11 @@
 # Studio: Missing Capability и context pack
 
-Статус: STU-255…274 реализованы в feature/studio-missing-capability;
-реальная локальная приёмка пройдена 2026-10-17. Слияние в dev ещё не выполнено.
+Статус: STU-255…274 реализованы и слиты в dev 2026-10-17 в
+[PR #60](https://github.com/QahNaaRlN/project-17/pull/60), merge
+`9259d6272471cba057c0625bd554bb730ae64660`.
+Реальная локальная приёмка и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39028004513)
+пройдены: Check (TS + Go), Go race/coverage 95%, Studio 328, 60 браузерных
+сценариев и Docker image.
 Дата: 2026-10-16. Основа — `origin/dev` на
 `35ccee43467d8e36a412c93a2e15c78a08df330d`, после
 [PR #59](https://github.com/QahNaaRlN/project-17/pull/59).
@@ -372,9 +376,13 @@ Studio содержит типизированную форму, очередь,
 Конфликты seq/revision/manifest, scope/отзыв прав, rollback, legacy pending,
 undo/redo, лимиты/приватность и межпроектная изоляция проверяются отдельными
 Go/PostgreSQL и TS/DOM/runtime тестами. Пороги покрытия сохранены.
-Окончательная готовность к слиянию требует зелёного CI итогового SHA с Go race.
+При ревью исправлены обработка одиночного ActionCall при подтверждении замены,
+его включение в pack и resolve одиночного pending, многочастные ключи действий
+и ограничения text в форме. Регрессионные тесты и CI итогового SHA
+`baba754101d0075bcad1487f9ec3e5883f37d0b1`, затем CI merge прошли.
 
-После пакета отдельно специфицировать webhook с подписью и повторной доставкой,
-источник достоверных PR/CI фактов, automatic fulfillment с группами requiredBy,
-preview/<ref> mapping, component/dataSource/token kinds и условные agent policies.
+Следующий пакет — [подписанная доставка context pack](studio-capability-delivery.md),
+STU-275…294: спецификация готова, реализация ещё не начата.
+Далее остаются источник достоверных PR/CI фактов, automatic fulfillment с группами
+requiredBy, preview/<ref> mapping, component/dataSource/token kinds и условные agent policies.
 Сквозной шаг 10 MVP закрывается после этих интеграций; M4/M5 целиком не закрыты.

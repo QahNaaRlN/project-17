@@ -170,12 +170,18 @@ MCP-сервер встроен в CMS (`/mcp`, транспорт Streamable HT
 
 Реализованный первый пакет описан отдельно:
 [Studio: Missing Capability и context pack](../studio-missing-capability.md),
-STU-255…274, feature/studio-missing-capability, на основе dev после PR #59.
+STU-255…274 слиты в dev в [PR #60](https://github.com/QahNaaRlN/project-17/pull/60),
+merge `9259d6272471cba057c0625bd554bb730ae64660`; CI merge пройден.
 Реализованы scoped draft/read tools, неизменяемые версии context pack и индекс
 кода. Встроенный Agent после создания draft останавливается для проверки человеком.
 Первый срез ограничен action-запросами, ручной передачей и явным применением;
 webhook, автоматическое fulfillment и preview/<ref> ниже остаются целевой
 архитектурой последующих пакетов.
+
+Следующий контракт — [подписанная доставка context pack](../studio-capability-delivery.md),
+STU-275…294: спецификация готова, код ещё не реализован. Доставка с отдельным
+согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
+автоматические шаги жизненного цикла ниже по-прежнему целевые.
 
 ### 5.1. Жизненный цикл
 
