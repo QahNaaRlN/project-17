@@ -1,9 +1,10 @@
 # Подписанная доставка context pack: приёмка
 
 Дата: 2026-10-17. Пакет STU-275…294 реализован в
-`feature/studio-capability-delivery`, от `dev` после PR #60. Слияние в dev
-не выполнено. [Черновой PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
-[CI конечного SHA](https://github.com/QahNaaRlN/project-17/pull/61/checks).
+`feature/studio-capability-delivery`, от `dev` после PR #60. Слит в dev
+2026-10-17 в [PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
+merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; [CI конечного SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39036418490)
+и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39037306790) пройдены.
 
 ## Реальный локальный сценарий
 
