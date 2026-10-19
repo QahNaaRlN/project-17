@@ -172,7 +172,13 @@ export function layers(document: IrDocument): Layer[] {
     if (!node || seen.has(id)) return;
     seen.add(id);
     locked ||= node.locked === true || node.zone?.locked === true;
-    result.push({ id, depth, parent, label: node.name ?? componentTitle(node) ?? node.type, locked });
+    result.push({
+      id,
+      depth,
+      parent,
+      label: node.name ?? componentTitle(node) ?? node.type,
+      locked,
+    });
     for (const child of [...(node.children ?? []), ...Object.values(node.slots ?? {}).flat()])
       walk(child, depth + 1, id, locked);
   }

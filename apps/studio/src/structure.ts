@@ -8,7 +8,7 @@ import {
   type Policy,
 } from "@cms/ir";
 import { builtinCatalogue } from "@cms/manifest/builtins";
-import type { Component, Manifest, Type } from "@cms/manifest";
+import type { Manifest, Type } from "@cms/manifest";
 import { fieldOperations } from "./fields.js";
 import { contract, nodeContract } from "./composed.js";
 import { StudioError, type Operation } from "./types.js";

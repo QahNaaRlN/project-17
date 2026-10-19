@@ -112,13 +112,17 @@ export function localChoices(plan: ExtractPlan, wizard: Wizard) {
         (c) =>
           c.current === "local" &&
           c.expression === "$local." + key.key &&
-          wizard.inputs.some((i) => i.enabled && i.source?.nodeId === c.nodeId && i.source.prop === c.prop),
+          wizard.inputs.some(
+            (i) => i.enabled && i.source?.nodeId === c.nodeId && i.source.prop === c.prop,
+          ),
       );
       const inComponent = key.nodeIds.some((id) => !slotted.has(id));
       const others = plan.candidates.filter(
         (c) =>
           c.expression === "$local." + key.key &&
-          !wizard.inputs.some((i) => i.enabled && i.source?.nodeId === c.nodeId && i.source.prop === c.prop),
+          !wizard.inputs.some(
+            (i) => i.enabled && i.source?.nodeId === c.nodeId && i.source.prop === c.prop,
+          ),
       );
       return {
         key: key.key,
@@ -154,7 +158,10 @@ export function wizardProblems(plan: ExtractPlan, wizard: Wizard): WizardProblem
   }
   if (enabled.length > 32) problems.push({ field: "inputs", code: "INPUT_LIMIT" });
   for (const c of plan.candidates)
-    if (c.external && !enabled.some((i) => i.source?.nodeId === c.nodeId && i.source.prop === c.prop))
+    if (
+      c.external &&
+      !enabled.some((i) => i.source?.nodeId === c.nodeId && i.source.prop === c.prop)
+    )
       problems.push({ field: `input:${c.nodeId}.${c.prop}`, code: "INPUT_EXTERNAL_REQUIRED" });
   const slotNames = new Set<string>();
   const slotted = new Set<string>();
@@ -176,18 +183,16 @@ export function wizardProblems(plan: ExtractPlan, wizard: Wizard): WizardProblem
 }
 
 /** Payload of component.extract; IDs are assigned by the server. */
-export function extractOperation(
-  target: string,
-  plan: ExtractPlan,
-  wizard: Wizard,
-): Operation {
+export function extractOperation(target: string, plan: ExtractPlan, wizard: Wizard): Operation {
   const inputs: Record<string, unknown> = {};
   for (const input of wizard.inputs.filter((i) => i.enabled)) {
     const entry: Record<string, unknown> = {};
     if (input.source) entry.from = [input.source];
     if (input.declared) {
       const list =
-        input.declared.listType !== undefined ? plan.sourceListTypes[input.declared.listType] : undefined;
+        input.declared.listType !== undefined
+          ? plan.sourceListTypes[input.declared.listType]
+          : undefined;
       if (input.source && list?.type === "list") entry.def = { of: list.of };
       else if (list) entry.def = structuredClone(list);
       else if (input.declared.type === "image") entry.def = { type: "asset", assetKind: "image" };
@@ -249,4 +254,10 @@ export function previewTree(doc: IrDocument, plan: ExtractPlan, wizard: Wizard) 
   return component;
 }
 
-export { registerComponents, componentOf, componentTitle, nodeContract, componentRefs } from "./composed.js";
+export {
+  registerComponents,
+  componentOf,
+  componentTitle,
+  nodeContract,
+  componentRefs,
+} from "./composed.js";

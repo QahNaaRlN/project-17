@@ -1131,19 +1131,25 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     async components(session, ids, signal) {
       const result: Record<string, IrDocument> = {};
       await Promise.all(
-        ids.filter((id) => uuid.test(id)).map(async (id) => {
-          try {
-            const record = await request<DocumentRecord>(
-              `/api/v1/documents/${id}?changesetId=${session.changeset.id}`,
-              signal,
-            );
-            if (record?.id === id && validateDocument(record.body).valid && record.body.kind === "component")
-              result[id] = record.body;
-          } catch (cause) {
-            if (signal?.aborted) throw cause;
-            /* An unresolved component stays a server diagnostic; the instance is read-only. */
-          }
-        }),
+        ids
+          .filter((id) => uuid.test(id))
+          .map(async (id) => {
+            try {
+              const record = await request<DocumentRecord>(
+                `/api/v1/documents/${id}?changesetId=${session.changeset.id}`,
+                signal,
+              );
+              if (
+                record?.id === id &&
+                validateDocument(record.body).valid &&
+                record.body.kind === "component"
+              )
+                result[id] = record.body;
+            } catch (cause) {
+              if (signal?.aborted) throw cause;
+              /* An unresolved component stays a server diagnostic; the instance is read-only. */
+            }
+          }),
       );
       return result;
     },
