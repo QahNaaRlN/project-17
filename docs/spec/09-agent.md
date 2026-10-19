@@ -182,9 +182,8 @@ merge `9259d6272471cba057c0625bd554bb730ae64660`; CI merge пройден.
 Пакет [подписанной доставки context pack](../studio-capability-delivery.md),
 STU-275…294 слит в dev в [PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
 merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; локальная приёмка и CI merge пройдены.
-Проверенные факты GitHub PR/CI (STU-295…314) реализованы в
-[черновом PR #62](https://github.com/QahNaaRlN/project-17/pull/62) и до слияния
-не считаются доступными в dev.
+Пакет [проверенных фактов GitHub PR/CI](../studio-capability-github.md),
+STU-295…314, слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
 Доставка с отдельным
 согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
 автоматические шаги жизненного цикла ниже по-прежнему целевые.

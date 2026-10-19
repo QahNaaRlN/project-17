@@ -1,8 +1,10 @@
 # Studio: подписанная доставка context pack
 
 Статус: STU-275…294 реализованы и слиты в dev 2026-10-17 в
-[PR #61](https://github.com/QahNaaRlN/project-17/pull/61), merge `cf59c4568cf276800922d80ee73e9c15650d25d7`;
-локальная сквозная приёмка и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39037306790) пройдены.
+[PR #61](https://github.com/QahNaaRlN/project-17/pull/61), merge
+`cf59c4568cf276800922d80ee73e9c15650d25d7`.
+Локальная сквозная приёмка, [CI конечного SHA PR](https://github.com/QahNaaRlN/project-17/actions/runs/39036418490)
+и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39037306790) пройдены.
 Дата: 2026-10-17. Основа — `origin/dev`
 `9259d6272471cba057c0625bd554bb730ae64660`, после
 [PR #60](https://github.com/QahNaaRlN/project-17/pull/60).
@@ -379,6 +381,8 @@ STU-275…294 реализованы: миграция 00021, отдельные
 immutable bytea и key pin, четыре команды, пять Query-маршрутов, очередь с двумя
 workers и периодическим восстановлением, безопасный transport, Studio/BFF.
 Проверки реализации описаны в [отчёте приёмки](studio-capability-delivery-acceptance.md).
-После пакета отдельно специфицировать доверенные факты
-PR/CI, preview/<ref>, automatic fulfillment/requiredBy и остальные kinds/policies.
+Следующий пакет — [проверенные факты GitHub PR/CI](studio-capability-github.md),
+STU-295…314: слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
+Затем отдельно специфицировать preview/<ref>, automatic fulfillment/requiredBy
+и остальные kinds/policies.
 Сквозной шаг 10 и полный M5 пока остаются частичными.

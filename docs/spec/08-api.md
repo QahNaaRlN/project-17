@@ -39,7 +39,7 @@ by:entity в `data.content` Delivery page. Параметр `locale` выбир�
 на серверной стороне приложения; новый CMS endpoint исполнения не вводится.
 
 Пакет [действий и условий](../studio-behavior-conditions.md), STU-237…254,
-реализован в ветке `feature/studio-behavior`, пока не слит в dev.
+реализован и слит в dev в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), merge `35ccee4`.
 Он использует node.setBehavior/node.setCondition, отдельные advisory-права,
 строгие аргументы и повторные проверки доступа. Нового endpoint исполнения нет.
 

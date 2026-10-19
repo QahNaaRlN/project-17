@@ -1,10 +1,12 @@
 # Подписанная доставка context pack: приёмка
 
-Дата: 2026-10-17. Пакет STU-275…294 реализован в
-`feature/studio-capability-delivery`, от `dev` после PR #60. Слит в dev
+Дата приёмки: 2026-10-17. Пакет STU-275…294 реализован в
+`feature/studio-capability-delivery`, от `dev` после PR #60, и слит в dev
 2026-10-17 в [PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
-merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; [CI конечного SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39036418490)
+merge `cf59c4568cf276800922d80ee73e9c15650d25d7`.
+[CI конечного SHA PR](https://github.com/QahNaaRlN/project-17/actions/runs/39036418490)
 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39037306790) пройдены.
+Обновление статуса 2026-10-18 не добавляет новых сценариев локальной приёмки.
 
 ## Реальный локальный сценарий
 

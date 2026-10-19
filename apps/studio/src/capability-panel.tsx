@@ -1,3 +1,4 @@
+import { CapabilityGithubPanel } from "./capability-github-panel.js";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { canonicalJson, manifestHash, type Fields, type Type } from "@cms/manifest";
@@ -589,7 +590,10 @@ export function CapabilityCard({
     expectedManifestHash: session?.manifestHash,
   };
   const locked =
-    command.pending || command.uncertain || !!state.dirtyFields["property-capability-delivery"];
+    command.pending ||
+    command.uncertain ||
+    !!state.dirtyFields["property-capability-delivery"] ||
+    !!state.dirtyFields["property-capability-github"];
   const act = (name: CapabilityCommand, extra: Record<string, unknown> = {}) =>
     command.send(name, { ...actionPayload, ...extra });
   const transitions = request.transitions ?? [];
@@ -642,12 +646,23 @@ export function CapabilityCard({
   return (
     <article className="capability-card">
       <h3>{request.title}</h3>
+      {api.github && api.githubHistory && api.githubCommand && request.status !== "draft" && (
+        <CapabilityGithubPanel key={request.id} {...{ api, editor, request }} />
+      )}
       {api.deliveryCommand && api.deliveries && api.delivery && api.deliveryPreview && (
         <CapabilityDeliveryPanel {...{ api, editor, request }} />
       )}
       <p>
         {request.key} · {request.status} · v{request.revision}
       </p>
+      {request.status === "pr_open" && (
+        <p>
+          {text(
+            "Статус pr_open сообщён разработчиком; подтверждение GitHub показано отдельно.",
+            "The pr_open status was reported by an engineer; GitHub verification is shown separately.",
+          )}
+        </p>
+      )}
       <p>{request.description}</p>
       <ul>
         {request.acceptance.map((s, i) => (
@@ -1052,7 +1067,8 @@ export function CapabilityQueue({ api, editor }: { api: Api; editor: Editor }) {
           onDismiss={() => {
             if (
               !["saving", "uncertain"].includes(editor.store.getState().status) &&
-              !editor.store.getState().dirtyFields["property-capability-delivery"]
+              !editor.store.getState().dirtyFields["property-capability-delivery"] &&
+              !editor.store.getState().dirtyFields["property-capability-github"]
             ) {
               setSelected(null);
               void read();
@@ -1060,7 +1076,8 @@ export function CapabilityQueue({ api, editor }: { api: Api; editor: Editor }) {
           }}
           locked={
             ["saving", "uncertain"].includes(state.status) ||
-            !!state.dirtyFields["property-capability-delivery"]
+            !!state.dirtyFields["property-capability-delivery"] ||
+            !!state.dirtyFields["property-capability-github"]
           }
         >
           <CapabilityCard
