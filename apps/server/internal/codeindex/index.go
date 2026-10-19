@@ -17,6 +17,7 @@ import (
 const MaxBytes = 1 << 20
 
 var ErrInvalid = errors.New("CODE_INDEX_INVALID")
+
 // CommitPattern — полный SHA-1 или SHA-256 commit (STU-316).
 var CommitPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 var HashPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)

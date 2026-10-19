@@ -843,11 +843,11 @@ it("STU-327/328: PR preview routes, exact preview origins and CSP", async () => 
   });
 
   const directory = await mkdtemp(join(tmpdir(), "studio-preview-"));
-  let handler: ReturnType<typeof createStudioHandler> | undefined;
-  const server = createServer((req, res) => void handler!(req, res));
+  const holder: { handler?: ReturnType<typeof createStudioHandler> } = {};
+  const server = createServer((req, res) => void holder.handler!(req, res));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const studio = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  handler = createStudioHandler(
+  holder.handler = createStudioHandler(
     { ...config, studioOrigin: studio, previewAppOrigins: ["https://pr.example.test"] },
     directory,
     vi.fn<typeof fetch>(),

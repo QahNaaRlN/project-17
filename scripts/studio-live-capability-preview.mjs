@@ -10,7 +10,7 @@ import { resolve, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, pathToFileURL, URL, URLSearchParams } from "node:url";
 import vm from "node:vm";
-const { fetch } = globalThis;
+const { fetch, structuredClone, setTimeout } = globalThis;
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const require = createRequire(new URL("../examples/react-store/package.json", import.meta.url));
 const { chromium, expect } = require("@playwright/test");
@@ -483,7 +483,8 @@ try {
   const fits = await card
     .getByRole("region", { name: "Предпросмотр", exact: true })
     .evaluate(
-      (e) => e.scrollWidth <= e.clientWidth && e.getBoundingClientRect().right <= innerWidth,
+      (e) =>
+        e.scrollWidth <= e.clientWidth && e.getBoundingClientRect().right <= globalThis.innerWidth,
     );
   expect(fits).toBe(true);
   await card.getByRole("button", { name: "Закрыть", exact: true }).click();
