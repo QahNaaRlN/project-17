@@ -318,3 +318,142 @@ it("STU-412/415: canvas clicks inside an instance select it; the component opens
   await click("Вернуться к странице");
   expect(editor.store.getState().session?.record?.id).toBe(documentId);
 });
+
+it("STU-413/418: every wizard control edits the payload; Back keeps answers", async () => {
+  const list = {
+    type: "list",
+    of: { type: "object", fields: { title: { type: "text" } } },
+  } as unknown as ExtractPlan["sourceListTypes"][number];
+  const { api, session } = await setup(
+    plan({
+      candidates: [
+        ...plan().candidates,
+        {
+          nodeId: "n_btn",
+          nodeType: "Repeat",
+          prop: "items",
+          type: { type: "list", content: true } as never,
+          current: "data",
+          content: true,
+          external: true,
+          suggestedName: "items",
+        },
+      ],
+      sourceListTypes: [list],
+    }),
+  );
+  vi.mocked(api.apply).mockImplementation(async (_s, operations) => extracted(session, operations));
+  // Ctrl/Cmd+Alt+K opens the wizard for the selected block.
+  await act(async () =>
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", code: "KeyK", ctrlKey: true, altKey: true }),
+    ),
+  );
+  await flush();
+  expect(document.querySelector("[role=dialog]")).not.toBeNull();
+  await type("Имя компонента", "Card");
+  const description = document.querySelector<HTMLTextAreaElement>("textarea")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      description,
+      "Описание",
+    );
+    description.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await flush();
+  await click("Далее");
+  // External list without an item type must get one from a source contract.
+  expect(button("Далее").disabled).toBe(true);
+  await type("Тип элемента списка", "0");
+  await act(async () =>
+    document.querySelector<HTMLInputElement>('[aria-label="Обязательный Heading.text"]')!.click(),
+  );
+  await act(async () =>
+    document
+      .querySelector<HTMLInputElement>('[aria-label="Сделать входом Button.variant"]')!
+      .click(),
+  );
+  await type("Имя входа Button.variant", "tone");
+  await type("Имя нового входа", "badge");
+  await type("Тип нового входа", "image");
+  await click("Добавить вход");
+  await type("Имя нового входа", "extra");
+  await click("Добавить вход");
+  const remove = [...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button")].filter(
+    (b) => b.textContent === "Удалить",
+  );
+  await act(async () => remove.at(-1)!.click());
+  await flush();
+  await click("Далее");
+  await type("Имя слота", "lead");
+  await act(async () =>
+    [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .find((i) => i.closest("label")?.textContent?.includes("Пустой слот"))!
+      .click(),
+  );
+  await flush();
+  await type("Контейнер", "0");
+  await type("Позиция", "1");
+  await type("Максимум узлов", "2");
+  await click("Добавить слот");
+  await type("Имя слота", "tmp");
+  await act(async () =>
+    [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .find((i) => i.closest("label")?.textContent?.includes("Пустой слот"))!
+      .click(),
+  );
+  await flush();
+  await type("Родитель", "0");
+  await type("Первый узел", "0");
+  await type("Последний узел", "0");
+  await click("Добавить слот");
+  await act(async () =>
+    [...document.querySelectorAll<HTMLButtonElement>("li button")]
+      .filter((b) => b.textContent === "Удалить")
+      .at(-1)!
+      .click(),
+  );
+  await flush();
+  await click("Назад");
+  expect(
+    document.querySelector<HTMLInputElement>('[aria-label="Имя входа Button.variant"]')!.value,
+  ).toBe("tone");
+  await click("Далее");
+  await click("Далее");
+  expect(document.body.textContent).toContain("Slot · lead");
+  await click("Сохранить");
+  const [, operations] = vi.mocked(api.apply).mock.calls[0]!;
+  expect(operations[0]!.payload).toEqual({
+    nodeId: "n_block",
+    name: "Card",
+    description: "Описание",
+    inputs: {
+      text: { from: [{ nodeId: "n_title", prop: "text" }], required: true },
+      tone: { from: [{ nodeId: "n_btn", prop: "variant" }] },
+      items: {
+        from: [{ nodeId: "n_btn", prop: "items" }],
+        def: { of: (list as { of: unknown }).of },
+      },
+      badge: { def: { type: "asset", assetKind: "image" } },
+    },
+    slots: { lead: { nodeIds: [], at: { parentId: "n_block", index: 1 }, min: 0, max: 2 } },
+  });
+});
+
+it("STU-401/413: a failed plan read offers retry and close", async () => {
+  const { api } = await setup();
+  vi.mocked(api.extractPlan!)
+    .mockRejectedValueOnce(new StudioError("FORBIDDEN"))
+    .mockRejectedValueOnce(new Error("network"));
+  await click("Сохранить как компонент");
+  expect(document.body.textContent).toContain("Нужны права component.write");
+  await click("Повторить");
+  expect(document.body.textContent).toContain("PLAN_FAILED");
+  await click("Повторить");
+  expect(button("Далее")).toBeDefined();
+  await click("Отмена");
+  vi.mocked(api.extractPlan!).mockRejectedValueOnce(new StudioError("FORBIDDEN"));
+  await click("Сохранить как компонент");
+  await click("Закрыть");
+  expect(document.querySelector("[role=dialog]")).toBeNull();
+});

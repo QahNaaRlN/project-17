@@ -457,6 +457,11 @@ export function createEditor(
       });
       invalidate();
     } catch (error) {
+      // A background reread can overlap this tab's own write; the snapshot is retried later.
+      if (remote && error instanceof StudioError && error.code === "CHANGESET_SEQ_CONFLICT") {
+        if (stamp === epoch) store.setState({ remotePending: true });
+        return;
+      }
       if (
         session.work &&
         error instanceof StudioError &&

@@ -639,6 +639,15 @@ try {
   if (page) {
     console.error((await page.locator("body").innerText()).slice(-6000));
     console.error(
+      "ALERTS: " +
+        JSON.stringify(
+          await page
+            .locator("[role=alert],[role=status],.studio-status,.status")
+            .allInnerTexts()
+            .catch(() => []),
+        ),
+    );
+    console.error(
       "DATA PANEL: " +
         (
           await page
