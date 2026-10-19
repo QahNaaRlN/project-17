@@ -386,12 +386,19 @@ iframe {
 .properties h2:not(:first-child) {
   margin-top: 28px;
 }
-.preview-error {
+.preview-error,
+.preview-banner {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   padding: 10px;
+  overflow-wrap: anywhere;
   background: var(--p17-dangerSurface);
+}
+/* STU-330: read-only PR preview mode. */
+.preview-banner {
+  background: var(--p17-panel);
 }
 footer {
   background: var(--p17-panel);

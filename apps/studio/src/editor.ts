@@ -1082,7 +1082,16 @@ export function createEditor(
      * block the switch; a new target restarts the preview with a new token. */
     viewEnvironment(target: PreviewTarget | null) {
       const state = store.getState();
-      if (fieldDirty() || contentDirty() || state.dirtyFields.json) {
+      // Request-card forms stay mounted across the switch; only page drafts block it.
+      const pageDraft = Object.entries(state.dirtyFields).some(
+        ([key, dirty]) =>
+          dirty &&
+          (key.startsWith("design-") ||
+            (key.startsWith("property-") &&
+              key !== "property-capability" &&
+              !key.startsWith("property-capability-"))),
+      );
+      if (pageDraft || contentDirty() || state.dirtyFields.json) {
         store.setState({ error: "FIELD_DRAFT_PENDING" });
         return Promise.resolve();
       }

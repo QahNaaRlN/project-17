@@ -520,6 +520,7 @@ export function Studio({
   const zoom = fitCanvas ? Math.min(1, canvasWidth / state.width) : 1;
   const disabled =
     busy ||
+    !!state.viewTarget ||
     jsonDirty ||
     !!state.dirtyFields["property-behavior"] ||
     !session?.review.canEdit ||
@@ -896,10 +897,14 @@ export function Studio({
                   </div>
                 )}
               </section>
-              <aside className="properties" inert={state.viewTarget ? true : undefined}>
-                <ContentBindingsPanel {...{ api, editor, rights }} />
-                <DataSourcesPanel {...{ editor, rights }} />
-                <BehaviorPanel {...{ editor, rights }} />
+              <aside className="properties">
+                {/* STU-330: editing panels are view-only in a PR preview; the
+                    request card stays usable to return or restart. */}
+                <div inert={state.viewTarget ? true : undefined}>
+                  <ContentBindingsPanel {...{ api, editor, rights }} />
+                  <DataSourcesPanel {...{ editor, rights }} />
+                  <BehaviorPanel {...{ editor, rights }} />
+                </div>
                 <CapabilityComposer {...{ api, editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (

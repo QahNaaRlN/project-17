@@ -118,6 +118,12 @@ it("STU-329/330: PR preview is read-only, bound to its build and origin", async 
   await editor.viewEnvironment(target);
   expect(editor.store.getState()).toMatchObject({ viewTarget: null, error: "FIELD_DRAFT_PENDING" });
   editor.formDirty("json", false);
+  editor.formDirty("property-title", true);
+  await editor.viewEnvironment(target);
+  expect(editor.store.getState().viewTarget).toBeNull();
+  editor.formDirty("property-title", false);
+  editor.formDirty("property-capability-card", true);
+  editor.formDirty("property-capability", true);
   await editor.viewEnvironment(target);
   const state = editor.store.getState();
   expect(api.preview).toHaveBeenLastCalledWith(
