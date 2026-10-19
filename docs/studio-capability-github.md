@@ -10,8 +10,8 @@
 пройден. Продолжает [Missing Capability](studio-missing-capability.md),
 [подписанную доставку](studio-capability-delivery.md) и
 [архитектуру агента](spec/09-agent.md#5-missing-capability).
-Одобрение получено; итоговая приёмка и слияние в dev ещё не выполнены.
-[Черновой PR #62](https://github.com/QahNaaRlN/project-17/pull/62).
+Слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`;
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39246472929) пройден.
 [Реализация, проверки и ограничения](studio-capability-github-acceptance.md).
 
 ## 1. Результат и границы

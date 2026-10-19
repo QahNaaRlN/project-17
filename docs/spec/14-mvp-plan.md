@@ -181,10 +181,13 @@ merge `cf59c4568cf276800922d80ee73e9c15650d25d7`.
 может настраивать получателя. Статусы запроса и CS не меняются от доставки.
 [CI конечного SHA PR](https://github.com/QahNaaRlN/project-17/actions/runs/39036418490)
 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39037306790)
-пройдены. Следующий пакет — [проверенные факты GitHub PR/CI](../studio-capability-github.md),
-STU-295…314: спецификация одобрена 2026-10-18; реализация в `feature/studio-capability-github`,
-публичная и приватная внешняя проверка STU-314 пройдены. Итоговое ревью и слияние
-в dev ещё не завершены.
+пройдены.
+
+Пакет M5 — [проверенные факты GitHub PR/CI](../studio-capability-github.md),
+STU-295…314: **реализован и слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62)**, merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
+Явная привязка запроса к PR настроенного репозитория, Checks и Commit Statuses
+на точном SHA от доверенного издателя, GitHub App для приватных репозиториев.
+Публичная и приватная внешняя проверка STU-314 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39246472929) пройдены.
 Далее остаются preview/<ref>, автоматическое fulfillment/requiredBy, другие kinds
 и условные policies. Полный M5 и шаг 10 MVP
 пока не закрыты. Автоматической отправки старых запросов новый пакет не включает.

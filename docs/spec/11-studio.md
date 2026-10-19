@@ -46,7 +46,7 @@ STU-219…236, реализован и слит в dev в
 историю и preview через сервер приложения. Доказательства и статус проверок
 перечислены в спецификации; CI PR и merge-коммита пройдены. Figma не требуется.
 [Действия и условия показа](../studio-behavior-conditions.md), STU-237…254,
-реализованы в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59); изменения ещё не слиты в dev.
+реализованы и слиты в dev в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), merge `35ccee4`.
 Формы поддерживают цепочки, строгие аргументы, navigate/scrollTo и when,
 раздельные права, legacy read-only и защиту устаревшего preview.
 Остальные конструкторы данных/поведения, advanced binding picker, component.extract,

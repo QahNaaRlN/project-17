@@ -382,8 +382,7 @@ immutable bytea и key pin, четыре команды, пять Query-марш
 workers и периодическим восстановлением, безопасный transport, Studio/BFF.
 Проверки реализации описаны в [отчёте приёмки](studio-capability-delivery-acceptance.md).
 Следующий пакет — [проверенные факты GitHub PR/CI](studio-capability-github.md),
-STU-295…314: спецификация одобрена 2026-10-18; реализация в `feature/studio-capability-github`,
-полная приёмка и слияние в dev ещё не завершены.
+STU-295…314: слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
 Затем отдельно специфицировать preview/<ref>, automatic fulfillment/requiredBy
 и остальные kinds/policies.
 Сквозной шаг 10 и полный M5 пока остаются частичными.
