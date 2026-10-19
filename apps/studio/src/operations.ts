@@ -5,6 +5,8 @@ import { StudioError, type Operation } from "./types.js";
 export function applyOperations(source: IrDocument, operations: Operation[]): IrDocument {
   const doc = structuredClone(source);
   for (const { type, payload: p } of operations) {
+    // IDs of the component and instance are assigned by CMS: no optimistic preview.
+    if (type === "component.extract") continue;
     if (type === "document.setDataSource") {
       const key = String(p.key);
       if (
