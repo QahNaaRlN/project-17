@@ -62,6 +62,19 @@ func TestCapabilityQueriesAreScopedBoundedAndNoStore(t *testing.T) {
 		}
 	}
 	command("submit-capability-request", map[string]any{"id": id, "expectedRevision": 1, "expectedSeq": 1, "expectedManifestHash": hash})
+	// STU-308/310: GitHub queries never fetch remotely and repeat scope/filters.
+	for _, path := range []string{"/api/v1/capability-github-config?environment=staging", root + "/github?environment=staging", root + "/github-observations?environment=staging&limit=1"} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode != 200 || response.Header.Get("Cache-Control") != "private, no-store" {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
+	for _, path := range []string{"/api/v1/capability-github-config", root + "/github?environment=production", root + "/github?environment=staging&unknown=x", root + "/github-observations?limit=bad", root + "/github-observations?limit=101", root + "/github-observations?cursor=bad", root + "/github?environment=staging&environment=staging", "/api/v1/capability-requests/invalid/github"} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode < 400 || response.StatusCode >= 500 {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
 	response, pack := e.do(t, "GET", root+"/context-pack?version=2&environment=staging", "", e.authed(nil))
 	if response.StatusCode != 200 || !strings.Contains(response.Header.Get("Content-Disposition"), "attachment;") || response.Header.Get("X-Context-Hash") == "" {
 		t.Fatal(response.StatusCode, pack)

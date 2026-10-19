@@ -57,8 +57,12 @@ MCP: [Streamable HTTP 2025-06-18](https://modelcontextprotocol.io/specification/
 STU-255…274 реализован и слит в dev в PR #60; CI merge пройден.
 Первый срез включает action-запросы, server-side index/pack, scoped draft tool
 и ручную передачу разработчику с явной заменой pending.
-Следующий пакет — [подписанная доставка](studio-capability-delivery.md),
-STU-275…294: реализованы в [черновом PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
-локальная приёмка пройдена; слияние в dev ещё не выполнено. Это ещё не весь M5:
-произвольная условная policy, code-agent webhook, автоматическое fulfillment,
-advanced bindings, component.extract/wrap и NFR-приёмка остаются отдельными задачами.
+[Подписанная доставка](studio-capability-delivery.md), STU-275…294, реализована
+и слита в dev в [PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
+merge `cf59c45`; локальная приёмка и CI PR/merge пройдены.
+Следующий пакет — [проверенные факты GitHub PR/CI](studio-capability-github.md),
+STU-295…314: спецификация одобрена 2026-10-18; реализация в `feature/studio-capability-github`,
+полная приёмка и слияние в dev ещё не завершены.
+Это ещё не весь M5: preview/<ref>, автоматическое fulfillment/requiredBy, другие
+kinds и условные agent policies остаются отдельными пакетами. Advanced bindings,
+component.extract/wrap и NFR-приёмка также ещё не закрыты.

@@ -32,7 +32,8 @@ FR-052/053, AGT-060…062, AGT-070…072, AGT-080/081.
 pack, формы запроса/очереди, ручной handoff и два scoped MCP-инструмента.
 CMS не читает репозиторий и не исполняет код или команды из context pack.
 
-Webhook/HMAC/outbox доставки кодовому агенту, трекеры, автоматическое определение
+В границы этого первого пакета не входят webhook/HMAC/outbox доставки кодовому
+агенту (позднее реализованы в PR #61), трекеры, автоматическое определение
 статуса PR/CI, fulfillment по регистрации manifest, массовая замена requiredBy
 и разрешение pending в `preview/<ref>` — следующие пакеты. Также вне границ
 component/dataSource/token requests, кодогенерация, автоматическое открытие PR,
@@ -381,9 +382,12 @@ Go/PostgreSQL и TS/DOM/runtime тестами. Пороги покрытия с
 и ограничения text в форме. Регрессионные тесты и CI итогового SHA
 `baba754101d0075bcad1487f9ec3e5883f37d0b1`, затем CI merge прошли.
 
-Следующий пакет — [подписанная доставка context pack](studio-capability-delivery.md),
-STU-275…294: реализованы в отдельной feature-ветке, локальная сквозная
-приёмка пройдена; слияние в dev ещё не подтверждено.
-Далее остаются источник достоверных PR/CI фактов, automatic fulfillment с группами
-requiredBy, preview/<ref> mapping, component/dataSource/token kinds и условные agent policies.
+Продолжение — [подписанная доставка context pack](studio-capability-delivery.md),
+STU-275…294: реализованы и слиты в dev в PR #61, merge `cf59c45`;
+локальная сквозная приёмка и CI PR/merge пройдены.
+Следующий пакет — [проверенные факты GitHub PR/CI](studio-capability-github.md),
+STU-295…314: спецификация одобрена 2026-10-18; реализация в `feature/studio-capability-github`,
+полная приёмка и слияние в dev ещё не завершены.
+Далее остаются preview/<ref> mapping, automatic fulfillment с группами requiredBy,
+component/dataSource/token kinds и условные agent policies.
 Сквозной шаг 10 MVP закрывается после этих интеграций; M4/M5 целиком не закрыты.

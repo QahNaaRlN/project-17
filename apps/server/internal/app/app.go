@@ -121,15 +121,25 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return err
 	}
 	capabilityDelivery.Register(bus)
+	capabilityGithub := &capabilities.GithubService{Pool: pool, Catalog: cfg.CapabilityGithub}
+	if err := capabilityGithub.ValidateCatalog(ctx); err != nil {
+		return err
+	}
+	capabilityGithub.Register(bus)
+	githubRecovery := &capabilities.GithubRecoveryWorker{Service: capabilityGithub}
 	deliveryRecovery := &capabilities.DeliveryRecoveryWorker{Service: capabilityDelivery}
 	agentService := &agents.Service{Pool: pool, Provider: agents.OpenRouter{Key: cfg.OpenRouterKey}, DefaultModel: cfg.OpenRouterModel}
 	agentService.Register(bus)
 	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) }, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.DeliveryWorker{Service: capabilityDelivery})
-	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, deliveryRecovery) })
+	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, deliveryRecovery) }, func(w *river.Workers) error {
+		return river.AddWorkerSafely(w, &capabilities.GithubWorker{Service: capabilityGithub})
+	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, githubRecovery) })
 	if err != nil {
 		return err
 	}
+	githubRecovery.Queue = queue
+	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.GithubRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-github-recovery", RunOnStart: true}))
 	deliveryRecovery.Queue = queue
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.DeliveryRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-delivery-recovery", RunOnStart: true}))
 	defer func() {
@@ -176,7 +186,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return err
 	}
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService, CapabilityDelivery: capabilityDelivery}),
+		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService, CapabilityGithub: capabilityGithub, CapabilityDelivery: capabilityDelivery}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

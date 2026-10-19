@@ -1,3 +1,10 @@
+import {
+  githubConfig,
+  githubView,
+  type GithubConfig,
+  type GithubView,
+  type GithubObservation,
+} from "./capability-github.js";
 import { validateDiffIndex, validateDiffPage } from "./review-diff.js";
 import {
   publicationList,
@@ -137,6 +144,71 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     }
   }
   const api: Api = {
+    async githubConfig(signal) {
+      const c = await api.config(signal);
+      return githubConfig(
+        await request<GithubConfig>(
+          "/api/v1/capability-github-config?" + new URLSearchParams({ environment: c.environment }),
+          signal,
+        ),
+      );
+    },
+    async github(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("PAYLOAD_INVALID");
+      const c = await api.config(signal);
+      return githubView(
+        await request<GithubView>(
+          "/api/v1/capability-requests/" +
+            id +
+            "/github?" +
+            new URLSearchParams({ environment: c.environment }),
+          signal,
+        ),
+      );
+    },
+    async githubHistory(id, cursor, signal) {
+      if (!uuid.test(id)) throw new StudioError("PAYLOAD_INVALID");
+      const c = await api.config(signal);
+      const v = await request<List<GithubObservation>>(
+        "/api/v1/capability-requests/" +
+          id +
+          "/github-observations?" +
+          new URLSearchParams({ environment: c.environment, ...(cursor ? { cursor } : {}) }),
+        signal,
+      );
+      if (
+        !v ||
+        !Array.isArray(v.items) ||
+        (v.nextCursor != null && typeof v.nextCursor !== "string")
+      )
+        throw new StudioError("RESPONSE_INVALID");
+      for (const o of v.items)
+        githubView({
+          link: null,
+          current: o,
+          lastKnown: null,
+          syncState: "idle",
+          canManage: false,
+        });
+      return v;
+    },
+    async githubCommand(attempt) {
+      const account = await api.account();
+      if (!account.authenticated || (attempt.actor && account.user?.id !== attempt.actor))
+        throw new StudioError("SESSION_CHANGED", true);
+      const v = await request<{ result: unknown }>(
+        "/api/v1/commands/" + attempt.name,
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      if (attempt.name === "set-capability-github-config")
+        return githubConfig(v?.result as GithubConfig, true);
+      const r = v?.result as { revision?: number; syncId?: string };
+      if (!r || !Number.isSafeInteger(r.revision) || !r.syncId)
+        throw new StudioError("RESPONSE_INVALID", true);
+      return r;
+    },
     async deliveryEndpoints(signal) {
       const config = await api.config(signal);
       const value = await request<{ items: DeliveryEndpoint[] }>(

@@ -235,6 +235,81 @@ type CapabilityDeliveryTarget struct {
 	ChangedAt     time.Time `json:"changedAt"`
 }
 
+type CapabilityGithubAudit struct {
+	ID         uuid.UUID  `json:"id"`
+	ProjectID  uuid.UUID  `json:"projectId"`
+	RequestID  *uuid.UUID `json:"requestId"`
+	ActorID    *uuid.UUID `json:"actorId"`
+	Event      string     `json:"event"`
+	Generation int64      `json:"generation"`
+	SyncID     *uuid.UUID `json:"syncId"`
+	Attempt    int32      `json:"attempt"`
+	Reason     string     `json:"reason"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+type CapabilityGithubConfig struct {
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"projectId"`
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	Environment   string    `json:"environment"`
+	ConfigID      string    `json:"configId"`
+	Fingerprint   string    `json:"fingerprint"`
+	CredentialID  string    `json:"credentialId"`
+	Enabled       bool      `json:"enabled"`
+	Revision      int64     `json:"revision"`
+	ChangedBy     uuid.UUID `json:"changedBy"`
+	ChangedAt     time.Time `json:"changedAt"`
+}
+
+type CapabilityGithubCredential struct {
+	CredentialID string     `json:"credentialId"`
+	BlockedUntil time.Time  `json:"blockedUntil"`
+	LeaseToken   *uuid.UUID `json:"leaseToken"`
+	LeaseUntil   *time.Time `json:"leaseUntil"`
+}
+
+type CapabilityGithubLink struct {
+	ID             uuid.UUID  `json:"id"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	RequestID      uuid.UUID  `json:"requestId"`
+	ConfigID       uuid.UUID  `json:"configId"`
+	ConfigRevision int64      `json:"configRevision"`
+	Fingerprint    string     `json:"fingerprint"`
+	Revision       int64      `json:"revision"`
+	Generation     int64      `json:"generation"`
+	Active         bool       `json:"active"`
+	PullNumber     int64      `json:"pullNumber"`
+	InitiatedBy    uuid.UUID  `json:"initiatedBy"`
+	State          string     `json:"state"`
+	LastError      string     `json:"lastError"`
+	Attempts       int32      `json:"attempts"`
+	PollsLeft      int32      `json:"pollsLeft"`
+	WindowUntil    time.Time  `json:"windowUntil"`
+	NextAt         time.Time  `json:"nextAt"`
+	RefreshAfter   time.Time  `json:"refreshAfter"`
+	LeaseToken     *uuid.UUID `json:"leaseToken"`
+	LeaseUntil     *time.Time `json:"leaseUntil"`
+	SyncID         uuid.UUID  `json:"syncId"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+}
+
+type CapabilityGithubObservation struct {
+	ID             uuid.UUID `json:"id"`
+	ProjectID      uuid.UUID `json:"projectId"`
+	RequestID      uuid.UUID `json:"requestId"`
+	LinkID         uuid.UUID `json:"linkId"`
+	Generation     int64     `json:"generation"`
+	ConfigRevision int64     `json:"configRevision"`
+	Fingerprint    string    `json:"fingerprint"`
+	SyncID         uuid.UUID `json:"syncId"`
+	Body           []byte    `json:"body"`
+	Digest         string    `json:"digest"`
+	ObservedAt     time.Time `json:"observedAt"`
+	FreshUntil     time.Time `json:"freshUntil"`
+}
+
 type CapabilityRequest struct {
 	ID                  uuid.UUID  `json:"id"`
 	ProjectID           uuid.UUID  `json:"projectId"`
