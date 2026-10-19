@@ -415,6 +415,7 @@ export function ComponentExtractDialog({
               <label>
                 {t("Имя", "Name")}
                 <input
+                  aria-label={t("Имя нового входа", "New input name")}
                   value={declared.name}
                   onChange={(e) => setDeclared({ ...declared, name: e.target.value })}
                 />
@@ -422,6 +423,7 @@ export function ComponentExtractDialog({
               <label>
                 {t("Тип", "Type")}
                 <select
+                  aria-label={t("Тип нового входа", "New input type")}
                   value={declared.type}
                   onChange={(e) => setDeclared({ ...declared, type: e.target.value })}
                 >
@@ -538,6 +540,7 @@ export function ComponentExtractDialog({
                   <label>
                     {t("Контейнер", "Container")}
                     <select
+                      aria-label={t("Контейнер", "Container")}
                       value={slot.position}
                       onChange={(e) => setSlot({ ...slot, position: e.target.value, index: "0" })}
                     >
@@ -564,6 +567,7 @@ export function ComponentExtractDialog({
                   <label>
                     {t("Родитель", "Parent")}
                     <select
+                      aria-label={t("Родитель", "Parent")}
                       value={slot.range}
                       onChange={(e) =>
                         setSlot({ ...slot, range: e.target.value, from: "0", to: "0" })
@@ -583,6 +587,11 @@ export function ComponentExtractDialog({
                         ? t("Первый узел", "First node")
                         : t("Последний узел", "Last node")}
                       <select
+                        aria-label={
+                          end === "from"
+                            ? t("Первый узел", "First node")
+                            : t("Последний узел", "Last node")
+                        }
                         value={slot[end]}
                         onChange={(e) => setSlot({ ...slot, [end]: e.target.value })}
                       >

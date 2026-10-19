@@ -3,7 +3,7 @@ import { Image, preparePage, loadSources, documentHash, sourceFailures } from "@
 import { registry, storeTokens } from "./registry.js";
 import { parseCatalog, type StoreModel } from "./model.js";
 import { storeComposition, definitionsFor } from "./composition.js";
-import { loadPlanImages } from "@cms/react/server";
+import { loadComponents, loadPlanImages } from "@cms/react/server";
 
 export async function loadStore(
   cms: CmsClient,
@@ -18,6 +18,9 @@ export async function loadStore(
     const page = await cms.getPage(path, read);
     if (!page) return { status: "missing", preview, images: {} };
     const catalog = parseCatalog(page);
+    // Composed instances render the component version visible to this read (draft or published).
+    const components = await loadComponents(cms, page, read);
+    if (!components) throw new Error("STORE_COMPOSITION_INVALID");
     const model: StoreModel = { status: "ready", preview, catalog, images: {}, locale };
     const scope = {
       context: {
@@ -44,6 +47,7 @@ export async function loadStore(
       breakpoints: registry.breakpoints,
       tokens: storeTokens,
       actions: registry.actions,
+      components,
     });
     if (preview) {
       model.plan.preview = true;
@@ -65,6 +69,7 @@ export async function loadStore(
         document,
         hash: await documentHash(document),
         data,
+        components,
         sourceErrors: sourceFailures(data),
         ...(options.preview?.changesetId ? { changesetId: options.preview.changesetId } : {}),
       };

@@ -53,4 +53,25 @@ it("STU-401: адаптер пропускает только план извл�
       .status,
   ).toBe(403);
   expect(fetcher).not.toHaveBeenCalled();
+  // STU-402: the command adapter forwards component.extract, never the internal inverse.
+  const post = (type: string) =>
+    fetch(origin + "/api/studio/api/v1/commands/apply-operations", {
+      method: "POST",
+      headers: {
+        Origin: origin,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "extract-key",
+      },
+      body: JSON.stringify({
+        payload: {
+          changesetId,
+          expectedSeq: 1,
+          operations: [{ type, target: changesetId, payload: { nodeId: "n_block", name: "X" } }],
+        },
+        reason: "Studio: save as component «X»",
+      }),
+    });
+  expect((await post("component.extract")).status).toBe(200);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect((await post("component.revertExtract")).status).toBe(400);
 });

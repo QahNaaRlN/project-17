@@ -617,6 +617,7 @@ export function createStudioHandler(
                     "node.insert",
                     "node.remove",
                     "node.move",
+                    "component.extract",
                     "entity.create",
                     "entity.setFields",
                     "entity.delete",
