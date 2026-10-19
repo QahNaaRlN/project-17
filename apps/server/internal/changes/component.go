@@ -228,9 +228,7 @@ func (s *session) createComponent(id uuid.UUID, body map[string]any) error {
 
 // revertExtract — undo извлечения: страница восстанавливается, компонент выходит из CS.
 func (s *session) revertExtract(target uuid.UUID, raw json.RawMessage) (recordInput, error) {
-	if !s.historical {
-		return recordInput{}, commandbus.Validation(map[string]string{"type": "component.revertExtract создаётся только отменой"})
-	}
+	// Клиент не передаёт этот тип: validateApply отклоняет его, он приходит только из истории.
 	d, err := s.load(target)
 	if err != nil {
 		return recordInput{}, err

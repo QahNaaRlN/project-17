@@ -20,7 +20,7 @@ var extractList = map[string]any{"type": "list", "of": map[string]any{"type": "o
 func extractSetup(t *testing.T) *cmstest.Env {
 	e := cntSetup(t)
 	var m map[string]any
-	_ = json.Unmarshal([]byte(cmstest.DefaultManifest), &m)
+	_ = json.Unmarshal([]byte(strings.TrimSuffix(cmstest.DefaultManifest, "}")+","+cntSchemas+"}"), &m)
 	m["dataSources"] = map[string]any{"store.products": map[string]any{"result": extractList}}
 	m["components"] = map[string]any{"Panel": map[string]any{"container": true, "props": map[string]any{}}}
 	raw, _ := json.Marshal(m)
@@ -143,7 +143,9 @@ func TestComponentExtractCommandSTU402407408(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Must(e.Admin, "undo", map[string]any{"changesetId": cs, "expectedSeq": cntSeq(e, cs)}, nil)
-	e.Must(e.Admin, "undo", map[string]any{"changesetId": cs, "expectedSeq": cntSeq(e, cs)}, nil)
+	if err := e.Do(e.Admin, "undo", map[string]any{"changesetId": cs, "expectedSeq": cntSeq(e, cs)}, nil); err != nil {
+		t.Fatalf("%v %s", err, mustJSON(t, err.(*commandbus.Error).Params))
+	}
 	if restored, _ := extractBody(e, page, &cs); mustJSON(t, restored) != mustJSON(t, before) {
 		t.Fatal("second undo")
 	}
@@ -265,4 +267,102 @@ func mustJSON(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestComponentExtractRejectionsSTU407410(t *testing.T) {
+	e := extractSetup(t)
+	cs := cntCS(e)
+	page := extractPage(e, cs, "/rejections")
+	// component.write без design.compose недостаточно.
+	writer := e.Human("component-only", auth.DesignRead, auth.ComponentWrite)
+	var own changes.Changeset
+	e.Must(writer, "create-changeset", map[string]any{"title": "own"}, &own)
+	if _, err := extractApply(e, writer, own.ID, page, extractPayload("A")); cmstest.Code(err) != "FORBIDDEN" {
+		t.Fatalf("design.compose: %v", err)
+	}
+	bad := extractPayload("A")
+	bad["unknown"] = true
+	if _, err := extractApply(e, e.Admin, cs, page, bad); opCode(err) != "PAYLOAD_INVALID" {
+		t.Fatalf("strict payload: %v", err)
+	}
+	missing := extractPayload("A")
+	missing["nodeId"] = "n_missing"
+	if _, err := extractApply(e, e.Admin, cs, page, missing); opCode(err) != "NODE_NOT_FOUND" {
+		t.Fatalf("node: %v", err)
+	}
+	// План: чужой черновик доступен для чтения с причиной, неизвестный документ — 404.
+	other := e.Human("other-designer", auth.DesignRead, auth.DesignCompose, auth.ComponentWrite)
+	plan, err := changes.ExtractPlan(context.Background(), e.Q, other, page, cs, "n_grid", "staging")
+	if err != nil || len(plan.Blockers) != 1 || plan.Blockers[0].Code != "CHANGESET_READ_ONLY" {
+		t.Fatalf("other owner: %v %+v", err, plan.Blockers)
+	}
+	if _, err := changes.ExtractPlan(context.Background(), e.Q, e.Admin, uuid.New(), cs, "n_grid", ""); cmstest.Code(err) != "NOT_FOUND" {
+		t.Fatalf("document: %v", err)
+	}
+	if _, err := changes.ExtractPlan(context.Background(), e.Q, e.Human("nobody"), page, cs, "n_grid", ""); cmstest.Code(err) != "FORBIDDEN" {
+		t.Fatalf("design.read: %v", err)
+	}
+}
+
+func TestComponentExtractLockedZoneSTU406(t *testing.T) {
+	e := extractSetup(t)
+	cs := cntCS(e)
+	made, err := cntOp(e, cs, "document.create", nil, map[string]any{"kind": "page", "path": "/locked", "root": map[string]any{
+		"id": "n_root", "type": "Box", "zone": map[string]any{"id": "header", "mode": "SYSTEM", "locked": true}, "children": []any{map[string]any{
+			"id": "n_block", "type": "Stack", "children": []any{map[string]any{"id": "n_text", "type": "Text"}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := made.Operations[0].Target
+	cntPublish(e, cs)
+	designer := e.Human("designer-locked", auth.DesignRead, auth.DesignCompose, auth.ComponentWrite)
+	var own changes.Changeset
+	e.Must(designer, "create-changeset", map[string]any{"title": "locked"}, &own)
+	if _, err := extractApply(e, designer, own.ID, page, map[string]any{"nodeId": "n_block", "name": "Locked"}); opCode(err) != "POLICY_ZONES_MANAGE_REQUIRED" {
+		t.Fatalf("locked: %v", err)
+	}
+}
+
+func TestComponentExtractContentInputSTU407(t *testing.T) {
+	e := extractSetup(t)
+	cs := cntCS(e)
+	made, err := cntOp(e, cs, "document.create", nil, map[string]any{"kind": "page", "path": "/content/:slug",
+		"content": map[string]any{"schema": "Article", "resolve": map[string]any{"by": "routeParam", "field": "slug", "param": "slug"}}, "root": map[string]any{
+		"id": "n_root", "type": "Box", "children": []any{map[string]any{
+			"id": "n_wrap", "type": "Stack", "children": []any{map[string]any{
+				"id": "n_block", "type": "Stack", "children": []any{
+					map[string]any{"id": "n_head", "type": "Heading", "bindings": map[string]any{"text": "$content.title"}},
+					map[string]any{"id": "n_panel", "type": "Panel"}}}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := made.Operations[0].Target
+	before, _ := extractBody(e, page, &cs)
+	payload := map[string]any{"nodeId": "n_block", "name": "Content", "inputs": map[string]any{"title": map[string]any{"from": []any{map[string]any{"nodeId": "n_head", "prop": "text"}}}}}
+	if _, err := extractApply(e, e.Human("no-content", auth.DesignRead, auth.DesignCompose, auth.ComponentWrite), cs, page, payload); err == nil {
+		t.Fatal("content.read required")
+	}
+	r, err := extractApply(e, e.Admin, cs, page, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := r.Operations[0].After.(map[string]any)["instanceNodeId"].(string)
+	// Тип входа вложенного Composed берётся из компонента этого CS.
+	plan, err := changes.ExtractPlan(context.Background(), e.Q, e.Admin, page, cs, "n_wrap", "staging")
+	if err != nil || len(plan.Blockers) != 0 {
+		t.Fatalf("plan: %v %+v", err, plan.Blockers)
+	}
+	found := false
+	for _, c := range plan.Candidates {
+		found = found || c.NodeID == instance && c.Prop == "title" && c.External
+	}
+	if !found {
+		t.Fatalf("nested instance input: %+v", plan.Candidates)
+	}
+	if err := e.Do(e.Admin, "undo", map[string]any{"changesetId": cs, "expectedSeq": cntSeq(e, cs)}, nil); err != nil {
+		t.Fatalf("%v %s", err, mustJSON(t, err.(*commandbus.Error).Params))
+	}
+	if restored, _ := extractBody(e, page, &cs); mustJSON(t, restored) != mustJSON(t, before) {
+		t.Fatal("undo with content input")
+	}
 }

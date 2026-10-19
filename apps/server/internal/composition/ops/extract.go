@@ -179,9 +179,6 @@ func (x *extraction) node(id string) map[string]any {
 // slotRange проверяет диапазон соседей и возвращает родителя, список и начальный индекс.
 func (x *extraction) slotRange(name string, ids []string) (string, string, int, error) {
 	ptr := "/payload/slots/" + name
-	if len(ids) == 0 {
-		return "", "", 0, extractFail("COMPONENT_EXTRACT_SLOT_INVALID", ptr, "", "диапазон слота пуст")
-	}
 	parent, ok := x.parentOf[ids[0]]
 	if !ok || !x.part[ids[0]] || ids[0] == x.root {
 		return "", "", 0, extractFail("COMPONENT_EXTRACT_SLOT_INVALID", ptr, ids[0], "узел слота должен быть внутри поддерева, но не его корнем")
@@ -566,7 +563,8 @@ func Extract(page map[string]any, p ExtractPayload, env ExtractEnv) (ExtractResu
 	revert := map[string]any{"componentId": componentID, "instanceNodeId": instanceID, "instance": cloneValue(instance), "before": cloneValue(before), "redo": canonical}
 	var warnings []ir.Diagnostic
 	for _, name := range sortedKeys(inputs) {
-		if len(p.Inputs[name].From) == 0 && !usesProp(doc, name) {
+		// Объявленный вход пока не используется: на странице нет выражений $props.
+		if len(p.Inputs[name].From) == 0 {
 			warnings = append(warnings, ir.Diagnostic{Code: "COMPONENT_INPUT_UNUSED", Severity: ir.SeverityWarning, Pointer: "/inputs/" + name, Message: "вход пока не используется внутри компонента"})
 		}
 	}
@@ -750,13 +748,8 @@ func (x *extraction) input(name string, in ExtractInput, component map[string]bo
 }
 
 func structuralProp(n map[string]any, prop string) bool {
-	switch n["type"] {
-	case "Repeat":
-		return prop == "key" || prop == "as" || prop == "limit"
-	case "Slot":
-		return prop == "name"
-	}
-	return false
+	// Slot встречается только в документах-компонентах, а извлечение — только из страницы.
+	return n["type"] == "Repeat" && (prop == "key" || prop == "as" || prop == "limit")
 }
 
 // typeOnly — тип свойства без значения по умолчанию и описания (их задаёт вход).
@@ -887,10 +880,7 @@ func (x *extraction) scopes(id string, v any, ptr string, strict bool, locals ma
 // itemScoped — у узла есть Repeat-предок внутри поддерева (alias — для $each).
 func (x *extraction) itemScoped(id, alias string) bool {
 	for child := id; child != x.root; {
-		parent, ok := x.parentOf[child]
-		if !ok {
-			return false
-		}
+		parent := x.parentOf[child] // каждый некорневой узел поддерева имеет родителя в нём
 		p := x.node(parent)
 		if p["type"] == "Repeat" && slices.Contains(list(p, ""), any(child)) {
 			as, _ := asMap(p["props"])["as"].(string)
@@ -940,21 +930,6 @@ func localRefs(doc map[string]any) map[string]bool {
 		}
 	}
 	return used
-}
-
-func usesProp(doc map[string]any, name string) bool {
-	found := false
-	for _, raw := range nodes(doc) {
-		n, _ := raw.(map[string]any)
-		for _, field := range []string{"props", "bindings", "when", "on"} {
-			strs(n[field], func(s string) {
-				if m := scopePattern.FindStringSubmatch(s); m != nil && m[1] == "props" && m[2] == name {
-					found = true
-				}
-			})
-		}
-	}
-	return found
 }
 
 // effectiveMode — режим места извлечения: проект → документ → зоны предков.

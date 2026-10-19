@@ -220,6 +220,8 @@ func classify(x *extraction, id string, v any) (string, bool) {
 		case "each":
 			if !x.itemScoped(id, m[2]) {
 				kind, external = "item", true
+			} else if kind == "binding" {
+				kind = "item"
 			}
 		case "context":
 			if kind == "binding" {
