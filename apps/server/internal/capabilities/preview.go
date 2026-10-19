@@ -68,7 +68,7 @@ type previewMatch struct {
 	Registration *store.PreviewRegistration
 	Observation  *store.CapabilityGithubObservation
 	HeadSHA      string
-	Manifest     object
+	Hash         string
 	Action       object
 }
 
@@ -126,8 +126,8 @@ func matchPreview(ctx context.Context, q *store.Queries, r store.CapabilityReque
 	if e != nil {
 		return m, e
 	}
-	m.Manifest = parse(man.Body)
-	m.Action = obj(obj(m.Manifest["actions"])[r.Key])
+	m.Hash = man.Hash
+	m.Action = obj(obj(parse(man.Body)["actions"])[r.Key])
 	if m.Action == nil {
 		m.State = PreviewKeyMissing
 		return m, nil
@@ -211,23 +211,21 @@ func previewCall(ctx context.Context, q *store.Queries, r store.CapabilityReques
 }
 
 // storedCall returns the preview call for the current manifest, or the bare
-// action when it has no required args (STU-321).
-func storedCall(ctx context.Context, q *store.Queries, r store.CapabilityRequest, env store.Environment, m previewMatch) (object, string, error) {
+// action when it has no required args (STU-321), with the saved args revision.
+func storedCall(ctx context.Context, q *store.Queries, r store.CapabilityRequest, env store.Environment, m previewMatch) (object, string, int64, error) {
 	a, e := q.GetCapabilityPreviewArgs(ctx, store.GetCapabilityPreviewArgsParams{ProjectID: r.ProjectID, RequestID: r.ID, EnvironmentID: env.ID})
 	if e != nil && !errors.Is(e, pgx.ErrNoRows) {
-		return nil, "", e
+		return nil, "", 0, e
 	}
-	if e == nil && a.ManifestID == m.Registration.ManifestID {
-		return parse(a.Args), "set", nil
+	switch {
+	case e == nil && a.ManifestID == m.Registration.ManifestID:
+		return parse(a.Args), "set", a.Revision, nil
+	case !needsArgs(m.Action):
+		return object{"action": r.Key}, "not_required", a.Revision, nil
+	case e == nil:
+		return nil, "stale", a.Revision, nil
 	}
-	status := "missing"
-	if e == nil {
-		status = "stale"
-	}
-	if needsArgs(m.Action) {
-		return nil, status, nil
-	}
-	return object{"action": r.Key}, "not_required", nil
+	return nil, "missing", 0, nil
 }
 
 // SetPreviewArgs — payload set-capability-preview-args (STU-321).
@@ -278,22 +276,18 @@ func setPreviewArgs(ctx context.Context, tx pgx.Tx, a auth.Actor, p SetPreviewAr
 	if !ready(m.State) {
 		return nil, previewError(http.StatusConflict, "PREVIEW_NOT_READY")
 	}
-	man, e := q.GetManifestByID(ctx, store.GetManifestByIDParams{ProjectID: a.ProjectID, ID: m.Registration.ManifestID})
-	if e != nil {
-		return nil, e
-	}
-	if man.Hash != p.ManifestHash {
+	if m.Hash != p.ManifestHash {
 		return nil, previewError(http.StatusConflict, "PREVIEW_ARGS_STALE")
 	}
 	calls := arr(jsonValue(p.Handlers))
 	if len(calls) != 1 || obj(calls[0])["action"] != r.Key {
 		return nil, previewError(http.StatusUnprocessableEntity, "PREVIEW_ARGS_INVALID")
 	}
-	current, e := q.GetCapabilityPreviewArgs(ctx, store.GetCapabilityPreviewArgsParams{ProjectID: a.ProjectID, RequestID: r.ID, EnvironmentID: env.ID})
-	if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+	_, _, revision, e := storedCall(ctx, q, r, env, m)
+	if e != nil {
 		return nil, e
 	}
-	if current.Revision != p.ExpectedArgsRevision {
+	if revision != p.ExpectedArgsRevision {
 		return nil, fail("CAPABILITY_REVISION_CONFLICT")
 	}
 	doc, e := q.ChangesetWorkingVersions(ctx, r.ChangesetID)
@@ -313,24 +307,24 @@ func setPreviewArgs(ctx context.Context, tx pgx.Tx, a auth.Actor, p SetPreviewAr
 	if !valid {
 		return nil, previewError(http.StatusUnprocessableEntity, "PREVIEW_ARGS_INVALID")
 	}
-	saved, e := q.SetCapabilityPreviewArgs(ctx, store.SetCapabilityPreviewArgsParams{ProjectID: a.ProjectID, RequestID: r.ID, EnvironmentID: env.ID, ManifestID: man.ID, Args: raw(calls[0]), SetBy: a.ID})
+	saved, e := q.SetCapabilityPreviewArgs(ctx, store.SetCapabilityPreviewArgsParams{ProjectID: a.ProjectID, RequestID: r.ID, EnvironmentID: env.ID, ManifestID: m.Registration.ManifestID, Args: raw(calls[0]), SetBy: a.ID})
 	if e != nil {
 		return nil, e
 	}
 	if e = projects.Audit(ctx, q, env, &a.ID, "preview_args_set", commandbus.ReasonFrom(ctx), map[string]any{"requestId": r.ID, "revision": saved.Revision}); e != nil {
 		return nil, e
 	}
-	return object{"requestId": r.ID, "environment": env.Name, "manifestHash": man.Hash, "handlers": []any{jsonValue(saved.Args)}, "revision": saved.Revision}, nil
+	return object{"requestId": r.ID, "environment": env.Name, "manifestHash": m.Hash, "handlers": []any{jsonValue(saved.Args)}, "revision": saved.Revision}, nil
 }
 
-func previewView(env store.Environment, m previewMatch, argsStatus string, argsRevision int64, manifestHash string) object {
+func previewView(env store.Environment, m previewMatch, argsStatus string, argsRevision int64) object {
 	name := env.Name
 	if env.ArchivedName != nil {
 		name = *env.ArchivedName
 	}
 	out := object{"environment": name, "pullNumber": env.SourcePullNumber, "state": m.State, "expiresAt": env.ExpiresAt, "archivedAt": env.ArchivedAt, "archiveReason": env.ArchiveReason, "registration": nil, "observation": nil, "keyAvailable": m.Action != nil, "args": object{"status": argsStatus, "revision": argsRevision}}
 	if m.Registration != nil {
-		out["registration"] = object{"seq": m.Registration.Seq, "commit": m.Registration.Commit, "registeredAt": m.Registration.RegisteredAt, "appUrl": m.Registration.AppUrl, "manifestHash": manifestHash}
+		out["registration"] = object{"seq": m.Registration.Seq, "commit": m.Registration.Commit, "registeredAt": m.Registration.RegisteredAt, "appUrl": m.Registration.AppUrl, "manifestHash": m.Hash}
 	}
 	if m.Observation != nil {
 		out["observation"] = object{"headSha": m.HeadSHA, "observedAt": m.Observation.ObservedAt, "freshUntil": m.Observation.FreshUntil}
@@ -373,31 +367,13 @@ func (s *GithubService) PreviewGet(ctx context.Context, q *store.Queries, a auth
 		if e != nil {
 			return nil, e
 		}
-		status, revision, hash := "missing", int64(0), ""
-		if m.Registration != nil {
-			man, e := q.GetManifestByID(ctx, store.GetManifestByIDParams{ProjectID: a.ProjectID, ID: m.Registration.ManifestID})
-			if e != nil {
-				return nil, e
-			}
-			hash = man.Hash
-		}
+		status, revision := "missing", int64(0)
 		if ready(m.State) {
-			call, st, e := storedCall(ctx, q, r, env, m)
-			if e != nil {
+			if _, status, revision, e = storedCall(ctx, q, r, env, m); e != nil {
 				return nil, e
 			}
-			status = st
-			if call != nil && st == "set" {
-				args, _ := q.GetCapabilityPreviewArgs(ctx, store.GetCapabilityPreviewArgsParams{ProjectID: a.ProjectID, RequestID: r.ID, EnvironmentID: env.ID})
-				revision = args.Revision
-			}
 		}
-		if status != "set" {
-			if args, e := q.GetCapabilityPreviewArgs(ctx, store.GetCapabilityPreviewArgsParams{ProjectID: a.ProjectID, RequestID: r.ID, EnvironmentID: env.ID}); e == nil {
-				revision = args.Revision
-			}
-		}
-		items = append(items, previewView(env, m, status, revision, hash))
+		items = append(items, previewView(env, m, status, revision))
 	}
 	out["items"] = items
 	return out, nil
@@ -438,7 +414,7 @@ func ProjectPreview(ctx context.Context, q *store.Queries, project, environment 
 		if !ready(m.State) {
 			continue
 		}
-		call, _, e := storedCall(ctx, q, r, env, m)
+		call, _, _, e := storedCall(ctx, q, r, env, m)
 		if e != nil {
 			return nil, e
 		}
@@ -528,7 +504,7 @@ func ChangesetPreview(ctx context.Context, q *store.Queries, a auth.Actor, cs uu
 				}
 				state = m.State
 				if ready(m.State) {
-					call, _, e := storedCall(ctx, q, r, env, m)
+					call, _, _, e := storedCall(ctx, q, r, env, m)
 					if e != nil {
 						return nil, e
 					}

@@ -14,6 +14,9 @@ func TestSTU328ParseExactOrigins(t *testing.T) {
 	if !slices.Equal(l.Origins(), want) {
 		t.Fatalf("origins: %v", l.Origins())
 	}
+	if v6, err := Parse("http://[::1]"); err != nil || v6.Origins()[0] != "http://[::1]" {
+		t.Fatal("IPv6 loopback without port", v6.Origins(), err)
+	}
 	if empty, err := Parse(""); err != nil || len(empty.Origins()) != 0 {
 		t.Fatal("empty list", empty, err)
 	}
