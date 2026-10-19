@@ -5,6 +5,7 @@ import {
   type GithubView,
   type GithubObservation,
 } from "./capability-github.js";
+import { previewList, type PreviewList } from "./capability-preview.js";
 import { validateDiffIndex, validateDiffPage } from "./review-diff.js";
 import {
   publicationList,
@@ -191,6 +192,32 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
           canManage: false,
         });
       return v;
+    },
+    async capabilityPreview(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("PAYLOAD_INVALID");
+      const c = await api.config(signal);
+      return previewList(
+        await request<PreviewList>(
+          "/api/v1/capability-requests/" +
+            id +
+            "/preview?" +
+            new URLSearchParams({ environment: c.environment }),
+          signal,
+        ),
+      );
+    },
+    async previewArgs(attempt) {
+      const account = await api.account();
+      if (!account.authenticated || (attempt.actor && account.user?.id !== attempt.actor))
+        throw new StudioError("SESSION_CHANGED", true);
+      const v = await request<{ result: { revision?: number } }>(
+        "/api/v1/commands/set-capability-preview-args",
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      if (!Number.isSafeInteger(v?.result?.revision))
+        throw new StudioError("RESPONSE_INVALID", true);
     },
     async githubCommand(attempt) {
       const account = await api.account();
@@ -1079,19 +1106,25 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         key,
       );
     },
-    async preview(session, signal) {
-      const result = await request<{ result: { token: string; expiresAt: string } }>(
+    async preview(session, signal, environment) {
+      const result = await request<{
+        result: { token: string; expiresAt: string; registrationSeq?: number };
+      }>(
         "/api/v1/commands/create-preview-token",
         signal,
         {
-          payload: { environment: session.config.environment, changesetId: session.changeset.id },
-          reason: "Studio: preview page draft",
+          payload: {
+            environment: environment ?? session.config.environment,
+            changesetId: session.changeset.id,
+          },
+          reason: environment ? "Studio: preview PR build" : "Studio: preview page draft",
         },
         crypto.randomUUID(),
       );
       if (
         typeof result.result.token !== "string" ||
-        !Number.isFinite(Date.parse(result.result.expiresAt))
+        !Number.isFinite(Date.parse(result.result.expiresAt)) ||
+        (environment !== undefined && !Number.isSafeInteger(result.result.registrationSeq))
       )
         throw new StudioError("PREVIEW_INVALID");
       return result.result;

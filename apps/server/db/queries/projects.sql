@@ -11,4 +11,4 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: ListEnvironments :many
-SELECT * FROM environments WHERE project_id = $1 ORDER BY name;
+SELECT * FROM environments WHERE project_id = $1 AND archived_at IS NULL ORDER BY name;

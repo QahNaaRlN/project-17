@@ -22,6 +22,7 @@ type Result struct {
 }
 
 func Register(bus *commandbus.Bus) {
+	registerPreviewArgs(bus)
 	commandbus.Register(bus, commandbus.Command[Create, Result]{Name: "create-capability-request", Authorize: func(a auth.Actor, _ Create) error { return author(a) }, Validate: func(p Create) error {
 		if !keyPattern.MatchString(p.Key) || len(p.Key) > 200 || p.DocumentID == uuid.Nil || p.ChangesetID == uuid.Nil || !codeHash(p.ExpectedManifestHash) || !validAnchor(p.NodeID, p.Event) {
 			return fail("CAPABILITY_REQUEST_INVALID")

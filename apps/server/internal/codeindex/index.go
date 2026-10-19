@@ -17,7 +17,8 @@ import (
 const MaxBytes = 1 << 20
 
 var ErrInvalid = errors.New("CODE_INDEX_INVALID")
-var commitPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
+// CommitPattern — полный SHA-1 или SHA-256 commit (STU-316).
+var CommitPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 var HashPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type Ref struct {
@@ -126,7 +127,7 @@ func Parse(raw []byte) (Index, []byte, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&index) != nil || index.Repo.Root != "." || !commitPattern.MatchString(index.Repo.Commit) || index.Elements == nil || len(index.Elements) > 1000 ||
+	if decoder.Decode(&index) != nil || index.Repo.Root != "." || !CommitPattern.MatchString(index.Repo.Commit) || index.Elements == nil || len(index.Elements) > 1000 ||
 		!Path(index.Conventions.Registry) || !Text(index.Conventions.TestCommand, 512) || !Text(index.Conventions.ManifestCommand, 512) {
 		return index, nil, ErrInvalid
 	}

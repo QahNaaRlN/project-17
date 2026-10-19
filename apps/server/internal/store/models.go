@@ -310,6 +310,17 @@ type CapabilityGithubObservation struct {
 	FreshUntil     time.Time `json:"freshUntil"`
 }
 
+type CapabilityPreviewArg struct {
+	ProjectID     uuid.UUID `json:"projectId"`
+	RequestID     uuid.UUID `json:"requestId"`
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	ManifestID    uuid.UUID `json:"manifestId"`
+	Args          []byte    `json:"args"`
+	Revision      int64     `json:"revision"`
+	SetBy         uuid.UUID `json:"setBy"`
+	SetAt         time.Time `json:"setAt"`
+}
+
 type CapabilityRequest struct {
 	ID                  uuid.UUID  `json:"id"`
 	ProjectID           uuid.UUID  `json:"projectId"`
@@ -435,15 +446,24 @@ type DeliveryKey struct {
 }
 
 type Environment struct {
-	ID               uuid.UUID  `json:"id"`
-	ProjectID        uuid.UUID  `json:"projectId"`
-	Name             string     `json:"name"`
-	Kind             string     `json:"kind"`
-	ActiveManifestID *uuid.UUID `json:"activeManifestId"`
-	AppUrl           *string    `json:"appUrl"`
-	ExpiresAt        *time.Time `json:"expiresAt"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	PreviewKey       []byte     `json:"previewKey"`
+	ID                      uuid.UUID  `json:"id"`
+	ProjectID               uuid.UUID  `json:"projectId"`
+	Name                    string     `json:"name"`
+	Kind                    string     `json:"kind"`
+	ActiveManifestID        *uuid.UUID `json:"activeManifestId"`
+	AppUrl                  *string    `json:"appUrl"`
+	ExpiresAt               *time.Time `json:"expiresAt"`
+	CreatedAt               time.Time  `json:"createdAt"`
+	PreviewKey              []byte     `json:"previewKey"`
+	SourceBaseEnvironmentID *uuid.UUID `json:"sourceBaseEnvironmentId"`
+	SourceConfigID          *uuid.UUID `json:"sourceConfigId"`
+	SourceRepositoryID      *string    `json:"sourceRepositoryId"`
+	SourcePullNumber        *int64     `json:"sourcePullNumber"`
+	RegistrationSeq         int32      `json:"registrationSeq"`
+	LastRegisteredAt        *time.Time `json:"lastRegisteredAt"`
+	ArchivedAt              *time.Time `json:"archivedAt"`
+	ArchivedName            *string    `json:"archivedName"`
+	ArchiveReason           *string    `json:"archiveReason"`
 }
 
 type HumanSession struct {
@@ -549,6 +569,29 @@ type PresenceLease struct {
 	ChangesetID uuid.UUID `json:"changesetId"`
 	Environment string    `json:"environment"`
 	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
+type PreviewEnvironmentAudit struct {
+	ID            uuid.UUID  `json:"id"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+	ActorID       *uuid.UUID `json:"actorId"`
+	Event         string     `json:"event"`
+	Reason        string     `json:"reason"`
+	Data          []byte     `json:"data"`
+	CreatedAt     time.Time  `json:"createdAt"`
+}
+
+type PreviewRegistration struct {
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"projectId"`
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	Seq           int32     `json:"seq"`
+	ManifestID    uuid.UUID `json:"manifestId"`
+	Commit        string    `json:"commit"`
+	AppUrl        *string   `json:"appUrl"`
+	RegisteredBy  uuid.UUID `json:"registeredBy"`
+	RegisteredAt  time.Time `json:"registeredAt"`
 }
 
 type PreviewSchemaSnapshot struct {

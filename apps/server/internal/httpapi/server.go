@@ -84,6 +84,7 @@ func NewRouter(d Deps) http.Handler {
 		capabilityRoutes(r, d)
 		capabilityDeliveryRoutes(r, d)
 		capabilityGithubRoutes(r, d)
+		capabilityPreviewRoutes(r, d)
 		r.Get("/changesets/{id}/history", historyHandler(d))
 		r.Post("/commands/{name}", commandHandler(d))
 		r.Get("/asset-uploads/{id}", func(w http.ResponseWriter, r *http.Request) {

@@ -12,6 +12,7 @@ import { behaviorFields, editableChain } from "./behavior.js";
 import type { CapabilityAttempt, CapabilityCommand, CapabilityRequest } from "./capabilities.js";
 import { capabilityMessage, capabilityURL } from "./capabilities.js";
 import { CapabilityDeliveryPanel } from "./capability-delivery-panel.js";
+import { CapabilityPreviewPanel } from "./capability-preview-panel.js";
 
 const types = ["string", "text", "number", "boolean", "enum", "reference", "link"] as const;
 type Arg = {
@@ -648,6 +649,9 @@ export function CapabilityCard({
       <h3>{request.title}</h3>
       {api.github && api.githubHistory && api.githubCommand && request.status !== "draft" && (
         <CapabilityGithubPanel key={request.id} {...{ api, editor, request }} />
+      )}
+      {api.capabilityPreview && request.status !== "draft" && (
+        <CapabilityPreviewPanel key={"preview-" + request.id} {...{ api, editor, request }} />
       )}
       {api.deliveryCommand && api.deliveries && api.delivery && api.deliveryPreview && (
         <CapabilityDeliveryPanel {...{ api, editor, request }} />

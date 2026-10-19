@@ -15,7 +15,16 @@ import {
 import { applyOperations } from "./operations.js";
 import { scopeProblems } from "./data-sources.js";
 import type { ContentOperation } from "./types.js";
+/** A PR preview environment shown read-only (STU-329/330). */
+export interface PreviewTarget {
+  environment: string;
+  origin: string;
+  pullNumber: number;
+  registrationSeq: number;
+  commit: string;
+}
 export interface EditorState {
+  viewTarget: PreviewTarget | null;
   bindingRetry: boolean;
   remotePending: boolean;
   contentRetry: boolean;
@@ -50,6 +59,7 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    viewTarget: null,
     bindingRetry: false,
     remotePending: false,
     contentRetry: false,
@@ -86,13 +96,24 @@ export function createEditor(
   const now = options.now ?? Date.now,
     setTimer = options.setTimer ?? setTimeout,
     clearTimer = options.clearTimer ?? clearTimeout;
+  function origin(state: EditorState) {
+    return state.viewTarget?.origin ?? state.session?.config.appOrigin ?? "";
+  }
   function send(type: string, payload: Record<string, unknown>) {
     const state = store.getState();
+    // A PR preview is read-only: Studio never patches its document (STU-330).
+    if (state.viewTarget && type === "document.patch") return;
     if (frame && state.session)
       frame.postMessage(
         { cms: "preview", v: 1, type, id: "studio-" + ++counter, payload },
-        state.session.config.appOrigin,
+        origin(state),
       );
+  }
+  /** Mutations are unavailable while a PR preview environment is shown. */
+  function readOnly() {
+    if (!store.getState().viewTarget) return false;
+    store.setState({ error: "PREVIEW_READ_ONLY" });
+    return true;
   }
   function invalidate() {
     const session = store.getState().session;
@@ -108,13 +129,16 @@ export function createEditor(
   }
   async function preview(session: Session, stamp: number) {
     try {
-      const credential = await api.preview(session, lifecycle.signal);
+      const target = store.getState().viewTarget;
+      const credential = await api.preview(session, lifecycle.signal, target?.environment);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
       const expires = Date.parse(credential.expiresAt),
         remaining = expires - now();
       if (!Number.isFinite(remaining) || remaining <= 0 || remaining > 15 * 60_000 + 5000)
         throw new StudioError("PREVIEW_INVALID");
-      const url = new URL("/api/cms/preview", session.config.appOrigin);
+      if (target && credential.registrationSeq !== target.registrationSeq)
+        throw new StudioError("PREVIEW_OUTDATED");
+      const url = new URL("/api/cms/preview", target?.origin ?? session.config.appOrigin);
       url.searchParams.set("token", credential.token);
       url.searchParams.set("path", session.record.path!);
       initialized = false;
@@ -207,6 +231,7 @@ export function createEditor(
       instance: null,
       previewError: null,
       canvasPick: 0,
+      viewTarget: null,
     });
     try {
       const session = await api.openWork(id, lifecycle.signal);
@@ -250,6 +275,7 @@ export function createEditor(
       workflowDiagnostics: [],
       publication: null,
       canvasPick: 0,
+      viewTarget: null,
       session: null,
       document: null,
       selected: null,
@@ -353,6 +379,7 @@ export function createEditor(
     if (store.getState().remotePending) void refreshRemote();
   }
   async function apply(operations: Operation[], selection?: string, source?: "json") {
+    if (readOnly()) return;
     if (
       operations.some(
         (op) =>
@@ -496,6 +523,7 @@ export function createEditor(
     }
   }
   async function changeHistory(action: "undo" | "redo") {
+    if (readOnly()) return;
     if (fieldDirty()) {
       store.setState({ error: "FIELD_DRAFT_PENDING" });
       return;
@@ -521,6 +549,7 @@ export function createEditor(
     await sendHistory();
   }
   async function workflow(action: WorkflowAction, comment = "", diffSnapshot?: string) {
+    if (readOnly()) return;
     const state = store.getState(),
       session = state.session;
     if (
@@ -604,6 +633,7 @@ export function createEditor(
     invalidate();
   }
   async function applyContent(operations: ContentOperation[], expectedSeq: number) {
+    if (readOnly()) return null;
     const state = store.getState(),
       session = state.session;
     if (
@@ -676,6 +706,7 @@ export function createEditor(
     return result ?? null;
   }
   async function applyBindings(operations: Operation[], selection?: string, source?: "json") {
+    if (readOnly()) return;
     const state = store.getState(),
       session = state.session,
       document = state.document;
@@ -847,8 +878,7 @@ export function createEditor(
   function receive(event: { origin: string; source: unknown; data: unknown }) {
     const state = store.getState(),
       session = state.session;
-    if (!session || !frame || event.source !== frame || event.origin !== session.config.appOrigin)
-      return;
+    if (!session || !frame || event.source !== frame || event.origin !== origin(state)) return;
     try {
       const data = event.data as {
         cms?: unknown;
@@ -1047,6 +1077,29 @@ export function createEditor(
     },
     width(width: number) {
       if ([375, 768, 1024, 1440].includes(width)) store.setState({ width });
+    },
+    /** Switch the environment the page is viewed in (STU-330). Pending drafts
+     * block the switch; a new target restarts the preview with a new token. */
+    viewEnvironment(target: PreviewTarget | null) {
+      const state = store.getState();
+      if (fieldDirty() || contentDirty() || state.dirtyFields.json) {
+        store.setState({ error: "FIELD_DRAFT_PENDING" });
+        return Promise.resolve();
+      }
+      const stamp = ++epoch;
+      initialized = false;
+      store.setState({
+        viewTarget: target,
+        previewSrc: "",
+        connected: false,
+        rects: {},
+        previewError: null,
+        error: null,
+        ...(target ? { mode: "interact" as const } : {}),
+      });
+      if (state.session?.record)
+        return preview({ ...state.session, record: state.session.record }, stamp);
+      return Promise.resolve();
     },
     retryPreview() {
       const session = store.getState().session;

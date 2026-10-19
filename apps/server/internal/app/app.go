@@ -134,13 +134,16 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return river.AddWorkerSafely(w, &capabilities.DeliveryWorker{Service: capabilityDelivery})
 	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, deliveryRecovery) }, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.GithubWorker{Service: capabilityGithub})
-	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, githubRecovery) })
+	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, githubRecovery) }, func(w *river.Workers) error {
+		return river.AddWorkerSafely(w, &capabilities.PreviewExpiryWorker{Pool: pool})
+	})
 	if err != nil {
 		return err
 	}
 	githubRecovery.Queue = queue
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.GithubRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-github-recovery", RunOnStart: true}))
 	deliveryRecovery.Queue = queue
+	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return capabilities.PreviewExpiryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-preview-expiry", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.DeliveryRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-delivery-recovery", RunOnStart: true}))
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
@@ -152,13 +155,13 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 
 	realtime.Register(bus)
 	bus.WithContext(jobs.WithClient(queue))
-	projects.Register(bus)
+	projects.RegisterWith(bus, projects.Preview{Source: capabilityGithub.PreviewSource, Origins: cfg.PreviewOrigins})
 	identity.Register(bus)
 	changes.Register(bus)
 	workflow.Register(bus)
 	publishing.Register(bus)
 	delivery.Register(bus)
-	manifestregistry.Register(bus)
+	manifestregistry.RegisterWith(bus, cfg.PreviewOrigins)
 	capabilities.Register(bus)
 	assetService.Register(bus)
 	if err := queue.Start(ctx); err != nil {

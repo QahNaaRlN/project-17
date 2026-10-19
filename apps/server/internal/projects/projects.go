@@ -26,10 +26,28 @@ type Environment struct {
 	Kind      string    `json:"kind"`
 	AppURL    *string   `json:"appUrl"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Preview lifecycle (STU-315…326); absent for standard environments.
+	Source           *SourceView `json:"source,omitempty"`
+	RegistrationSeq  *int32      `json:"registrationSeq,omitempty"`
+	LastRegisteredAt *time.Time  `json:"lastRegisteredAt,omitempty"`
+	ExpiresAt        *time.Time  `json:"expiresAt,omitempty"`
+	ArchivedAt       *time.Time  `json:"archivedAt,omitempty"`
+	ArchiveReason    *string     `json:"archiveReason,omitempty"`
 }
 
 func toEnvironment(e store.Environment) Environment {
-	return Environment{ID: e.ID, Name: e.Name, Kind: e.Kind, AppURL: e.AppUrl, CreatedAt: e.CreatedAt}
+	out := Environment{ID: e.ID, Name: e.Name, Kind: e.Kind, AppURL: e.AppUrl, CreatedAt: e.CreatedAt}
+	if e.Kind == "preview" {
+		seq := e.RegistrationSeq
+		out.RegistrationSeq, out.LastRegisteredAt, out.ExpiresAt, out.ArchivedAt, out.ArchiveReason = &seq, e.LastRegisteredAt, e.ExpiresAt, e.ArchivedAt, e.ArchiveReason
+		if e.ArchivedName != nil {
+			out.Name = *e.ArchivedName
+		}
+		if e.SourcePullNumber != nil {
+			out.Source = &SourceView{BaseEnvironmentID: *e.SourceBaseEnvironmentID, RepositoryID: *e.SourceRepositoryID, PullNumber: *e.SourcePullNumber}
+		}
+	}
+	return out
 }
 
 // CreateEnvironmentPayload — payload команды create-environment (08-api.md §3.2).
@@ -37,12 +55,20 @@ type CreateEnvironmentPayload struct {
 	Name   string  `json:"name"`
 	Kind   string  `json:"kind"`
 	AppURL *string `json:"appUrl"`
+	// Source binds a preview environment to a pull request of the base
+	// environment's GitHub configuration (STU-315).
+	Source *SourcePayload `json:"source,omitempty"`
 }
 
 var environmentName = regexp.MustCompile(`^[a-z0-9][a-z0-9/_-]{0,62}$`)
 
-// Register регистрирует команды модуля в шине.
-func Register(bus *commandbus.Bus) {
+// Register регистрирует команды модуля в шине без preview-источников.
+func Register(bus *commandbus.Bus) { RegisterWith(bus, Preview{}) }
+
+// RegisterWith регистрирует команды; cfg настраивает окружения preview/pr-<N>
+// с источником (STU-315…328), без него такие окружения отклоняются.
+func RegisterWith(bus *commandbus.Bus, cfg Preview) {
+	registerPreview(bus, cfg)
 	commandbus.Register(bus, commandbus.Command[CreateEnvironmentPayload, Environment]{
 		Name: "create-environment",
 		// Стандартное окружение создаёт администратор проекта; preview-окружение — CI с правом
@@ -55,6 +81,9 @@ func Register(bus *commandbus.Bus) {
 		},
 		Validate: validateEnvironment,
 		Handle: func(ctx context.Context, tx pgx.Tx, actor auth.Actor, p CreateEnvironmentPayload) (Environment, error) {
+			if p.Source != nil {
+				return cfg.create(ctx, tx, actor, p)
+			}
 			env, err := store.New(tx).CreateEnvironment(ctx, store.CreateEnvironmentParams{
 				ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, Name: p.Name, Kind: p.Kind, AppUrl: p.AppURL,
 			})
@@ -77,6 +106,9 @@ func validateEnvironment(p CreateEnvironmentPayload) error {
 	}
 	if p.Kind != "standard" && p.Kind != "preview" {
 		fields["kind"] = "допустимо: standard, preview"
+	}
+	if p.Source != nil && (p.Kind != "preview" || p.Source.PullNumber < 1 || p.Source.BaseEnvironment == "" || p.Name != PreviewName(p.Source.PullNumber)) {
+		fields["source"] = "preview с источником: kind=preview, имя preview/pr-<pullNumber>, baseEnvironment"
 	}
 	if p.AppURL != nil {
 		u, err := url.Parse(*p.AppURL)

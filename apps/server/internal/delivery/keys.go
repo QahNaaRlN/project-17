@@ -124,6 +124,9 @@ type Access struct {
 	ChangesetID    *uuid.UUID
 	ExpiresAt      time.Time
 	PreviewKeyHash string
+	// BaseEnvironment — standard environment of a PR preview (STU-315). A PR
+	// deployment is configured for its base and reads drafts with this token.
+	BaseEnvironment string
 }
 
 // ErrUnauthenticated — ключ не передан, не найден или отозван.

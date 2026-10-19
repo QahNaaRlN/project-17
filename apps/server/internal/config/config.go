@@ -8,6 +8,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/capabilitywebhook"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/previeworigins"
 	"log/slog"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ type Config struct {
 	S3Bucket           string
 	S3Secure           bool
 	Images             imagedelivery.Config
+	PreviewOrigins     previeworigins.List // CMS_PREVIEW_APP_ORIGINS — точные origin preview-приложений (STU-328)
 }
 
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
@@ -58,6 +60,9 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	}
 	cfg.CapabilityGithub, webhookErr = capabilitygithub.FromEnv(getenv)
 	if webhookErr != nil {
+		errs = append(errs, webhookErr)
+	}
+	if cfg.PreviewOrigins, webhookErr = previeworigins.Parse(getenv("CMS_PREVIEW_APP_ORIGINS")); webhookErr != nil {
 		errs = append(errs, webhookErr)
 	}
 	cfg.Identity = identity.Config{Issuer: getenv("CMS_OIDC_ISSUER"), ClientID: getenv("CMS_OIDC_CLIENT_ID"), ClientSecret: getenv("CMS_OIDC_CLIENT_SECRET"), PublicOrigin: getenv("CMS_STUDIO_PUBLIC_URL"), AllowLoopbackHTTP: getenv("CMS_OIDC_ALLOW_LOOPBACK_HTTP") == "true"}

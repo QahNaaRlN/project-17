@@ -75,6 +75,19 @@ func TestCapabilityQueriesAreScopedBoundedAndNoStore(t *testing.T) {
 			t.Fatal(path, response.StatusCode, value)
 		}
 	}
+	// STU-318/323: preview queries are scoped, bounded and never cached.
+	for _, path := range []string{root + "/preview?environment=staging", root + "/preview"} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if response.StatusCode != 200 || response.Header.Get("Cache-Control") != "private, no-store" || value["items"] == nil {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
+	for path, status := range map[string]int{root + "/preview?environment=production": 404, root + "/preview?x=1": 422, "/api/v1/changesets/" + cs["id"].(string) + "/preview?environment=staging": 404, "/api/v1/changesets/" + cs["id"].(string) + "/preview": 422, "/api/v1/changesets/invalid/preview?environment=preview/pr-1": 0} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if status == 0 && (response.StatusCode < 400 || response.StatusCode >= 500) || status != 0 && response.StatusCode != status {
+			t.Fatal(path, response.StatusCode, value)
+		}
+	}
 	response, pack := e.do(t, "GET", root+"/context-pack?version=2&environment=staging", "", e.authed(nil))
 	if response.StatusCode != 200 || !strings.Contains(response.Header.Get("Content-Disposition"), "attachment;") || response.Header.Get("X-Context-Hash") == "" {
 		t.Fatal(response.StatusCode, pack)
