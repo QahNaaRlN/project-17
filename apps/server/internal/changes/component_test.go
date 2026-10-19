@@ -328,11 +328,11 @@ func TestComponentExtractContentInputSTU407(t *testing.T) {
 	cs := cntCS(e)
 	made, err := cntOp(e, cs, "document.create", nil, map[string]any{"kind": "page", "path": "/content/:slug",
 		"content": map[string]any{"schema": "Article", "resolve": map[string]any{"by": "routeParam", "field": "slug", "param": "slug"}}, "root": map[string]any{
-		"id": "n_root", "type": "Box", "children": []any{map[string]any{
-			"id": "n_wrap", "type": "Stack", "children": []any{map[string]any{
-				"id": "n_block", "type": "Stack", "children": []any{
-					map[string]any{"id": "n_head", "type": "Heading", "bindings": map[string]any{"text": "$content.title"}},
-					map[string]any{"id": "n_panel", "type": "Panel"}}}}}}}})
+			"id": "n_root", "type": "Box", "children": []any{map[string]any{
+				"id": "n_wrap", "type": "Stack", "children": []any{map[string]any{
+					"id": "n_block", "type": "Stack", "children": []any{
+						map[string]any{"id": "n_head", "type": "Heading", "bindings": map[string]any{"text": "$content.title"}},
+						map[string]any{"id": "n_panel", "type": "Panel"}}}}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
