@@ -4,7 +4,7 @@ import type { DataSourceUse, IrDocument } from "@cms/ir";
 import type { Type, Manifest } from "@cms/manifest";
 import type { Editor } from "./editor.js";
 import { layers } from "./fields.js";
-import { contract, location } from "./structure.js";
+import { nodeContract, location } from "./structure.js";
 import {
   compatible,
   registeredSource,
@@ -285,7 +285,7 @@ function DataPanel({ editor, rights }: { editor: Editor; rights?: string[] | und
   const results = resultFields(doc, manifest),
     choices = selected ? bindingFields(doc, manifest, selected.id) : { fields: [], limited: false };
   const properties = selected
-    ? Object.entries(contract(selected.type, manifest)?.props ?? {}).filter(
+    ? Object.entries(nodeContract(selected, manifest)?.props ?? {}).filter(
         ([name]) => selected.type !== "Repeat" || name === "items",
       )
     : [];

@@ -271,6 +271,19 @@ func NewRouter(d Deps) http.Handler {
 			doc, err := changes.GetDocument(r.Context(), store.New(d.Pool), actor.ProjectID, id, cs)
 			respond(w, r, d, doc, err)
 		})
+		r.Get("/documents/{id}/component-extract-plan", func(w http.ResponseWriter, r *http.Request) {
+			id, ok := uuidParam(w, r, d, "id")
+			if !ok {
+				return
+			}
+			cs, err := uuid.Parse(r.URL.Query().Get("changesetId"))
+			if err != nil {
+				writeError(w, r, d.Log, badParam("changesetId", "UUID"))
+				return
+			}
+			plan, err := changes.ExtractPlan(r.Context(), store.New(d.Pool), actorFrom(r.Context()), id, cs, r.URL.Query().Get("nodeId"), r.URL.Query().Get("environment"))
+			respond(w, r, d, plan, err)
+		})
 	})
 
 	r.With(authenticate(d)).Post("/mcp", mcpHandler(d))

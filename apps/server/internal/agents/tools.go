@@ -36,12 +36,13 @@ func Tools() []Tool {
 		{"list_schemas", "Read active content schema contracts", schema(map[string]any{"environment": str}, "environment")},
 		{"get_capabilities", "Read active manifest contracts and available composition capabilities", schema(map[string]any{"environment": str}, "environment")},
 		{"get_capability_request", "Read a request only in the delegated CS/document/environment", schema(map[string]any{"id": idSchema, "changesetId": idSchema, "documentId": idSchema, "environment": str}, "id", "changesetId", "documentId", "environment")},
+		{"plan_component_extract", "Read the server plan for saving a page subtree as a component: candidate inputs, required external inputs, slots and blockers", schema(map[string]any{"changesetId": idSchema, "documentId": idSchema, "nodeId": str}, "changesetId", "documentId", "nodeId")},
 		{"report_missing_capability", "Create an action request DRAFT only. A human must inspect context and explicitly submit it", schema(map[string]any{"changesetId": idSchema, "documentId": idSchema, "environment": str, "expectedSeq": map[string]any{"type": "integer", "minimum": 0}, "reason": str, "payload": schema(map[string]any{"expectedManifestHash": str, "nodeId": str, "event": str, "key": str, "title": str, "description": str, "proposedContract": map[string]any{"type": "object"}, "acceptance": map[string]any{"type": "array", "items": str}}, "expectedManifestHash", "nodeId", "event", "key", "title", "description", "proposedContract", "acceptance")}, "changesetId", "documentId", "environment", "expectedSeq", "reason", "payload")},
 	}
 	// Semantic commands share IR/manifest/zone validators with Studio. No arbitrary command,
 	// raw JSON patch, document replacement, schema, publish, approvals or network tool.
-	types := map[string]string{"insert_node": "node.insert", "move_node": "node.move", "remove_node": "node.remove", "update_props": "node.setProps", "update_design": "node.setDesign", "bind_data": "node.setBinding", "set_behavior": "node.setBehavior", "set_local_content": "localContent.set"}
-	names := []string{"insert_node", "move_node", "remove_node", "update_props", "update_design", "bind_data", "set_behavior", "set_local_content"}
+	types := map[string]string{"insert_node": "node.insert", "move_node": "node.move", "remove_node": "node.remove", "update_props": "node.setProps", "update_design": "node.setDesign", "bind_data": "node.setBinding", "set_behavior": "node.setBehavior", "set_local_content": "localContent.set", "create_component": "component.extract"}
+	names := []string{"insert_node", "move_node", "remove_node", "update_props", "update_design", "bind_data", "set_behavior", "set_local_content", "create_component"}
 	object := map[string]any{"type": "object"}
 	integer := map[string]any{"type": "integer", "minimum": 0}
 	payloads := map[string]any{
@@ -52,6 +53,7 @@ func Tools() []Tool {
 		"update_design":     schema(map[string]any{"nodeId": str, "set": object, "unset": map[string]any{"type": "array", "items": str}}, "nodeId"),
 		"bind_data":         schema(map[string]any{"nodeId": str, "prop": str, "binding": map[string]any{}}, "nodeId", "prop", "binding"),
 		"set_behavior":      schema(map[string]any{"nodeId": str, "event": str, "handlers": map[string]any{"type": "array", "items": object}}, "nodeId", "event", "handlers"),
+		"create_component":  schema(map[string]any{"nodeId": str, "name": str, "description": str, "inputs": object, "slots": object, "localContent": object}, "nodeId", "name"),
 		"set_local_content": schema(map[string]any{"key": str, "type": map[string]any{"type": "string", "enum": []string{"text"}}, "locale": str, "value": str}, "key", "type", "locale", "value"),
 	}
 	for _, name := range names {
@@ -66,6 +68,7 @@ type toolInput struct {
 	DocumentID  uuid.UUID       `json:"documentId"`
 	Environment string          `json:"environment"`
 	ExpectedSeq *int32          `json:"expectedSeq"`
+	NodeID      string          `json:"nodeId"`
 	Reason      string          `json:"reason"`
 	Payload     json.RawMessage `json:"payload"`
 }
@@ -97,7 +100,7 @@ func (s *Service) Call(ctx context.Context, a auth.Actor, name string, raw []byt
 	if err != nil {
 		return nil, err
 	}
-	if bound != nil && ((p.ChangesetID != uuid.Nil && p.ChangesetID != bound.ChangesetID) || (p.DocumentID != uuid.Nil && p.DocumentID != bound.DocumentID) || (p.Environment != "" && p.Environment != bound.Environment)) {
+	if bound != nil && ((p.ChangesetID != uuid.Nil && p.ChangesetID != bound.ChangesetID) || (p.DocumentID != uuid.Nil && p.DocumentID != bound.DocumentID && !(name == "get_page_structure" && usedComponent(ctx, q, a.ProjectID, bound, p.DocumentID))) || (p.Environment != "" && p.Environment != bound.Environment)) {
 		return nil, denied()
 	}
 	if name == "get_capabilities" || name == "list_schemas" {
@@ -127,6 +130,12 @@ func (s *Service) Call(ctx context.Context, a auth.Actor, name string, raw []byt
 			return nil, err
 		}
 		return changes.GetDocument(ctx, q, a.ProjectID, p.DocumentID, &p.ChangesetID)
+	}
+	if name == "plan_component_extract" {
+		if p.DocumentID == uuid.Nil || p.NodeID == "" {
+			return nil, commandbus.Validation(map[string]string{"arguments": "documentId and nodeId required"})
+		}
+		return changes.ExtractPlan(ctx, q, a, p.DocumentID, p.ChangesetID, p.NodeID, p.Environment)
 	}
 	if name == "get_capability_request" {
 		view, err := capabilities.Get(ctx, q, a, p.ID)
@@ -164,7 +173,7 @@ func (s *Service) Call(ctx context.Context, a auth.Actor, name string, raw []byt
 		err = json.Unmarshal(response.Body, &value)
 		return value, err
 	}
-	opType := map[string]string{"insert_node": "node.insert", "move_node": "node.move", "remove_node": "node.remove", "update_props": "node.setProps", "update_design": "node.setDesign", "bind_data": "node.setBinding", "set_behavior": "node.setBehavior", "set_local_content": "localContent.set"}[name]
+	opType := map[string]string{"insert_node": "node.insert", "move_node": "node.move", "remove_node": "node.remove", "update_props": "node.setProps", "update_design": "node.setDesign", "bind_data": "node.setBinding", "set_behavior": "node.setBehavior", "set_local_content": "localContent.set", "create_component": "component.extract"}[name]
 	if opType == "" {
 		return nil, commandbus.NewError(404, "TOOL_NOT_FOUND", "Инструмент не найден", name)
 	}
@@ -183,4 +192,13 @@ func (s *Service) Call(ctx context.Context, a auth.Actor, name string, raw []byt
 	var value any
 	err = json.Unmarshal(resp.Body, &value)
 	return value, err
+}
+
+// usedComponent — компонент, на который ссылается экземпляр на странице сессии (только чтение).
+func usedComponent(ctx context.Context, q *store.Queries, project uuid.UUID, bound *Scope, id uuid.UUID) bool {
+	d, err := changes.GetDocument(ctx, q, project, bound.DocumentID, &bound.ChangesetID)
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(d.Body, []byte(`"component":"`+id.String()+`"`)) || bytes.Contains(d.Body, []byte(`"component": "`+id.String()+`"`))
 }

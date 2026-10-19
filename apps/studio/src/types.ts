@@ -85,7 +85,8 @@ export interface Operation {
     | "localContent.remove"
     | "node.insert"
     | "node.remove"
-    | "node.move";
+    | "node.move"
+    | "component.extract";
   target: string;
   payload: Record<string, unknown>;
 }
@@ -227,7 +228,18 @@ export interface Api {
     operations: Operation[],
     idempotencyKey: string,
     signal: AbortSignal,
+    reason?: string,
   ): Promise<void>;
+  extractPlan?(
+    session: Session,
+    nodeId: string,
+    signal?: AbortSignal,
+  ): Promise<import("./component-extract.js").ExtractPlan>;
+  components?(
+    session: Session,
+    ids: string[],
+    signal?: AbortSignal,
+  ): Promise<Record<string, IrDocument>>;
   preview(session: Session, signal: AbortSignal): Promise<{ token: string; expiresAt: string }>;
 }
 export interface AgentConfig {
@@ -349,6 +361,8 @@ export interface Upload {
   uploadUrl?: string;
 }
 export class StudioError extends Error {
+  /** Причина отказа операции apply-operations (params.operationCode) и её указатели. */
+  operation?: { code: string; diagnostics: { code: string; pointer: string; nodeId?: string }[] };
   constructor(
     public code: string,
     public uncertain = false,
