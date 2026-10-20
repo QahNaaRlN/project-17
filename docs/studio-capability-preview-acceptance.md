@@ -2,7 +2,8 @@
 
 Дата: 2026-10-19. Ветка: `feature/studio-capability-preview` от `dev` `9437fb5`.
 [Спецификация STU-315…334](studio-capability-preview.md) одобрена пользователем,
-решения §11 и уточнение STU-323 приняты 2026-10-19. Пакет не слит; полный M5 не завершён.
+решения §11 и уточнение STU-323 приняты 2026-10-19. Слит в dev 2026-10-20 в [PR #68](https://github.com/QahNaaRlN/project-17/pull/68),
+merge `59ce50f`; [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39387944386) пройден. Полный M5 не завершён.
 
 ## Реализовано
 

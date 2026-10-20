@@ -1,8 +1,8 @@
 # Сохранить как компонент: реализация и приёмка
 
 Дата: 2026-10-20. Ветка: `feature/component-extract` от `dev` `9437fb5`
-(после PR #65 и #66). Черновой PR:
-[#67](https://github.com/QahNaaRlN/project-17/pull/67).
+(после PR #65 и #66). Слит в dev 2026-10-20 в [PR #67](https://github.com/QahNaaRlN/project-17/pull/67),
+merge `951a5de`; [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39385815988) пройден.
 [Спецификация STU-400…419](studio-component-extract.md) одобрена пользователем
 2026-10-19 вместе с решениями Q-1…Q-9. Пакет закрывает шаг 3 сквозного
 сценария MVP. Полный M4 и автоматический сценарий §2 в CI этим не закрыты.

@@ -184,6 +184,8 @@ STU-275…294 слит в dev в [PR #61](https://github.com/QahNaaRlN/project-1
 merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; локальная приёмка и CI merge пройдены.
 Пакет [проверенных фактов GitHub PR/CI](../studio-capability-github.md),
 STU-295…314, слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
+Пакет [preview/<ref>](../studio-capability-preview.md), STU-315…334, слит в dev
+2026-10-20 в [PR #68](https://github.com/QahNaaRlN/project-17/pull/68), merge `59ce50f6ab7ca3d5faf9f2de1fe501273f550270`.
 Доставка с отдельным
 согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
 автоматические шаги жизненного цикла ниже по-прежнему целевые.

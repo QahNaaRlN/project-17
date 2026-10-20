@@ -49,8 +49,10 @@ STU-219…236, реализован и слит в dev в
 реализованы и слиты в dev в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), merge `35ccee4`.
 Формы поддерживают цепочки, строгие аргументы, navigate/scrollTo и when,
 раздельные права, legacy read-only и защиту устаревшего preview.
-Остальные конструкторы данных/поведения, advanced binding picker, component.extract,
-междокументный буфер/wrap и измерения NFR остаются частями полного M4.
+[Сохранить поддерево как компонент](../studio-component-extract.md), STU-400…419,
+реализовано и слито в dev в [PR #67](https://github.com/QahNaaRlN/project-17/pull/67), merge `951a5de`.
+Остальные конструкторы данных/поведения, advanced binding picker, каталог и вставка
+компонентов, междокументный буфер/wrap и измерения NFR остаются частями полного M4.
 
 ## 1. Стек
 
