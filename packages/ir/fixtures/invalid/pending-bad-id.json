@@ -1,0 +1,32 @@
+{
+  "description": "pending — UUID запроса (STU-357)",
+  "expect": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "pointer": "/nodes/n_promo/pending"
+    }
+  ],
+  "document": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "root": "n_root",
+    "nodes": {
+      "n_root": {
+        "id": "n_root",
+        "type": "Box",
+        "children": [
+          "n_promo"
+        ],
+        "zone": {
+          "id": "lab",
+          "mode": "CODE"
+        }
+      },
+      "n_promo": {
+        "id": "n_promo",
+        "type": "PromoBanner",
+        "pending": "request-1"
+      }
+    }
+  }
+}

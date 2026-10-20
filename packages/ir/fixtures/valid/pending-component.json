@@ -1,0 +1,42 @@
+{
+  "irVersion": "1.0",
+  "kind": "page",
+  "root": "n_root",
+  "nodes": {
+    "n_root": {
+      "id": "n_root",
+      "type": "Box",
+      "children": [
+        "n_promo"
+      ],
+      "zone": {
+        "id": "lab",
+        "mode": "CODE"
+      }
+    },
+    "n_promo": {
+      "id": "n_promo",
+      "type": "PromoBanner",
+      "pending": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11",
+      "props": {
+        "title": {
+          "lit": "Летняя распродажа"
+        }
+      },
+      "slots": {
+        "actions": [
+          "n_btn"
+        ]
+      }
+    },
+    "n_btn": {
+      "id": "n_btn",
+      "type": "Button",
+      "props": {
+        "label": {
+          "lit": "Купить"
+        }
+      }
+    }
+  }
+}

@@ -184,6 +184,9 @@ export const irSchema = {
           },
           "additionalProperties": false
         },
+        "pending": {
+          "$ref": "#/$defs/uuid"
+        },
         "name": {
           "type": "string",
           "maxLength": 120
@@ -278,6 +281,23 @@ export const irSchema = {
           "else": {
             "properties": {
               "ref": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "pending"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "not": {
+                  "const": "Composed"
+                }
+              },
+              "on": false
             }
           }
         }

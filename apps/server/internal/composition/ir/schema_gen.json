@@ -164,6 +164,9 @@
           },
           "additionalProperties": false
         },
+        "pending": {
+          "$ref": "#/$defs/uuid"
+        },
         "name": {
           "type": "string",
           "maxLength": 120
@@ -254,6 +257,21 @@
           "else": {
             "properties": {
               "ref": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["pending"]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "not": {
+                  "const": "Composed"
+                }
+              },
+              "on": false
             }
           }
         }

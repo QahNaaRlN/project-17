@@ -269,6 +269,42 @@
       "message": "Узел n_lost не связан с корнем документа"
     }
   ],
+  "ir/pending-bad-id.json": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/nodes/n_promo/pending",
+      "nodeId": "n_promo",
+      "message": "должно соответствовать образцу \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\"",
+      "params": {
+        "keyword": "pattern"
+      }
+    }
+  ],
+  "ir/pending-on-composed.json": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/nodes/n_promo/type",
+      "nodeId": "n_promo",
+      "message": "должно не соответствовать схеме в \"not\"",
+      "params": {
+        "keyword": ""
+      }
+    }
+  ],
+  "ir/pending-with-events.json": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/nodes/n_promo/on",
+      "nodeId": "n_promo",
+      "message": "поле недопустимо в этом контексте",
+      "params": {
+        "keyword": "false schema"
+      }
+    }
+  ],
   "ir/predicate-depth-exceeded.json": [
     {
       "code": "LIMIT_EXCEEDED",

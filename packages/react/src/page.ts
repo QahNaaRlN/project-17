@@ -121,6 +121,23 @@ export function CmsPage({
           ]),
         )
       : undefined;
+    // STU-366: a component placeholder never runs application code; only the
+    // preview shows a neutral block with the requested component name.
+    if (node.pending !== undefined)
+      return preview
+        ? createElement(
+            "div",
+            {
+              ...common,
+              "data-cms-pending": node.pending,
+              role: "group",
+              "aria-label": node.type,
+              style: { border: "1px dashed currentColor", padding: "12px", opacity: 0.8 },
+            },
+            createElement("span", null, node.type),
+            ...children,
+          )
+        : null;
     switch (node.type) {
       case "Image": {
         const image = plan.images?.[node.key];

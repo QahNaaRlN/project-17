@@ -488,7 +488,7 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 
 func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayload) (ApplyResult, error) {
 	for _, op := range p.Operations {
-		if actor.System && op.Type != ops.NodeSetBehavior {
+		if actor.System && op.Type != ops.NodeSetBehavior && op.Type != ops.NodeClearPending {
 			return ApplyResult{}, systemForbidden()
 		}
 	}

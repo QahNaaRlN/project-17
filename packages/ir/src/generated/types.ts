@@ -169,6 +169,7 @@ export interface Node {
     component: Uuid;
     version?: "live" | number;
   };
+  pending?: Uuid;
   name?: string;
   props?: {};
   bindings?: {

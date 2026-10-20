@@ -157,3 +157,30 @@ it("SDK-033/042: root без атрибута не создаёт выбор в�
   bridge.dispose();
   await vi.advanceTimersByTimeAsync(60);
 });
+
+it("STU-366: a placeholder renders a neutral preview block and nothing when published", () => {
+  const pendingPlan = {
+    roots: [
+      {
+        id: "n_promo",
+        key: "n_promo",
+        type: "PromoBanner",
+        props: {},
+        className: "",
+        pending: "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11",
+        children: [{ id: "n_btn", key: "n_btn", type: "Button", props: { label: "Buy" }, className: "", children: [] }],
+      },
+    ],
+    css: "",
+    diagnostics: [],
+  };
+  const Real = () => createElement("section", null, "real");
+  const preview = renderToString(
+    createElement(CmsPage, { plan: { ...pendingPlan, preview: true }, registry: { PromoBanner: Real } }),
+  );
+  expect(preview).toContain('data-cms-pending="0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"');
+  expect(preview).toContain("PromoBanner");
+  expect(preview).toContain("Buy");
+  expect(preview).not.toContain("real");
+  expect(renderToString(createElement(CmsPage, { plan: pendingPlan, registry: { PromoBanner: Real } }))).toBe("");
+});
