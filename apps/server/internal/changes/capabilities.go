@@ -39,9 +39,16 @@ func (s *session) validatePending(target uuid.UUID, before, after map[string]any
 	nodes, _ := after["nodes"].(map[string]any)
 	oldNodes, _ := before["nodes"].(map[string]any)
 	if s.actor.System {
-		return s.validateSystem(target, oldNodes, nodes)
+		normalized, err := s.systemDataAndTokens(target, before, after)
+		if err != nil {
+			return err
+		}
+		return s.validateSystem(target, normalized, nodes)
 	}
 	if err := s.validatePlaceholders(target, oldNodes, nodes); err != nil {
+		return err
+	}
+	if err := s.validateDataAndTokens(target, before, after); err != nil {
 		return err
 	}
 	for id, raw := range nodes {

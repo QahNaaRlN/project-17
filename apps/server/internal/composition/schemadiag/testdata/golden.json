@@ -293,6 +293,17 @@
       }
     }
   ],
+  "ir/pending-source-bad-id.json": [
+    {
+      "code": "IR_SCHEMA_VIOLATION",
+      "severity": "error",
+      "pointer": "/dataSources/recommended/pending",
+      "message": "должно соответствовать образцу \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\"",
+      "params": {
+        "keyword": "pattern"
+      }
+    }
+  ],
   "ir/pending-with-events.json": [
     {
       "code": "IR_SCHEMA_VIOLATION",

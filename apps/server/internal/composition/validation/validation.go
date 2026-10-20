@@ -222,11 +222,12 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		if r := ir.ValidateDocument(doc); !r.Valid {
 			return r, nil
 		}
-		app, placeholders, err := c.pendingApp(ctx, doc)
+		app, view, placeholders, err := c.pendingApp(ctx, doc)
 		if err != nil {
 			return ir.Result{}, err
 		}
 		extra = append(extra, placeholders...)
+		doc = view
 		nodes := object(doc["nodes"])
 		keys := sortedKeys(nodes)
 		for _, id := range keys {
@@ -346,7 +347,7 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 	if err != nil || !ir.ValidateDocument(doc).Valid || c.app == nil {
 		return r, nil
 	}
-	app, _, err := c.pendingApp(ctx, doc)
+	app, doc, _, err := c.pendingApp(ctx, doc)
 	if err != nil {
 		return ir.Result{}, err
 	}

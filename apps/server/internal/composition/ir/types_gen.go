@@ -28,6 +28,9 @@ type DataSourceUse struct {
 	// Params corresponds to the JSON schema field "params".
 	Params DataSourceUseParams `json:"params,omitempty,omitzero" yaml:"params,omitempty" mapstructure:"params,omitempty"`
 
+	// Pending corresponds to the JSON schema field "pending".
+	Pending *Uuid `json:"pending,omitempty,omitzero" yaml:"pending,omitempty" mapstructure:"pending,omitempty"`
+
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source" yaml:"source" mapstructure:"source"`
 }

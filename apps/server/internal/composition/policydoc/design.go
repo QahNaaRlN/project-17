@@ -329,3 +329,7 @@ func (c *checker) track(s string, m Mode) bool {
 	}
 	return false
 }
+
+// TokenCategory — the manifest token category a design property takes, or ""
+// (STU-378: a token placeholder must match its property's category).
+func TokenCategory(property string) string { return catalogue[property].token }
