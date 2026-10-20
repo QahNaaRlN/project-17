@@ -44,7 +44,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Автоматическое fulfillment и группы requiredBy](../studio-capability-fulfillment.md), STU-335…354 | [PR #71](https://github.com/QahNaaRlN/project-17/pull/71) слит в dev 2026-10-20; локальная [приёмка шага 10](../studio-capability-fulfillment-acceptance.md) и CI итогового SHA пройдены; реальный GitHub в приёмке не использовался |
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
 | Выполнено | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | [PR #75](https://github.com/QahNaaRlN/project-17/pull/75) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-data-token-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.1%); реальный GitHub не использовался |
-| 1 | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | Спецификация на согласовании |
+| 1 | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | Спецификация одобрена 2026-10-21, решения §11 приняты; код не начат |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
