@@ -125,3 +125,41 @@ func TestSTU367ComponentPreview(t *testing.T) {
 		t.Fatal("STU-367 Change Set preview", cs, e)
 	}
 }
+
+// STU-356/360/363: draft edits keep the kind's contract and the initial props
+// valid; a placement cannot join an action request.
+func TestSTU356_363ComponentDraftEdits(t *testing.T) {
+	f := setup(t)
+	f.doc = f.promoPage("/promo")
+	g := githubFixture{fixture: f}
+	r := must(f.e, f.a, "create-capability-request", f.componentCreate())
+	id := uuid.MustParse(r.Request["id"].(string))
+	edit := func(contract object) error {
+		_, e := g.call(f.a, "update-capability-request", Update{ID: id, ExpectedRevision: 1, Draft: &Draft{Title: "Promo", Description: "A banner", ProposedContract: raw(contract), Acceptance: []string{"ok"}}}, "")
+		return e
+	}
+	expectCode(t, edit(object{"args": object{}}), "CAPABILITY_CONTRACT_INVALID")
+	if e := edit(object{"props": object{"headline": object{"type": "string"}}}); e != nil {
+		t.Fatal(e)
+	}
+	_, e := g.call(f.a, "submit-capability-request", Action{ID: id, ExpectedRevision: 2, ExpectedSeq: f.seq(), ExpectedManifestHash: f.hash}, "")
+	expectCode(t, e, "CAPABILITY_PROPS_INVALID")
+	// An action request does not take a placement.
+	h := githubSetup(t)
+	_, e = h.call(h.a, "attach-capability-request", AttachRequest{RequestID: h.request.ID, ExpectedRequestRevision: 2, ChangesetID: h.cs, ExpectedSeq: 1, DocumentID: h.doc, ExpectedManifestHash: h.hash, Placement: &Placement{ParentID: "n_root"}}, "")
+	expectCode(t, e, "CAPABILITY_REQUEST_INVALID")
+}
+
+// STU-368: manual resolve refuses instance props that the real component rejects.
+func TestSTU368ManualResolveRefusesInvalidProps(t *testing.T) {
+	f := componentSetup(t)
+	r := f.engineering(f.current())
+	hash := f.activateComponent(object{"PromoBanner": object{"container": true, "props": object{"title": object{"type": "string", "required": true, "pattern": "^[0-9]+$"}, "tone": object{"type": "enum", "values": []any{"plain", "accent"}}}}})
+	_, e := f.call(f.a, "resolve-capability-request", Action{ID: r.ID, ExpectedRevision: r.Revision, ExpectedSeq: f.seq(f.cs), ExpectedManifestHash: hash}, "")
+	if code := cmstest.Code(e); code != "CAPABILITY_PROPS_INVALID" && code != "CAPABILITY_CONTRACT_MISMATCH" {
+		t.Fatal("STU-368 invalid props are refused", e)
+	}
+	if f.current().Status == "fulfilled" || f.node(f.cs, f.doc, r.NodeID)["pending"] == nil {
+		t.Fatal("refused resolve leaves the placeholder")
+	}
+}

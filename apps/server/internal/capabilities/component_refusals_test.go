@@ -2,12 +2,14 @@ package capabilities
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -159,5 +161,74 @@ func TestSTU357_358PlaceholderValidation(t *testing.T) {
 		if strings.HasPrefix(key, "/nodes/"+r.NodeID+"/props") {
 			t.Error("the placeholder props follow the proposed contract", key)
 		}
+	}
+}
+
+// STU-356/359/365/368: pure rules of component contracts, placements,
+// compatibility and the pack anchor.
+func TestSTU356_368ComponentRules(t *testing.T) {
+	for _, bad := range []object{
+		{"props": "x"},
+		{"props": object{}, "container": "yes"},
+		{"props": object{}, "slots": "x"},
+		{"props": object{"Bad": object{"type": "string"}}},
+		{"props": object{"title": object{"type": "unknownType"}}},
+	} {
+		if validComponentContract(bad) == nil {
+			t.Error("contract refused", bad)
+		}
+	}
+	good := object{"props": object{"item": object{"type": "reference", "schema": "Product"}}, "slots": object{"actions": object{"max": json.Number("2")}}, "container": true}
+	if e := validComponentContract(good); e != nil {
+		t.Fatal("reference and slot contract", e)
+	}
+	app := object{"components": object{"Card": object{"slots": object{"free": object{"max": json.Number("1")}, "typed": object{"allowedTypes": []any{"Button"}}}}}, "primitives": object{"Panel": object{"container": true}}}
+	card := object{"type": "Card", "slots": object{"free": []any{"n_a"}}}
+	for name, c := range map[string]struct {
+		parent object
+		p      Placement
+		want   bool
+	}{
+		"full slot":     {card, Placement{ParentID: "n_card", Slot: "free"}, false},
+		"typed slot":    {card, Placement{ParentID: "n_card", Slot: "typed"}, false},
+		"unknown slot":  {card, Placement{ParentID: "n_card", Slot: "none"}, false},
+		"free slot":     {object{"type": "Card"}, Placement{ParentID: "n_card", Slot: "free"}, true},
+		"primitive":     {object{"type": "Panel"}, Placement{ParentID: "n_card"}, true},
+		"unknown type":  {object{"type": "Ghost"}, Placement{ParentID: "n_card"}, false},
+		"composed":      {object{"type": "Composed"}, Placement{ParentID: "n_card"}, false},
+		"not container": {object{"type": "Card"}, Placement{ParentID: "n_card"}, false},
+	} {
+		if acceptsChild(app, c.parent, c.p) != c.want {
+			t.Error("placement", name)
+		}
+	}
+	r := store.CapabilityRequest{Kind: KindComponent, Key: "PromoBanner", ProposedContract: raw(object{"props": object{"title": object{"type": "string"}}, "container": true, "slots": object{"actions": object{}}})}
+	for name, actual := range map[string]object{
+		"missing":       nil,
+		"required":      {"container": true, "props": object{"title": object{"type": "string"}, "size": object{"type": "number", "required": true}}, "slots": object{"actions": object{}}},
+		"not container": {"props": object{"title": object{"type": "string"}}, "slots": object{"actions": object{}}},
+		"no slot":       {"container": true, "props": object{"title": object{"type": "string"}}},
+		"typed slot":    {"container": true, "props": object{"title": object{"type": "string"}}, "slots": object{"actions": object{"allowedTypes": []any{"Button"}}}},
+	} {
+		if componentCompatible(r, actual) {
+			t.Error("incompatible", name)
+		}
+	}
+	if !componentCompatible(r, object{"container": true, "props": object{"title": object{"type": "text"}, "size": object{"type": "number", "required": true, "default": json.Number("1")}}, "slots": object{"actions": object{}}}) {
+		t.Error("compatible component")
+	}
+	if !nodeErrors(map[string]map[string][]ir.Diagnostic{"staging": {"doc": {{NodeID: "n_a", Severity: ir.SeverityError}}}}, "n_a") || nodeErrors(nil, "n_a") {
+		t.Error("node errors")
+	}
+	r.Placement = raw(Placement{ParentID: "n_card", Slot: "free", Index: 1})
+	r.NodeID = "n_promo"
+	if payload := parse(marker(r).Payload); payload["slot"] != "free" {
+		t.Error("marker slot", payload)
+	}
+	if a := anchorContext(r, snapshot{}, nil, nil, false); obj(a["placement"])["slot"] != "free" {
+		t.Error("anchor slot", a)
+	}
+	if substitute(object{"nodes": object{}}, r, nil) {
+		t.Error("no placeholder to substitute")
 	}
 }

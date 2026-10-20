@@ -82,7 +82,7 @@ const button = (s: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (b) => b.textContent?.trim() === s,
   );
-async function setup(v: FulfillmentView, prepare?: (api: Api) => void) {
+async function setup(v: FulfillmentView, prepare?: (api: Api) => void, request = card) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("crypto", webcrypto);
   const { api } = mockApi(fixture());
@@ -101,7 +101,7 @@ async function setup(v: FulfillmentView, prepare?: (api: Api) => void) {
   document.body.innerHTML = "<div id='root'></div>";
   root = createRoot(document.getElementById("root")!);
   await act(async () =>
-    root.render(<CapabilityFulfillmentPanel {...{ api, editor }} request={card} />),
+    root.render(<CapabilityFulfillmentPanel {...{ api, editor }} request={request} />),
   );
   return api;
 }
@@ -272,4 +272,24 @@ it("STU-336/351: API client reads, looks up and sends exact commands", async () 
   await expect(api.fulfillmentCommand!(attempt)).rejects.toMatchObject({
     code: "RESPONSE_INVALID",
   });
+});
+
+it("STU-370/372: a component instance shows no arguments and retries invalid props", async () => {
+  const v = view();
+  v.anchors[0]!.state = "invalid_props";
+  delete v.anchors[0]!.event;
+  const component: CapabilityRequest = {
+    ...card,
+    kind: "component",
+    key: "PromoBanner",
+    event: "",
+    proposedContract: { props: { title: { type: "string", required: true } } },
+  };
+  const api = await setup(v, undefined, component);
+  expect(document.body.textContent).not.toContain("Аргументы выполнения");
+  expect(document.body.textContent).toContain("Свойства не подходят к компоненту");
+  await act(async () => button("Повторить замену")!.click());
+  expect(api.fulfillmentCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({ name: "retry-capability-fulfillment" }),
+  );
 });

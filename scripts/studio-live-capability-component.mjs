@@ -82,6 +82,8 @@ try {
     reviewer = await browser.newContext();
   const alice = await author.newPage(),
     bob = await reviewer.newPage();
+  for (const page of [alice, bob])
+    page.on("pageerror", (error) => console.error("PAGE ERROR", error.message, error.stack));
   async function login(page, name, roleId) {
     await page.goto(cfg.studioOrigin + "/editor");
     await page.getByRole("link", { name: "Войти", exact: true }).click();
@@ -194,7 +196,10 @@ try {
     await dialog.getByLabel("Максимум", { exact: true }).last().fill("200");
     await dialog.getByRole("button", { name: "Добавить свойство", exact: true }).click();
     await dialog.getByLabel("Имя свойства", { exact: true }).last().fill("tone");
-    await dialog.getByLabel(/^Тип свойства/).last().selectOption("enum");
+    await dialog
+      .getByLabel(/^Тип свойства/)
+      .last()
+      .selectOption("enum");
     await dialog.getByLabel("Варианты через запятую", { exact: true }).fill("plain, accent");
     await dialog.getByLabel("Принимает вложенные блоки", { exact: true }).check();
     await dialog.getByLabel("title", { exact: true }).fill("Летняя распродажа");
@@ -218,9 +223,8 @@ try {
     dialog.getByRole("button", { name: "Скачать context pack", exact: true }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
-  const requestId = (
-    await read(author, "/capability-requests?environment=staging&key=PromoBanner")
-  ).items[0].id;
+  const requestId = (await read(author, "/capability-requests?environment=staging&key=PromoBanner"))
+    .items[0].id;
   const request = await read(author, "/capability-requests/" + requestId);
   report.requestId = requestId;
   let page = await read(author, "/documents/" + one.page + "?changesetId=" + one.cs);

@@ -16,7 +16,7 @@ import {
   type FulfillmentView,
 } from "./capability-fulfillment.js";
 
-const retryable = ["reverted", "anchor_changed", "failed", "invalid_args"];
+const retryable = ["reverted", "anchor_changed", "failed", "invalid_args", "invalid_props"];
 
 /** Request card section «Выполнение» (STU-351/352). */
 export function CapabilityFulfillmentPanel({
@@ -106,7 +106,9 @@ export function CapabilityFulfillmentPanel({
   const session = state.session,
     doc = state.document;
   const action = session?.manifest.actions?.[request.key]?.args as Record<string, Type> | undefined;
-  const args = (action ?? request.proposedContract.args) as Record<string, Type>;
+  const args = (action ?? request.proposedContract.args ?? {}) as Record<string, Type>;
+  // STU-370: a component instance has no fulfillment arguments.
+  const component = request.kind === "component";
   const locked = pending || uncertain;
   const payload = (a: FulfillmentAnchor) => ({
     requestId: request.id,
@@ -128,7 +130,9 @@ export function CapabilityFulfillmentPanel({
       <li key={a.id}>
         <p>
           {a.own
-            ? `${a.nodeId} · ${a.event}`
+            ? component
+              ? `${a.nodeId}`
+              : `${a.nodeId} · ${a.event}`
             : text("Привязка другого черновика", "Another draft's anchor")}{" "}
           · {anchorLabel(a.state, ru)}
           {a.own && a.argsSet ? text(" · аргументы подтверждены", " · arguments confirmed") : ""}
@@ -136,6 +140,7 @@ export function CapabilityFulfillmentPanel({
         {a.own &&
           here &&
           doc &&
+          !component &&
           ["active", "awaiting_args", "invalid_args", "reverted"].includes(a.state) && (
             <fieldset disabled={locked}>
               <legend>{text("Аргументы выполнения", "Fulfillment arguments")}</legend>
