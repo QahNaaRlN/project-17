@@ -141,6 +141,7 @@ func handlerChain(value any) []any {
 	}
 	return []any{value}
 }
+
 // exactPending — the anchor holds exactly this request's marker: a pending
 // action call, or a component placeholder (STU-357).
 func exactPending(r store.CapabilityRequest, doc object) bool {

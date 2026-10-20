@@ -94,6 +94,7 @@ func human(a auth.Actor) error {
 	}
 	return author(a)
 }
+
 // validDraft checks the texts and a contract of either kind; handlers repeat
 // the contract check for the request's own kind.
 func validDraft(d Draft) error {
