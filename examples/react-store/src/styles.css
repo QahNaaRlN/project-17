@@ -622,3 +622,14 @@ h2 {
     scroll-behavior: auto;
   }
 }
+
+.promo {
+  margin: 24px 0;
+  padding: 24px;
+  border-radius: 12px;
+  background: #f4f1ec;
+}
+.promo-accent {
+  background: #1f4fd1;
+  color: #ffffff;
+}
