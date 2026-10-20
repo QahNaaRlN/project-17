@@ -1,6 +1,8 @@
 # Studio: автоматическое выполнение запроса и группы requiredBy
 
-Статус: **одобрена пользователем 2026-10-20; решения §11 приняты; код не начат**.
+Статус: **одобрена пользователем 2026-10-20; решения §11 приняты; реализована
+и слита в dev 2026-10-20 в [PR #71](https://github.com/QahNaaRlN/project-17/pull/71), merge `4a76e82`**
+([реализация и проверка](studio-capability-fulfillment-acceptance.md)).
 Дата: 2026-10-20. Требования: STU-335…354.
 Основа: `origin/dev` на `59ce50f` (после [PR #68](https://github.com/QahNaaRlN/project-17/pull/68)
 и [PR #67](https://github.com/QahNaaRlN/project-17/pull/67)).

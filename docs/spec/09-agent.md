@@ -186,6 +186,9 @@ merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; локальная приём�
 STU-295…314, слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
 Пакет [preview/<ref>](../studio-capability-preview.md), STU-315…334, слит в dev
 2026-10-20 в [PR #68](https://github.com/QahNaaRlN/project-17/pull/68), merge `59ce50f6ab7ca3d5faf9f2de1fe501273f550270`.
+Пакет [автоматического fulfillment и групп requiredBy](../studio-capability-fulfillment.md),
+STU-335…354, слит в dev 2026-10-20 в [PR #71](https://github.com/QahNaaRlN/project-17/pull/71), merge `4a76e82`: строка
+«Выполнение» ниже реализована для `kind: action`.
 Доставка с отдельным
 согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
 автоматические шаги жизненного цикла ниже по-прежнему целевые.
