@@ -164,6 +164,7 @@ export function createStudioHandler(
           path === "/api/v1/manifest" ||
           new RegExp(`^/api/v1/changesets/${uuid}/history$`).test(path) ||
           new RegExp(`^/api/v1/changesets/${uuid}/review$`).test(path) ||
+          new RegExp(`^/api/v1/documents/${uuid}/component-extract-plan$`).test(path) ||
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
           ...githubCommands.map((name) => "/api/v1/commands/" + name),
@@ -316,6 +317,19 @@ export function createStudioHandler(
               !new RegExp(`^${uuid}$`).test(url.searchParams.get("changesetId") ?? "") ||
               (url.searchParams.has("after") &&
                 !new RegExp(`^${uuid}$`).test(url.searchParams.get("after")!))
+            )
+              return error(400, "PARAM_INVALID");
+            if (url.searchParams.get("environment") !== config.environment)
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            upstream.search = url.search;
+          } else if (path.endsWith("/component-extract-plan")) {
+            const allowed = ["changesetId", "nodeId", "environment"];
+            if (
+              [...url.searchParams.keys()].some(
+                (key) => !allowed.includes(key) || url.searchParams.getAll(key).length !== 1,
+              ) ||
+              !new RegExp(`^${uuid}$`).test(url.searchParams.get("changesetId") ?? "") ||
+              !/^[A-Za-z0-9_-]{4,32}$/.test(url.searchParams.get("nodeId") ?? "")
             )
               return error(400, "PARAM_INVALID");
             if (url.searchParams.get("environment") !== config.environment)
@@ -664,6 +678,7 @@ export function createStudioHandler(
                     "node.insert",
                     "node.remove",
                     "node.move",
+                    "component.extract",
                     "entity.create",
                     "entity.setFields",
                     "entity.delete",

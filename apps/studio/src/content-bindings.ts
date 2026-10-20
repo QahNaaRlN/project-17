@@ -1,6 +1,6 @@
 import type { IrDocument, Node } from "@cms/ir";
 import type { Manifest, Type } from "@cms/manifest";
-import { contract } from "./structure.js";
+import { nodeContract } from "./structure.js";
 import { StudioError, type Operation } from "./types.js";
 import { behaviorDependencies } from "./behavior.js";
 
@@ -150,7 +150,7 @@ export function sourceChange(
       const pointer = `/nodes/${esc(node.id)}/bindings/${esc(prop)}`;
       if (typeof binding === "string" && simpleContentPath.test(binding)) {
         const field = choices.find((f) => f.path === binding),
-          receiver = contract(node.type, manifest)?.props?.[prop];
+          receiver = nodeContract(node, manifest)?.props?.[prop];
         if (field && receiver && contentCompatible(field.schema, receiver)) continue;
         if (doc.content && !previous.some((f) => f.path === binding)) {
           scan(binding, pointer);

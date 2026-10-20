@@ -1,0 +1,360 @@
+{
+  "before": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "localContent": {
+      "t_cta": {
+        "type": "text",
+        "value": {
+          "ru": "Купить"
+        }
+      },
+      "t_desc": {
+        "type": "text",
+        "value": {
+          "ru": "Описание"
+        }
+      },
+      "t_note": {
+        "type": "text",
+        "value": {
+          "ru": "Общая подпись"
+        }
+      },
+      "t_page": {
+        "type": "text",
+        "value": {
+          "ru": "Заголовок страницы"
+        }
+      },
+      "t_title": {
+        "type": "text",
+        "value": {
+          "en": "New",
+          "ru": "Новинки"
+        }
+      }
+    },
+    "nodes": {
+      "n_btn": {
+        "bindings": {
+          "label": "$local.t_cta"
+        },
+        "id": "n_btn",
+        "type": "Button"
+      },
+      "n_grid": {
+        "children": ["n_stack", "n_img"],
+        "design": {
+          "gap": "md"
+        },
+        "id": "n_grid",
+        "type": "Grid"
+      },
+      "n_h1": {
+        "bindings": {
+          "text": "$local.t_title"
+        },
+        "id": "n_h1",
+        "props": {
+          "level": 2
+        },
+        "type": "Heading"
+      },
+      "n_img": {
+        "bindings": {
+          "src": "$content.cover"
+        },
+        "id": "n_img",
+        "type": "Image"
+      },
+      "n_note": {
+        "bindings": {
+          "text": "$local.t_note"
+        },
+        "id": "n_note",
+        "type": "Text"
+      },
+      "n_root": {
+        "children": ["n_top", "n_grid"],
+        "id": "n_root",
+        "type": "Box"
+      },
+      "n_stack": {
+        "children": ["n_h1", "n_txt", "n_note", "n_btn"],
+        "id": "n_stack",
+        "type": "Stack"
+      },
+      "n_top": {
+        "bindings": {
+          "text": "$local.t_page"
+        },
+        "id": "n_top",
+        "type": "Heading"
+      },
+      "n_txt": {
+        "bindings": {
+          "text": "$local.t_desc"
+        },
+        "id": "n_txt",
+        "type": "Text"
+      }
+    },
+    "root": "n_root"
+  },
+  "component": {
+    "inputs": {
+      "description": {
+        "content": true,
+        "type": "text"
+      },
+      "image": {
+        "assetKind": "image",
+        "content": true,
+        "type": "asset"
+      },
+      "products": {
+        "of": {
+          "fields": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "text"
+            }
+          },
+          "type": "object"
+        },
+        "type": "list"
+      },
+      "title": {
+        "content": true,
+        "required": true,
+        "type": "text"
+      }
+    },
+    "irVersion": "1.0",
+    "kind": "component",
+    "localContent": {
+      "t_note": {
+        "type": "text",
+        "value": {
+          "ru": "Общая подпись"
+        }
+      }
+    },
+    "meta": {
+      "title": "ProductShowcase"
+    },
+    "nodes": {
+      "n_grid": {
+        "children": ["n_stack", "n_img"],
+        "design": {
+          "gap": "md"
+        },
+        "id": "n_grid",
+        "type": "Grid"
+      },
+      "n_h1": {
+        "bindings": {
+          "text": "$props.title"
+        },
+        "id": "n_h1",
+        "props": {
+          "level": 2
+        },
+        "type": "Heading"
+      },
+      "n_img": {
+        "bindings": {
+          "src": "$props.image"
+        },
+        "id": "n_img",
+        "type": "Image"
+      },
+      "n_note": {
+        "bindings": {
+          "text": "$local.t_note"
+        },
+        "id": "n_note",
+        "type": "Text"
+      },
+      "n_slot1": {
+        "id": "n_slot1",
+        "props": {
+          "name": "footer"
+        },
+        "type": "Slot"
+      },
+      "n_stack": {
+        "children": ["n_h1", "n_txt", "n_note", "n_slot1"],
+        "id": "n_stack",
+        "type": "Stack"
+      },
+      "n_txt": {
+        "bindings": {
+          "text": "$props.description"
+        },
+        "id": "n_txt",
+        "type": "Text"
+      }
+    },
+    "policy": {
+      "mode": "SYSTEM"
+    },
+    "root": "n_grid",
+    "slotDefs": {
+      "footer": {
+        "allowedTypes": ["Button"]
+      }
+    }
+  },
+  "page": {
+    "irVersion": "1.0",
+    "kind": "page",
+    "localContent": {
+      "t_cta": {
+        "type": "text",
+        "value": {
+          "ru": "Купить"
+        }
+      },
+      "t_desc": {
+        "type": "text",
+        "value": {
+          "ru": "Описание"
+        }
+      },
+      "t_note": {
+        "type": "text",
+        "value": {
+          "ru": "Общая подпись"
+        }
+      },
+      "t_page": {
+        "type": "text",
+        "value": {
+          "ru": "Заголовок страницы"
+        }
+      },
+      "t_title": {
+        "type": "text",
+        "value": {
+          "en": "New",
+          "ru": "Новинки"
+        }
+      }
+    },
+    "nodes": {
+      "n_btn": {
+        "bindings": {
+          "label": "$local.t_cta"
+        },
+        "id": "n_btn",
+        "type": "Button"
+      },
+      "n_inst": {
+        "bindings": {
+          "description": "$local.t_desc",
+          "image": "$content.cover",
+          "title": "$local.t_title"
+        },
+        "id": "n_inst",
+        "ref": {
+          "component": "0192f1c5-0000-7000-8000-000000000001",
+          "version": "live"
+        },
+        "slots": {
+          "footer": ["n_btn"]
+        },
+        "type": "Composed"
+      },
+      "n_root": {
+        "children": ["n_top", "n_inst"],
+        "id": "n_root",
+        "type": "Box"
+      },
+      "n_top": {
+        "bindings": {
+          "text": "$local.t_page"
+        },
+        "id": "n_top",
+        "type": "Heading"
+      }
+    },
+    "root": "n_root"
+  },
+  "payload": {
+    "nodeId": "n_grid",
+    "name": "ProductShowcase",
+    "inputs": {
+      "description": {
+        "from": [
+          {
+            "nodeId": "n_txt",
+            "prop": "text"
+          }
+        ],
+        "def": {
+          "content": true,
+          "type": "text"
+        }
+      },
+      "image": {
+        "from": [
+          {
+            "nodeId": "n_img",
+            "prop": "src"
+          }
+        ],
+        "def": {
+          "assetKind": "image",
+          "content": true,
+          "type": "asset"
+        }
+      },
+      "products": {
+        "def": {
+          "of": {
+            "fields": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "text"
+              }
+            },
+            "type": "object"
+          },
+          "type": "list"
+        }
+      },
+      "title": {
+        "from": [
+          {
+            "nodeId": "n_h1",
+            "prop": "text"
+          }
+        ],
+        "def": {
+          "content": true,
+          "required": true,
+          "type": "text"
+        }
+      }
+    },
+    "slots": {
+      "footer": {
+        "nodeIds": ["n_btn"]
+      }
+    },
+    "localContent": {
+      "t_note": "copy"
+    },
+    "componentId": "0192f1c5-0000-7000-8000-000000000001",
+    "instanceNodeId": "n_inst",
+    "slotNodeIds": {
+      "footer": "n_slot1"
+    }
+  }
+}

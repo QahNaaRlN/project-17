@@ -304,7 +304,7 @@ func validateApply(p applyPayload) error {
 		if op.ExpectedVersionID != nil && (!isContentOperation(op.Type) || op.Type == EntityCreate || op.Type == AssetCreate || *op.ExpectedVersionID == uuid.Nil) {
 			return commandbus.Validation(map[string]string{field + ".expectedVersionId": "допустим только для изменения существующего контента"})
 		}
-		if _, ok := OperationRight(op.Type); !ok {
+		if _, ok := OperationRight(op.Type); !ok || op.Type == ops.ComponentRevertExtract {
 			return commandbus.Validation(map[string]string{field + ".type": "неизвестный тип операции " + op.Type})
 		}
 		if op.Type == schemaflow.Apply {
@@ -601,6 +601,12 @@ func (s *session) applyToDocument(target uuid.UUID, op ops.Op) (recordInput, err
 	}
 	if op.Type == DocumentSetRoute {
 		return s.setRoute(target, op.Payload)
+	}
+	if op.Type == ops.ComponentExtract {
+		return s.extract(target, op.Payload)
+	}
+	if op.Type == ops.ComponentRevertExtract {
+		return s.revertExtract(target, op.Payload)
 	}
 	d, err := s.load(target)
 	if err != nil {

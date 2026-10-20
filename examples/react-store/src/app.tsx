@@ -85,6 +85,7 @@ export function StoreApp({ initialModel }: AppProps) {
           actions: registry.actions,
           breakpoints: registry.breakpoints,
           tokens: storeTokens,
+          ...(current.bridge!.components ? { components: current.bridge!.components } : {}),
           scope: {
             context: {
               locale: current.locale ?? "ru",

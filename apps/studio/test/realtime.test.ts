@@ -189,6 +189,22 @@ it("STU-114: input changed during a remote read is preserved", async () => {
   expect(editor.store.getState().remotePending).toBe(true);
   editor.dispose();
 });
+it("STU-114/419: a remote read overlapping an own write is retried, not reported", async () => {
+  const { api } = mockApi(),
+    editor = createEditor(api);
+  await editor.open(documentId, changesetId);
+  vi.mocked(api.open).mockRejectedValueOnce(new StudioError("CHANGESET_SEQ_CONFLICT"));
+  editor.remoteChanged();
+  await editor.refreshRemote();
+  await vi.waitFor(() => expect(api.open).toHaveBeenCalledTimes(3));
+  // The conflict is not shown; the immediate retry reads the committed snapshot.
+  expect(editor.store.getState()).toMatchObject({
+    status: "ready",
+    error: null,
+    remotePending: false,
+  });
+  editor.dispose();
+});
 it("STU-110/113: API sends credentials in headers and presence via CSRF Command API", async () => {
   const fetcher = vi.fn<typeof fetch>(
     async () =>

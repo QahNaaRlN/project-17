@@ -1,12 +1,14 @@
 package changes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
@@ -83,6 +85,8 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 		ops           []opPlan
 	}
 	var plans []objectPlan
+	instances := map[string]bool{}    // экземпляры исключённых извлечений
+	var droppedComponents []uuid.UUID // компоненты исключённых извлечений
 	for _, objectID := range stale {
 		obj, err := q.LockObject(ctx, objectID)
 		if err != nil {
@@ -168,8 +172,22 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 				conflict = &Conflict{OperationID: op.ID, Seq: op.Seq, Type: op.Type, Code: "OPERATION_INAPPLICABLE", Message: "Объект удалён; сначала восстановите его"}
 			} else if op.Type == DocumentSetRoute {
 				step, conflict = replayRoute(&plan.path, op, choice)
+			} else if cascaded(op, instances) {
+				// Q-9: правки экземпляра исключаются вместе с извлечением.
+				step = opPlan{op: op, status: "dropped"}
 			} else {
+				if op.Type == ops.ComponentExtract && choice == ResolutionMine {
+					choice = "" // mine потерял бы изменения базы внутри поддерева
+				}
 				step, conflict = replay(plan.body, op, choice)
+				if conflict != nil && op.Type == ops.ComponentExtract && conflict.Code == "BEFORE_MISMATCH" {
+					conflict.Code, conflict.Message = "COMPONENT_EXTRACT_BASE_CHANGED", "Поддерево или его место изменены на новой базе; повторите извлечение"
+				}
+			}
+			if step.status == "dropped" && op.Type == ops.ComponentExtract {
+				instance, component := extractIDs(op.Payload)
+				instances[instance] = true
+				droppedComponents = append(droppedComponents, component)
 			}
 			if conflict == nil && step.status == "applied" && op.Type != ComponentCertify {
 				if r := policydoc.CheckEdit(before, plan.body, actor.Rights.Has(auth.DesignZonesManage)); !r.Valid {
@@ -252,6 +270,15 @@ func Rebase(ctx context.Context, q *store.Queries, cs store.Changeset, resolutio
 			return res, err
 		}
 		res.Rebased = append(res.Rebased, p.id)
+	}
+	for _, id := range droppedComponents {
+		removed, err := dropComponent(ctx, q, cs.ID, id)
+		if err != nil {
+			return res, err
+		}
+		if removed {
+			res.Removed = append(res.Removed, id)
+		}
 	}
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
 	if err != nil {
@@ -377,4 +404,44 @@ func sameString(a, b *string) bool {
 		return a == b
 	}
 	return *a == *b
+}
+
+// cascaded — операция над экземпляром исключённого извлечения.
+func cascaded(op store.Operation, instances map[string]bool) bool {
+	for id := range instances {
+		if bytes.Contains(op.Payload, []byte(`"`+id+`"`)) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractIDs(payload []byte) (string, uuid.UUID) {
+	p, _ := ops.DecodeExtract(payload)
+	id, _ := uuid.Parse(p.ComponentID)
+	return p.InstanceNodeID, id
+}
+
+// dropComponent исключает компонент исключённого извлечения и все операции над ним.
+func dropComponent(ctx context.Context, q *store.Queries, cs, id uuid.UUID) (bool, error) {
+	list, err := q.ObjectOperations(ctx, store.ObjectOperationsParams{ChangesetID: cs, TargetObjectID: &id})
+	if err != nil {
+		return false, err
+	}
+	for _, op := range list {
+		if err := q.SetOperationStatus(ctx, store.SetOperationStatusParams{ID: op.ID, Status: "dropped"}); err != nil {
+			return false, err
+		}
+	}
+	co, err := q.GetChangesetObject(ctx, store.GetChangesetObjectParams{ChangesetID: cs, ObjectID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // извлечение уже отменено
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := q.RemoveChangesetObject(ctx, store.RemoveChangesetObjectParams{ChangesetID: cs, ObjectID: id}); err != nil {
+		return false, err
+	}
+	return true, q.DeleteWorkingVersion(ctx, co.WorkingVersionID)
 }

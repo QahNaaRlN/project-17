@@ -201,3 +201,47 @@ describe("STORE-001/005/006/007: чтение CMS", () => {
     expect(Object.getPrototypeOf(result.images)).toBe(Object.prototype);
   });
 });
+describe("STU-412: Composed instances on the storefront", () => {
+  const componentId = "0192f1c5-0000-7000-8000-000000000001";
+  const component = {
+    irVersion: "1.0" as const,
+    kind: "component" as const,
+    root: "n_card",
+    inputs: { title: { type: "text" as const, content: true } },
+    nodes: {
+      n_card: { id: "n_card", type: "Stack", children: ["n_title"] },
+      n_title: { id: "n_title", type: "Heading", bindings: { text: "$props.title" } },
+    },
+  };
+  function withInstance() {
+    const data = page(catalog);
+    data.document.nodes.n_store!.children!.push("n_inst");
+    data.document.nodes.n_inst = {
+      id: "n_inst",
+      type: "Composed",
+      ref: { component: componentId, version: "live" },
+      props: { title: "Витрина" },
+    };
+    return data;
+  }
+  it("loads the component with the page read and passes it to the preview bridge", async () => {
+    const c = cms();
+    vi.mocked(c.getPage).mockResolvedValue(withInstance());
+    c.getDocument = vi.fn(async () => ({ document: component })) as unknown as typeof c.getDocument;
+    const read = { preview: { token: "test", changesetId: id } };
+    const result = await loadStore(c, "/store", read, {
+      studioOrigin: "https://studio.test",
+      manifestHash: "sha256:" + "a".repeat(64),
+    });
+    expect(result.status).toBe("ready");
+    expect(JSON.stringify(result.plan)).toContain("Витрина");
+    expect(c.getDocument).toHaveBeenCalledWith(componentId, expect.objectContaining(read));
+    expect(result.bridge!.components![componentId]).toEqual(component);
+  });
+  it("an unresolved component is a store error, not a partial page", async () => {
+    const c = cms();
+    vi.mocked(c.getPage).mockResolvedValue(withInstance());
+    c.getDocument = vi.fn(async () => null) as unknown as typeof c.getDocument;
+    expect((await loadStore(c, "/store")).status).toBe("error");
+  });
+});

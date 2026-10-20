@@ -8,8 +8,9 @@ import {
   type Policy,
 } from "@cms/ir";
 import { builtinCatalogue } from "@cms/manifest/builtins";
-import type { Component, Manifest, Type } from "@cms/manifest";
+import type { Manifest, Type } from "@cms/manifest";
 import { fieldOperations } from "./fields.js";
+import { contract, nodeContract } from "./composed.js";
 import { StudioError, type Operation } from "./types.js";
 
 export interface Place {
@@ -17,13 +18,7 @@ export interface Place {
   slot: string;
   index: number;
 }
-export function contract(type: string, manifest: Manifest): Component | undefined {
-  return (
-    (builtinCatalogue as unknown as Record<string, Component>)[type] ??
-    manifest.primitives?.[type] ??
-    manifest.components?.[type]
-  );
-}
+export { contract, nodeContract } from "./composed.js";
 export function palette(manifest: Manifest) {
   return Object.keys({ ...builtinCatalogue, ...manifest.primitives, ...manifest.components })
     .sort()
@@ -183,7 +178,7 @@ function sourceAllowed(
   const flat = normalize({ irVersion: "1.0", kind: doc.kind, root: tree });
   if (Object.values(flat.nodes).some((n) => n.locked || n.zone)) return false;
   if (target?.parentId === from.parentId && target.slot === from.slot) return true;
-  const min = contract(doc.nodes[from.parentId]!.type, manifest)?.slots?.[from.slot]?.min ?? 0;
+  const min = nodeContract(doc.nodes[from.parentId], manifest)?.slots?.[from.slot]?.min ?? 0;
   return listAt(doc, from).length - 1 >= min;
 }
 export function canRemove(doc: IrDocument, id: string, manifest: Manifest): boolean {
@@ -204,7 +199,7 @@ export function destinations(
   const canLeave =
     !from ||
     listAt(doc, from).length - 1 >=
-      (contract(doc.nodes[from.parentId]!.type, manifest)?.slots?.[from.slot]?.min ?? 0);
+      (nodeContract(doc.nodes[from.parentId], manifest)?.slots?.[from.slot]?.min ?? 0);
   const excluded = moving
     ? new Set(
         Object.keys(
@@ -218,7 +213,7 @@ export function destinations(
     if (chain.some((n) => n.locked || n.zone?.locked)) continue;
     const levels: Policy[] = [doc.policy ?? {}, ...chain.flatMap((n) => (n.zone ? [n.zone] : []))];
     if (!treeAllowed(tree, levels, manifest)) continue;
-    const def = contract(parent.type, manifest);
+    const def = nodeContract(parent, manifest);
     if (!def) continue;
     for (const slot of [...(def.container ? [""] : []), ...Object.keys(def.slots ?? {})]) {
       const rule = def.slots?.[slot];

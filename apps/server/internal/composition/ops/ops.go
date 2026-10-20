@@ -72,19 +72,21 @@ type spec struct {
 }
 
 var registry = map[string]spec{
-	DocumentSetDataSource: {auth.DesignCompose, setDataSource},
-	DocumentSetContent:    {auth.DesignCompose, setContent},
-	NodeInsert:            {auth.DesignCompose, applyInsert},
-	NodeRemove:            {auth.DesignCompose, applyRemove},
-	NodeMove:              {auth.DesignCompose, applyMove},
-	NodeSetProps:          {auth.DesignCompose, mapSetter("props")},
-	NodeSetDesign:         {auth.DesignCompose, mapSetter("design")},
-	NodeSetBinding:        {auth.DesignCompose, applySetBinding},
-	NodeSetCondition:      {auth.DesignCompose, fieldSetter("when")},
-	NodeSetBehavior:       {auth.BehaviorUse, applySetBehavior},
-	NodeRename:            {auth.DesignCompose, fieldSetter("name")},
-	LocalContentSet:       {auth.ContentWrite, localContentSet},
-	LocalContentRemove:    {auth.ContentWrite, localContentRemove},
+	DocumentSetDataSource:  {auth.DesignCompose, setDataSource},
+	DocumentSetContent:     {auth.DesignCompose, setContent},
+	NodeInsert:             {auth.DesignCompose, applyInsert},
+	NodeRemove:             {auth.DesignCompose, applyRemove},
+	NodeMove:               {auth.DesignCompose, applyMove},
+	NodeSetProps:           {auth.DesignCompose, mapSetter("props")},
+	NodeSetDesign:          {auth.DesignCompose, mapSetter("design")},
+	NodeSetBinding:         {auth.DesignCompose, applySetBinding},
+	NodeSetCondition:       {auth.DesignCompose, fieldSetter("when")},
+	NodeSetBehavior:        {auth.BehaviorUse, applySetBehavior},
+	NodeRename:             {auth.DesignCompose, fieldSetter("name")},
+	LocalContentSet:        {auth.ContentWrite, localContentSet},
+	LocalContentRemove:     {auth.ContentWrite, localContentRemove},
+	ComponentExtract:       {auth.ComponentWrite, applyExtractPage},
+	ComponentRevertExtract: {auth.ComponentWrite, applyRevertExtractPage},
 }
 
 // Types — поддерживаемые типы операций над документом.

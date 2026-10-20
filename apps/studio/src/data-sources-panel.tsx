@@ -4,7 +4,7 @@ import type { DataSourceUse, IrDocument } from "@cms/ir";
 import type { Type, Manifest } from "@cms/manifest";
 import type { Editor } from "./editor.js";
 import { layers } from "./fields.js";
-import { contract, location } from "./structure.js";
+import { nodeContract, location } from "./structure.js";
 import {
   compatible,
   registeredSource,
@@ -220,7 +220,7 @@ export function DataSourcesPanel({
   const revision = useRef(state.historyRevision);
   if (!state.dirtyFields["property-dataSource"] && !state.dirtyFields["property-repeatSettings"])
     revision.current = state.historyRevision;
-  if (!session?.record || state.document?.kind !== "page") return null;
+  if (!session?.record || !["page", "component"].includes(state.document?.kind ?? "")) return null;
   return (
     <DataPanel
       key={`${session.changeset.id}:${session.record.id}:${revision.current}:${session.manifestHash}`}
@@ -281,11 +281,12 @@ function DataPanel({ editor, rights }: { editor: Editor; rights?: string[] | und
     rootLocked ||
     Object.entries(state.dirtyFields).some(([k, v]) => v && k !== "property-dataSource");
   const canReadContent = !rights || rights.includes("content.read");
+  const component = doc.kind === "component";
   const catalogue = Object.entries(manifest.dataSources ?? {});
   const results = resultFields(doc, manifest),
     choices = selected ? bindingFields(doc, manifest, selected.id) : { fields: [], limited: false };
   const properties = selected
-    ? Object.entries(contract(selected.type, manifest)?.props ?? {}).filter(
+    ? Object.entries(nodeContract(selected, manifest)?.props ?? {}).filter(
         ([name]) => selected.type !== "Repeat" || name === "items",
       )
     : [];
@@ -402,59 +403,71 @@ function DataPanel({ editor, rights }: { editor: Editor; rights?: string[] | und
   return (
     <section className="content-bindings" aria-label={text("Источники данных", "Data sources")}>
       <h2>{text("Источники данных", "Data sources")}</h2>
-      <ul>
-        {Object.entries(doc.dataSources ?? {}).map(([key, use]) => (
-          <li key={key}>
-            <strong>{key}</strong> · {use.source}
-            {registeredSource(manifest, use.source)?.paginated && (
-              <p>
-                {text(
-                  "Первая порция; загрузка следующих порций пока не настраивается.",
-                  "First page only; loading more is not configurable yet.",
-                )}
-              </p>
-            )}
-            {!registeredSource(manifest, use.source) && (
-              <p role="status">
-                {text(
-                  "Источник отсутствует в активном контракте.",
-                  "Source is absent from the active contract.",
-                )}
-              </p>
-            )}
-            <button
-              disabled={readOnly || !!dialog || !safeKey(key)}
-              onClick={(e) => {
-                trigger.current = e.currentTarget;
-                sourceDialog(key);
-              }}
-            >
-              {text("Настроить", "Configure")} {key}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <button
-        disabled={
-          readOnly ||
-          !!dialog ||
-          !catalogue.length ||
-          Object.keys(doc.dataSources ?? {}).length >= 64
-        }
-        onClick={(e) => {
-          trigger.current = e.currentTarget;
-          sourceDialog();
-        }}
-      >
-        {text("Подключить источник", "Connect source")}
-      </button>
-      {!catalogue.length && (
+      {component && (
         <p>
           {text(
-            "В приложении нет зарегистрированных источников.",
-            "The application has no registered sources.",
+            "Данные компонента приходят через входы ($props); источники подключаются на странице.",
+            "Component data comes from inputs ($props); sources are connected on the page.",
           )}
         </p>
+      )}
+      {!component && (
+        <>
+          <ul>
+            {Object.entries(doc.dataSources ?? {}).map(([key, use]) => (
+              <li key={key}>
+                <strong>{key}</strong> · {use.source}
+                {registeredSource(manifest, use.source)?.paginated && (
+                  <p>
+                    {text(
+                      "Первая порция; загрузка следующих порций пока не настраивается.",
+                      "First page only; loading more is not configurable yet.",
+                    )}
+                  </p>
+                )}
+                {!registeredSource(manifest, use.source) && (
+                  <p role="status">
+                    {text(
+                      "Источник отсутствует в активном контракте.",
+                      "Source is absent from the active contract.",
+                    )}
+                  </p>
+                )}
+                <button
+                  disabled={readOnly || !!dialog || !safeKey(key)}
+                  onClick={(e) => {
+                    trigger.current = e.currentTarget;
+                    sourceDialog(key);
+                  }}
+                >
+                  {text("Настроить", "Configure")} {key}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            disabled={
+              readOnly ||
+              !!dialog ||
+              !catalogue.length ||
+              Object.keys(doc.dataSources ?? {}).length >= 64
+            }
+            onClick={(e) => {
+              trigger.current = e.currentTarget;
+              sourceDialog();
+            }}
+          >
+            {text("Подключить источник", "Connect source")}
+          </button>
+          {!catalogue.length && (
+            <p>
+              {text(
+                "В приложении нет зарегистрированных источников.",
+                "The application has no registered sources.",
+              )}
+            </p>
+          )}
+        </>
       )}
       <details>
         <summary>{text("Каталог и результаты", "Catalogue and results")}</summary>

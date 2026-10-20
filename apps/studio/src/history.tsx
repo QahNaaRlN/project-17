@@ -21,6 +21,7 @@ const copy = {
     insert: "Добавление блока",
     remove: "Удаление блока",
     move: "Перемещение блока",
+    extract: "Сохранено как компонент",
     undoEvent: "Отмена",
     redoEvent: "Повтор",
     other: "Есть изменения другого объекта",
@@ -46,6 +47,7 @@ const copy = {
     props: "Property change",
     insert: "Block added",
     remove: "Block deleted",
+    extract: "Saved as component",
     move: "Block moved",
     undoEvent: "Undo",
     redoEvent: "Redo",
@@ -79,6 +81,11 @@ function description(action: HistoryAction, t: typeof copy.ru) {
   if (action.kind === "redo") return t.redoEvent;
   if (action.operations.some((op) => op.type.startsWith("entity.") || op.type.startsWith("asset.")))
     return t.content;
+  if (action.operations.some((o) => o.type === "component.extract")) {
+    // Studio writes the component name into the reason: «…».
+    const name = /«([^«»]{1,80})»$/.exec(action.reason ?? "")?.[1];
+    return name ? `${t.extract} «${name}»` : t.extract;
+  }
   if (action.operations.some((o) => o.type === "node.insert")) return t.insert;
   if (action.operations.some((o) => o.type === "node.remove")) return t.remove;
   if (action.operations.some((o) => o.type === "node.move")) return t.move;

@@ -24,41 +24,13 @@ export async function loadPage(
 ): Promise<RenderPlan | null> {
   const page = await cms.getPage(path, options.read);
   if (!page) return null;
-  const components: Record<string, IrDocument> = Object.create(null);
-  for (const [id, item] of Object.entries(page.components)) components[id] = item.document;
-  Object.assign(components, options.components);
-  const seen = new Set<string>();
-  const queue = [page.document];
-  while (queue.length) {
-    const doc = queue.shift()!;
-    for (const node of Object.values(doc.nodes)) {
-      if (
-        node.type !== "Composed" ||
-        !node.ref ||
-        (node.ref.version !== undefined && node.ref.version !== "live")
-      )
-        continue;
-      const id = node.ref.component;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      if (seen.size > 64)
-        return {
-          roots: [],
-          css: "",
-          diagnostics: [{ code: "CMS_COMPONENT_LOAD_LIMIT", nodeId: page.document.root }],
-        };
-      if (!Object.hasOwn(components, id)) {
-        try {
-          const result = await cms.getDocument(id, options.read);
-          if (result) components[id] = result.document;
-        } catch (error) {
-          if (options.read?.signal?.aborted) throw error;
-          /* A missing component produces a sanitized diagnostic during preparation. */
-        }
-      }
-      if (components[id]) queue.push(components[id]);
-    }
-  }
+  const components = await loadComponents(cms, page, options.read, options.components);
+  if (!components)
+    return {
+      roots: [],
+      css: "",
+      diagnostics: [{ code: "CMS_COMPONENT_LOAD_LIMIT", nodeId: page.document.root }],
+    };
   const plan = await preparePageWithData(page.document, {
     ...(options.registry
       ? {
@@ -94,6 +66,50 @@ export async function loadPage(
     );
   await loadPlanImages(cms, plan, options.read);
   return plan;
+}
+
+/**
+ * Live Composed components of a page, transitively (at most 64). Each is read with the
+ * page's read options, so a preview resolves the working version of its own Change Set.
+ * Returns null when the limit is exceeded; a missing component stays a plan diagnostic.
+ */
+export async function loadComponents(
+  cms: CmsClient,
+  page: { document: IrDocument; components?: Record<string, { document: IrDocument }> },
+  read?: ReadOptions,
+  known?: Record<string, IrDocument>,
+): Promise<Record<string, IrDocument> | null> {
+  const components: Record<string, IrDocument> = Object.create(null);
+  for (const [id, item] of Object.entries(page.components ?? {})) components[id] = item.document;
+  Object.assign(components, known);
+  const seen = new Set<string>();
+  const queue = [page.document];
+  while (queue.length) {
+    const doc = queue.shift()!;
+    for (const node of Object.values(doc.nodes)) {
+      if (
+        node.type !== "Composed" ||
+        !node.ref ||
+        (node.ref.version !== undefined && node.ref.version !== "live")
+      )
+        continue;
+      const id = node.ref.component;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (seen.size > 64) return null;
+      if (!Object.hasOwn(components, id)) {
+        try {
+          const result = await cms.getDocument(id, read);
+          if (result) components[id] = result.document;
+        } catch (error) {
+          if (read?.signal?.aborted) throw error;
+          /* A missing component produces a sanitized diagnostic during preparation. */
+        }
+      }
+      if (components[id]) queue.push(components[id]);
+    }
+  }
+  return components;
 }
 
 /** Load signed models in the same scope and return their earliest refresh time. */

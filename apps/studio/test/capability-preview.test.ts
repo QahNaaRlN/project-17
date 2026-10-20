@@ -163,6 +163,12 @@ it("STU-329/330: PR preview is read-only, bound to its build and origin", async 
   expect(await editor.applyContent([], 1)).toBeNull();
   await editor.changeHistory("undo");
   await editor.workflow("submit");
+  expect(
+    await editor.extract(
+      { type: "node.setDesign", target: documentId, payload: { nodeId: "n_root" } },
+      "Card",
+    ),
+  ).toMatchObject({ code: "PREVIEW_READ_ONLY" });
   expect(api.apply).not.toHaveBeenCalled();
   expect(api.workflow).not.toHaveBeenCalled();
   expect(api.changeHistory).not.toHaveBeenCalled();

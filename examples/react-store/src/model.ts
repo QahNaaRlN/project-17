@@ -1,3 +1,4 @@
+import type { IrDocument } from "@cms/ir";
 import type { PageResponse } from "@cms/core";
 import type { Image } from "@cms/runtime";
 import type { RenderPlan } from "@cms/runtime";
@@ -41,6 +42,7 @@ export interface StoreModel {
     studioOrigin: string;
     manifestHash: string;
     data: Record<string, unknown>;
+    components?: Record<string, IrDocument>;
     sourceErrors?: Record<string, string>;
     changesetId?: string;
   };

@@ -27,6 +27,8 @@ const stepNames: Record<string, [string, string]> = {
   bind_data: ["Привязка данных", "Binding data"],
   set_behavior: ["Настройка поведения", "Configuring behavior"],
   set_local_content: ["Изменение текста", "Changing text"],
+  plan_component_extract: ["Чтение плана компонента", "Reading component plan"],
+  create_component: ["Сохранение компонента", "Saving component"],
 };
 const errorNames: Record<string, [string, string]> = {
   NETWORK_UNCERTAIN: [
