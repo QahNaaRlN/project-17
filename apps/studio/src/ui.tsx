@@ -25,6 +25,7 @@ import { DataSourcesPanel } from "./data-sources-panel.js";
 import { BehaviorPanel } from "./behavior-panel.js";
 import { CapabilityComposer, CapabilityQueue } from "./capability-panel.js";
 import { ComponentRequestComposer } from "./capability-component-panel.js";
+import { DataTokenRequestComposer } from "./capability-data-token-panel.js";
 import { DeliveryTargetPanel } from "./capability-delivery-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
@@ -908,6 +909,7 @@ export function Studio({
                 </div>
                 <CapabilityComposer {...{ api, editor, rights }} />
                 <ComponentRequestComposer {...{ api, editor, rights }} />
+                <DataTokenRequestComposer {...{ api, editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (
                   <>

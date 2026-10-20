@@ -11,7 +11,7 @@ export const capabilityCommands = [
 export type CapabilityCommand = (typeof capabilityCommands)[number];
 export interface CapabilityRequest {
   id: string;
-  kind: "action" | "component";
+  kind: "action" | "component" | "dataSource" | "token";
   environment: string;
   key: string;
   title: string;
@@ -19,11 +19,24 @@ export interface CapabilityRequest {
   proposedContract: {
     args?: Fields;
     props?: Fields;
+    params?: Fields;
+    result?: Fields[string];
+    paginated?: boolean;
+    category?: string;
+    value?: string;
     container?: boolean;
     slots?: Record<string, { max?: number }>;
   };
   /** Component requests: where the placeholder was inserted (STU-359). */
-  placement?: { parentId: string; slot?: string; index: number };
+  placement?: {
+    parentId?: string;
+    slot?: string;
+    index?: number;
+    dataSourceKey?: string;
+    nodeId?: string;
+    property?: string;
+    breakpoint?: string;
+  };
   initialProps?: Record<string, unknown>;
   acceptance: string[];
   status: string;
@@ -67,7 +80,7 @@ export function capability(value: CapabilityRequest, uncertain = false): Capabil
   if (
     !value ||
     !uuid.test(value.id) ||
-    !["action", "component"].includes(value.kind) ||
+    !["action", "component", "dataSource", "token"].includes(value.kind) ||
     typeof value.title !== "string" ||
     typeof value.description !== "string" ||
     typeof value.key !== "string" ||
@@ -87,7 +100,13 @@ export function capability(value: CapabilityRequest, uncertain = false): Capabil
       "rejected",
       "cancelled",
     ].includes(value.status) ||
-    !(value.kind === "component" ? value.proposedContract?.props : value.proposedContract?.args) ||
+    !(value.kind === "component"
+      ? value.proposedContract?.props
+      : value.kind === "dataSource"
+        ? value.proposedContract?.result
+        : value.kind === "token"
+          ? value.proposedContract?.category
+          : value.proposedContract?.args) ||
     !Array.isArray(value.acceptance) ||
     value.acceptance.some((x) => typeof x !== "string") ||
     !Array.isArray(value.externalRefs) ||

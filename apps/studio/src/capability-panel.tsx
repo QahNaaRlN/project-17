@@ -136,6 +136,7 @@ export function DraftFields({
   ru,
   disabled,
   noun = "argument",
+  typed = true,
 }: {
   title: string;
   description: string;
@@ -149,10 +150,11 @@ export function DraftFields({
   ru: boolean;
   disabled: boolean;
   /** STU-372: a component contract lists properties instead of arguments. */
-  noun?: "argument" | "property";
+  noun?: "argument" | "property" | "parameter";
+  /** STU-380: a token request has no typed fields. */
+  typed?: boolean;
 }) {
   const text = (r: string, e: string) => (ru ? r : e);
-  const prop = noun === "property";
   return (
     <fieldset disabled={disabled}>
       <label>
@@ -172,113 +174,128 @@ export function DraftFields({
         {text("Критерии приёмки, по одному в строке", "Acceptance criteria, one per line")}
         <textarea required value={acceptance} onChange={(e) => setAcceptance(e.target.value)} />
       </label>
-      {args.map((arg, i) => {
-        const change = (v: Partial<Arg>) =>
-          setArgs(args.map((a, n) => (n === i ? { ...a, ...v } : a)));
-        return (
-          <fieldset key={i}>
-            <legend>
-              {prop ? text("Свойство", "Property") : text("Аргумент", "Argument")} {i + 1}
-            </legend>
-            <label>
-              {prop
-                ? text("Имя свойства", "Property name")
-                : text("Имя аргумента", "Argument name")}
-              <input
-                required
-                pattern="[a-z][a-zA-Z0-9]*"
-                value={arg.name}
-                onChange={(e) => change({ name: e.target.value })}
-              />
-            </label>
-            <label>
-              {prop
-                ? text("Тип свойства", "Property type")
-                : text("Тип аргумента", "Argument type")}
-              <select
-                value={arg.type}
-                onChange={(e) => change({ type: e.target.value as Arg["type"] })}
-              >
-                {types.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={arg.required}
-                onChange={(e) => change({ required: e.target.checked })}
-              />
-              {text("Обязательный", "Required")}
-            </label>
-            {arg.type === "enum" && (
+      {typed &&
+        args.map((arg, i) => {
+          const change = (v: Partial<Arg>) =>
+            setArgs(args.map((a, n) => (n === i ? { ...a, ...v } : a)));
+          return (
+            <fieldset key={i}>
+              <legend>
+                {noun === "property"
+                  ? text("Свойство", "Property")
+                  : noun === "parameter"
+                    ? text("Параметр", "Parameter")
+                    : text("Аргумент", "Argument")}{" "}
+                {i + 1}
+              </legend>
               <label>
-                {text("Варианты через запятую", "Comma separated values")}
+                {noun === "property"
+                  ? text("Имя свойства", "Property name")
+                  : noun === "parameter"
+                    ? text("Имя параметра", "Parameter name")
+                    : text("Имя аргумента", "Argument name")}
                 <input
                   required
-                  value={arg.values}
-                  onChange={(e) => change({ values: e.target.value })}
+                  pattern="[a-z][a-zA-Z0-9]*"
+                  value={arg.name}
+                  onChange={(e) => change({ name: e.target.value })}
                 />
               </label>
-            )}
-            {arg.type === "reference" && (
               <label>
-                {text("Схема", "Schema")}
+                {noun === "property"
+                  ? text("Тип свойства", "Property type")
+                  : noun === "parameter"
+                    ? text("Тип параметра", "Parameter type")
+                    : text("Тип аргумента", "Argument type")}
                 <select
-                  required
-                  value={arg.schema}
-                  onChange={(e) => change({ schema: e.target.value })}
+                  value={arg.type}
+                  onChange={(e) => change({ type: e.target.value as Arg["type"] })}
                 >
-                  <option value="">—</option>
-                  {schemas.map((s) => (
-                    <option key={s}>{s}</option>
+                  {types.map((t) => (
+                    <option key={t}>{t}</option>
                   ))}
                 </select>
               </label>
-            )}
-            {["number", "string", "text"].includes(arg.type) && (
-              <>
-                {arg.type !== "text" && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={arg.required}
+                  onChange={(e) => change({ required: e.target.checked })}
+                />
+                {text("Обязательный", "Required")}
+              </label>
+              {arg.type === "enum" && (
+                <label>
+                  {text("Варианты через запятую", "Comma separated values")}
+                  <input
+                    required
+                    value={arg.values}
+                    onChange={(e) => change({ values: e.target.value })}
+                  />
+                </label>
+              )}
+              {arg.type === "reference" && (
+                <label>
+                  {text("Схема", "Schema")}
+                  <select
+                    required
+                    value={arg.schema}
+                    onChange={(e) => change({ schema: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    {schemas.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {["number", "string", "text"].includes(arg.type) && (
+                <>
+                  {arg.type !== "text" && (
+                    <label>
+                      {text("Минимум", "Minimum")}
+                      <input
+                        type="number"
+                        step={arg.type === "number" ? "any" : "1"}
+                        min={arg.type === "number" ? undefined : 0}
+                        value={arg.min}
+                        onChange={(e) => change({ min: e.target.value })}
+                      />
+                    </label>
+                  )}
                   <label>
-                    {text("Минимум", "Minimum")}
+                    {text("Максимум", "Maximum")}
                     <input
                       type="number"
                       step={arg.type === "number" ? "any" : "1"}
-                      min={arg.type === "number" ? undefined : 0}
-                      value={arg.min}
-                      onChange={(e) => change({ min: e.target.value })}
+                      min={arg.type === "number" ? undefined : 1}
+                      value={arg.max}
+                      onChange={(e) => change({ max: e.target.value })}
                     />
                   </label>
-                )}
-                <label>
-                  {text("Максимум", "Maximum")}
-                  <input
-                    type="number"
-                    step={arg.type === "number" ? "any" : "1"}
-                    min={arg.type === "number" ? undefined : 1}
-                    value={arg.max}
-                    onChange={(e) => change({ max: e.target.value })}
-                  />
-                </label>
-              </>
-            )}
-            <button type="button" onClick={() => setArgs(args.filter((_, n) => n !== i))}>
-              {prop
-                ? text("Удалить свойство", "Remove property")
-                : text("Удалить аргумент", "Remove argument")}
-            </button>
-          </fieldset>
-        );
-      })}
+                </>
+              )}
+              <button type="button" onClick={() => setArgs(args.filter((_, n) => n !== i))}>
+                {noun === "property"
+                  ? text("Удалить свойство", "Remove property")
+                  : noun === "parameter"
+                    ? text("Удалить параметр", "Remove parameter")
+                    : text("Удалить аргумент", "Remove argument")}
+              </button>
+            </fieldset>
+          );
+        })}
       <button
         type="button"
+        hidden={!typed}
         disabled={args.length >= 32}
         onClick={() => setArgs([...args, newArg()])}
       >
-        {prop
+        {noun === "property"
           ? text("Добавить свойство", "Add property")
-          : text("Добавить аргумент", "Add argument")}
+          : noun === "parameter"
+            ? text("Добавить параметр", "Add parameter")
+            : text("Добавить аргумент", "Add argument")}
       </button>
     </fieldset>
   );
@@ -629,10 +646,17 @@ export function CapabilityCard({
     [description, setDescription] = useState(initial.description),
     [acceptance, setAcceptance] = useState(initial.acceptance.join("\n")),
     [args, setArgs] = useState(
-      argsFor(initial.proposedContract.args ?? initial.proposedContract.props ?? {}),
+      argsFor(
+        initial.proposedContract.args ??
+          initial.proposedContract.props ??
+          initial.proposedContract.params ??
+          {},
+      ),
     );
-  // STU-372: a component request has props, a placement and no handlers.
-  const component = request.kind === "component";
+  // STU-372/392: placeholder kinds (component, data source, token) have a
+  // placement and no handlers.
+  const component = request.kind !== "action";
+  const fieldKey = request.kind === "dataSource" ? "params" : "props";
   const command = useCommand(api, editor, async (r) => {
     setRequest(r);
     setRequest(await api.capability!(r.id));
@@ -763,9 +787,11 @@ export function CapabilityCard({
         ))}
       </ul>
       <p>
-        {component
+        {request.kind === "component"
           ? `${request.nodeId} · ${text("в", "in")} ${request.placement?.parentId ?? "—"}`
-          : `${request.nodeId} · ${request.event}`}
+          : request.kind === "dataSource"
+            ? `$data.${request.nodeId}`
+            : `${request.nodeId} · ${request.event}`}
       </p>
       {request.stale && (
         <p role="status">
@@ -845,10 +871,12 @@ export function CapabilityCard({
                     .map((s) => s.trim())
                     .filter(Boolean),
                   proposedContract: component
-                    ? {
-                        ...request.proposedContract,
-                        props: proposed(args),
-                      }
+                    ? request.kind === "token"
+                      ? request.proposedContract
+                      : {
+                          ...request.proposedContract,
+                          [fieldKey]: proposed(args),
+                        }
                     : { args: proposed(args) },
                 },
               });
@@ -871,7 +899,7 @@ export function CapabilityCard({
             }}
             schemas={Object.keys(session?.manifest.schemas ?? {})}
             disabled={locked}
-            noun={component ? "property" : "argument"}
+            noun={request.kind === "dataSource" ? "parameter" : component ? "property" : "argument"}
           />
           <button disabled={locked}>{text("Сохранить изменения", "Save changes")}</button>
         </form>
@@ -902,8 +930,8 @@ export function CapabilityCard({
                 {request.status === "draft" && component && (
                   <p>
                     {text(
-                      `На страницу будет вставлена заглушка компонента ${request.key}.`,
-                      `A placeholder of the ${request.key} component will be inserted into the page.`,
+                      `На страницу будет добавлена заглушка ${request.key}.`,
+                      `A placeholder of ${request.key} will be added to the page.`,
                     )}
                   </p>
                 )}
@@ -969,9 +997,9 @@ export function CapabilityCard({
       {transitions.includes("resolve") &&
         matches &&
         component &&
-        session.manifest.components?.[request.key] && (
+        available(request, session.manifest) && (
           <button disabled={locked} onClick={() => void act("resolve-capability-request")}>
-            {text("Применить доступный компонент", "Apply available component")}
+            {text("Применить доступную возможность", "Apply available capability")}
           </button>
         )}
       {transitions.includes("resolve") && matches && !component && actual && doc && (
@@ -1211,4 +1239,14 @@ export function CapabilityQueue({ api, editor }: { api: Api; editor: Editor }) {
       )}
     </section>
   );
+}
+
+/** STU-369/390: the manifest already has the requested element. */
+function available(request: CapabilityRequest, manifest: Session["manifest"]): boolean {
+  if (request.kind === "component") return !!manifest.components?.[request.key];
+  if (request.kind === "dataSource") return !!manifest.dataSources?.[request.key];
+  const [category, name] = request.key.split(".");
+  return !!(manifest.tokens as Record<string, Record<string, unknown> | undefined> | undefined)?.[
+    category!
+  ]?.[name!];
 }
