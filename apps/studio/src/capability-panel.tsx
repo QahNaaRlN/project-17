@@ -25,7 +25,8 @@ type Arg = {
   min: string;
   max: string;
 };
-const newArg = (): Arg => ({
+export type { Arg };
+export const newArg = (): Arg => ({
   name: "",
   type: "string",
   required: false,
@@ -34,7 +35,7 @@ const newArg = (): Arg => ({
   min: "",
   max: "",
 });
-const codeMode = (doc: IrDocument, id: string, policy: Session["review"]["capabilityPolicy"]) => {
+export const codeMode = (doc: IrDocument, id: string, policy: Session["review"]["capabilityPolicy"]) => {
   if (!policy) return false;
   const levels = [doc.policy ?? {}];
   const nodes = [];
@@ -62,7 +63,7 @@ const codeMode = (doc: IrDocument, id: string, policy: Session["review"]["capabi
   return mode === "CODE";
 };
 
-function useCommand(
+export function useCommand(
   api: Api,
   editor: Editor,
   onDone: (request: CapabilityRequest) => Promise<void>,
@@ -118,7 +119,7 @@ function useCommand(
   return { send, error, pending, uncertain };
 }
 
-function DraftFields({
+export function DraftFields({
   title,
   description,
   acceptance,
@@ -130,6 +131,7 @@ function DraftFields({
   schemas,
   ru,
   disabled,
+  noun = "argument",
 }: {
   title: string;
   description: string;
@@ -142,8 +144,11 @@ function DraftFields({
   schemas: string[];
   ru: boolean;
   disabled: boolean;
+  /** STU-372: a component contract lists properties instead of arguments. */
+  noun?: "argument" | "property";
 }) {
   const text = (r: string, e: string) => (ru ? r : e);
+  const prop = noun === "property";
   return (
     <fieldset disabled={disabled}>
       <label>
@@ -169,10 +174,10 @@ function DraftFields({
         return (
           <fieldset key={i}>
             <legend>
-              {text("Аргумент", "Argument")} {i + 1}
+              {prop ? text("Свойство", "Property") : text("Аргумент", "Argument")} {i + 1}
             </legend>
             <label>
-              {text("Имя аргумента", "Argument name")}
+              {prop ? text("Имя свойства", "Property name") : text("Имя аргумента", "Argument name")}
               <input
                 required
                 pattern="[a-z][a-zA-Z0-9]*"
@@ -181,7 +186,7 @@ function DraftFields({
               />
             </label>
             <label>
-              {text("Тип аргумента", "Argument type")}
+              {prop ? text("Тип свойства", "Property type") : text("Тип аргумента", "Argument type")}
               <select
                 value={arg.type}
                 onChange={(e) => change({ type: e.target.value as Arg["type"] })}
@@ -251,7 +256,9 @@ function DraftFields({
               </>
             )}
             <button type="button" onClick={() => setArgs(args.filter((_, n) => n !== i))}>
-              {text("Удалить аргумент", "Remove argument")}
+              {prop
+                ? text("Удалить свойство", "Remove property")
+                : text("Удалить аргумент", "Remove argument")}
             </button>
           </fieldset>
         );
@@ -261,12 +268,12 @@ function DraftFields({
         disabled={args.length >= 32}
         onClick={() => setArgs([...args, newArg()])}
       >
-        {text("Добавить аргумент", "Add argument")}
+        {prop ? text("Добавить свойство", "Add property") : text("Добавить аргумент", "Add argument")}
       </button>
     </fieldset>
   );
 }
-function proposed(args: Arg[]): Fields {
+export function proposed(args: Arg[]): Fields {
   const fields: Fields = {};
   for (const arg of args) {
     if (
@@ -611,7 +618,11 @@ export function CapabilityCard({
   const [title, setTitle] = useState(initial.title),
     [description, setDescription] = useState(initial.description),
     [acceptance, setAcceptance] = useState(initial.acceptance.join("\n")),
-    [args, setArgs] = useState(argsFor(initial.proposedContract.args));
+    [args, setArgs] = useState(
+      argsFor(initial.proposedContract.args ?? initial.proposedContract.props ?? {}),
+    );
+  // STU-372: a component request has props, a placement and no handlers.
+  const component = request.kind === "component";
   const command = useCommand(api, editor, async (r) => {
     setRequest(r);
     setRequest(await api.capability!(r.id));
@@ -742,7 +753,9 @@ export function CapabilityCard({
         ))}
       </ul>
       <p>
-        {request.nodeId} · {request.event}
+        {component
+          ? `${request.nodeId} · ${text("в", "in")} ${request.placement?.parentId ?? "—"}`
+          : `${request.nodeId} · ${request.event}`}
       </p>
       {request.stale && (
         <p role="status">
@@ -821,7 +834,12 @@ export function CapabilityCard({
                     .split("\n")
                     .map((s) => s.trim())
                     .filter(Boolean),
-                  proposedContract: { args: proposed(args) },
+                  proposedContract: component
+                    ? {
+                        ...request.proposedContract,
+                        props: proposed(args),
+                      }
+                    : { args: proposed(args) },
                 },
               });
             } catch {
@@ -843,6 +861,7 @@ export function CapabilityCard({
             }}
             schemas={Object.keys(session?.manifest.schemas ?? {})}
             disabled={locked}
+            noun={component ? "property" : "argument"}
           />
           <button disabled={locked}>{text("Сохранить изменения", "Save changes")}</button>
         </form>
@@ -870,7 +889,15 @@ export function CapabilityCard({
                     "Share this context pack with project members who have code.propose",
                   )}
                 </label>
-                {request.status === "draft" && (
+                {request.status === "draft" && component && (
+                  <p>
+                    {text(
+                      `На страницу будет вставлена заглушка компонента ${request.key}.`,
+                      `A placeholder of the ${request.key} component will be inserted into the page.`,
+                    )}
+                  </p>
+                )}
+                {request.status === "draft" && !component && (
                   <>
                     <p>
                       {text(
@@ -901,7 +928,7 @@ export function CapabilityCard({
                   disabled={
                     locked ||
                     !share ||
-                    (request.status === "draft" && !replace) ||
+                    (request.status === "draft" && !replace && !component) ||
                     state.status !== "ready"
                   }
                   onClick={() =>
@@ -914,7 +941,9 @@ export function CapabilityCard({
                         expectedSeq: preview.expectedSeq,
                         expectedRevision: preview.expectedRevision,
                         expectedManifestHash: preview.expectedManifestHash,
-                        ...(request.status === "draft" ? { confirmReplaceExisting: replace } : {}),
+                        ...(request.status === "draft" && !component
+                          ? { confirmReplaceExisting: replace }
+                          : {}),
                       },
                     )
                   }
@@ -927,7 +956,18 @@ export function CapabilityCard({
             )}
           </>
         )}
-      {transitions.includes("resolve") && matches && actual && doc && (
+      {transitions.includes("resolve") &&
+        matches &&
+        component &&
+        session.manifest.components?.[request.key] && (
+          <button
+            disabled={locked}
+            onClick={() => void act("resolve-capability-request")}
+          >
+            {text("Применить доступный компонент", "Apply available component")}
+          </button>
+        )}
+      {transitions.includes("resolve") && matches && !component && actual && doc && (
         <fieldset disabled={locked}>
           <legend>{text("Аргументы готового действия", "Available action arguments")}</legend>
           {Object.entries(actual).map(([name, schema]) => (
