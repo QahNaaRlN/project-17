@@ -7,7 +7,7 @@ import {
 } from "@cms/ir";
 import type { Manifest, Type } from "@cms/manifest";
 import { contentCompatible, contentFields } from "./content-bindings.js";
-import { contract, location, destinations, insertion, type Place } from "./structure.js";
+import { nodeContract, location, destinations, insertion, type Place } from "./structure.js";
 import { applyOperations } from "./operations.js";
 import { layers } from "./fields.js";
 import { StudioError, type Operation } from "./types.js";
@@ -79,6 +79,14 @@ export function walkFields(path: string, schema: Type): { fields: DataField[]; l
 export function resultFields(doc: IrDocument, manifest: Manifest) {
   const fields: DataField[] = [];
   let limited = false;
+  // STU-415: inside a component the inputs are the data scope ($props.<input>).
+  if (doc.kind === "component")
+    for (const [name, input] of Object.entries(doc.inputs ?? {})) {
+      if (!safeKey(name)) continue;
+      const result = walkFields("$props." + name, input as Type);
+      limited ||= result.limited || fields.length + result.fields.length > 200;
+      fields.push(...result.fields.slice(0, Math.max(0, 200 - fields.length)));
+    }
   for (const [key, use] of Object.entries(doc.dataSources ?? {})) {
     const source = registeredSource(manifest, use.source);
     if (!safeKey(key) || !source) continue;
@@ -132,7 +140,7 @@ export function bindingFields(doc: IrDocument, manifest: Manifest, id: string) {
   };
 }
 export const directPath =
-  /^\$(?:data\.[A-Za-z][A-Za-z0-9_]*|item)(?:\.[A-Za-z][A-Za-z0-9_]*){0,8}$/;
+  /^\$(?:data\.[A-Za-z][A-Za-z0-9_]*|props\.[A-Za-z][A-Za-z0-9_]*|item)(?:\.[A-Za-z][A-Za-z0-9_]*){0,8}$/;
 export function dataBinding(
   target: string,
   node: Node,
@@ -288,7 +296,7 @@ export function sourceChange(
       }
       const previous = bindingFields(doc, manifest, node.id).fields.find((f) => f.path === binding),
         next = bindingFields(after, manifest, node.id).fields.find((f) => f.path === binding),
-        receiver = contract(node.type, manifest)?.props?.[prop];
+        receiver = nodeContract(node, manifest)?.props?.[prop];
       if (!previous || !receiver) {
         blocked.push(pointer);
         continue;
@@ -402,7 +410,7 @@ export function scopeProblems(
       if (typeof value !== "string" || !directPath.test(value)) continue;
       const old = bindingFields(before, manifest, node.id).fields.find((f) => f.path === value);
       const current = bindingFields(after, manifest, node.id).fields.find((f) => f.path === value);
-      const target = contract(node.type, manifest)?.props?.[prop];
+      const target = nodeContract(node, manifest)?.props?.[prop];
       if (old && (!current || !target || !compatible(current.schema, target)))
         problems.push(`/nodes/${escape(node.id)}/bindings/${escape(prop)}`);
     }

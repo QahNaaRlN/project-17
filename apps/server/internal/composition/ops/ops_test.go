@@ -253,7 +253,7 @@ func TestRightsAndTypes(t *testing.T) {
 	if _, ok := Right("x"); ok {
 		t.Error("неизвестный тип")
 	}
-	if got := Types(); len(got) != 16 || got[0] != DocumentSetContent {
+	if got := Types(); len(got) != 18 || got[0] != ComponentExtract {
 		t.Errorf("Types: %v", got)
 	}
 }

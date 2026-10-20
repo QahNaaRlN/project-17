@@ -221,6 +221,7 @@ const author = await command("create-role", {
     "content.read",
     "design.compose",
     ...(process.env.CMS_REVIEW_BEHAVIOR === "true" ? ["behavior.use"] : []),
+    ...(process.env.CMS_REVIEW_COMPONENTS === "true" ? ["component.write"] : []),
     ...(capabilityStand ? ["behavior.use", "capability.request", "design.zones.manage"] : []),
     ...(capabilityDeliveryStand ? ["capability.deliver"] : []),
     "content.write",

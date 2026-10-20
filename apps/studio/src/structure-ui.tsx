@@ -25,6 +25,8 @@ import {
   type Place,
 } from "./structure.js";
 import { StudioError } from "./types.js";
+import { ComponentExtractDialog } from "./component-extract-panel.js";
+import { componentOf } from "./composed.js";
 
 const copy = {
   ru: {
@@ -52,6 +54,15 @@ const copy = {
     locked: "Элемент заблокирован",
     defaults: "Текст нового блока можно изменить в свойствах.",
     server: "Ограничения проекта и доступ к правке проверяются при сохранении.",
+    extract: "Сохранить как компонент",
+    extractRoot: "Корень страницы нельзя сохранить как компонент.",
+    extractPage: "Сохранить как компонент можно только блок страницы.",
+    openComponent: "Открыть компонент",
+    componentDoc: "Компонент",
+    componentHint:
+      "Изменения компонента видны в превью страницы с экземпляром. Превью самого компонента нет.",
+    backToPage: "Вернуться к странице",
+    certified: "Компонент сертифицирован: правка снимет сертификацию.",
   },
   en: {
     layers: "Layers",
@@ -77,6 +88,15 @@ const copy = {
     locked: "Element is locked",
     defaults: "Edit the new block's text in Properties.",
     server: "Project restrictions and edit permissions are checked when saving.",
+    extract: "Save as component",
+    extractRoot: "The page root cannot become a component.",
+    extractPage: "Only a page block can become a component.",
+    openComponent: "Open component",
+    componentDoc: "Component",
+    componentHint:
+      "Component changes are visible in the preview of the page with the instance. There is no component preview.",
+    backToPage: "Back to page",
+    certified: "The component is certified: editing removes certification.",
   },
 };
 const placeKey = (p: Place) => JSON.stringify(p);
@@ -143,7 +163,8 @@ export function StructurePanel({ editor }: { editor: Editor }) {
     [addPlace, setAddPlace] = useState(""),
     [movePlace, setMovePlace] = useState(""),
     [dragging, setDragging] = useState<string | null>(null),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [extracting, setExtracting] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const tree = useMemo(() => (doc ? layers(doc) : []), [doc]);
   const items = session ? palette(session.manifest) : [];
@@ -241,8 +262,24 @@ export function StructurePanel({ editor }: { editor: Editor }) {
       (p) => p.parentId === from.parentId && p.slot === from.slot && p.index === from.index + 1,
     );
   }, [doc, session, state.selected]);
+  const isPage = doc?.kind === "page";
+  const extractable =
+    !!enabled && isPage && !!state.selected && state.selected !== doc?.root && !dragging;
+  const selectedComponent = componentOf(state.selected ? doc?.nodes[state.selected] : undefined);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      // STU-024: Ctrl/Cmd+Alt+K opens the wizard for the selected block.
+      if (
+        !event.defaultPrevented &&
+        event.altKey &&
+        (event.ctrlKey || event.metaKey) &&
+        event.code === "KeyK" &&
+        extractable
+      ) {
+        event.preventDefault();
+        setExtracting(state.selected);
+        return;
+      }
       if (event.defaultPrevented || event.isComposing || event.altKey || !enabled || dragging)
         return;
       if (
@@ -276,6 +313,30 @@ export function StructurePanel({ editor }: { editor: Editor }) {
   });
   return (
     <aside className="layers">
+      {extracting && doc && session && (
+        <ComponentExtractDialog
+          editor={editor}
+          nodeId={extracting}
+          onClose={() => setExtracting(null)}
+        />
+      )}
+      {doc?.kind === "component" && (
+        <section aria-label={t.componentDoc} className="structure-panel component-document">
+          <h2>
+            {t.componentDoc}: {typeof doc.meta?.title === "string" ? doc.meta.title : ""}
+          </h2>
+          <p className="hint">{t.componentHint}</p>
+          {state.pageReturn && (
+            <button
+              type="button"
+              disabled={state.status === "saving"}
+              onClick={() => void editor.returnToPage()}
+            >
+              {t.backToPage}
+            </button>
+          )}
+        </section>
+      )}
       <h2>{t.layers}</h2>
       <DndContext
         sensors={sensors}
@@ -372,7 +433,30 @@ export function StructurePanel({ editor }: { editor: Editor }) {
               <button disabled={!enabled || !removable} onClick={remove}>
                 {t.remove}
               </button>
+              {isPage && (
+                <button
+                  disabled={!extractable}
+                  aria-keyshortcuts="Control+Alt+K Meta+Alt+K"
+                  onClick={() => setExtracting(state.selected)}
+                >
+                  {t.extract}
+                </button>
+              )}
+              {selectedComponent && (
+                <button
+                  disabled={
+                    state.status !== "ready" || Object.values(state.dirtyFields).some(Boolean)
+                  }
+                  onClick={() => {
+                    const ref = doc.nodes[state.selected!]?.ref?.component;
+                    if (ref) void editor.openComponent(ref);
+                  }}
+                >
+                  {t.openComponent}
+                </button>
+              )}
             </div>
+            {isPage && state.selected === doc.root && <p className="hint">{t.extractRoot}</p>}
             <label>
               {t.destination}
               <select

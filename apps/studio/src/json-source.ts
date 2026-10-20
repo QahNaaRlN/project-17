@@ -1,7 +1,7 @@
 import { jsonLanguage } from "@codemirror/lang-json";
 import { IR_LIMITS, irSchema, type IrDocument } from "@cms/ir";
 import { canonicalJson, type Manifest } from "@cms/manifest";
-import { contract } from "./structure.js";
+import { nodeContract } from "./structure.js";
 import { JsonProblem, documentDiff, editedDocument } from "./json-diff.js";
 import type { Operation } from "./types.js";
 export interface JsonDiagnostic {
@@ -118,7 +118,7 @@ export function jsonSuggestions(
     node = id ? doc.nodes[id] : undefined;
   if (node) {
     if (parts[2] === "props" || parts[2] === "bindings")
-      return Object.keys(contract(node.type, manifest)?.props ?? {});
+      return Object.keys(nodeContract(node, manifest)?.props ?? {});
     if (parts[2] === "design")
       return [
         ...new Set([

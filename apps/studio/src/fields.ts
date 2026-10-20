@@ -2,6 +2,7 @@ import { builtinCatalogue } from "@cms/manifest/builtins";
 import type { IrDocument, Node } from "@cms/ir";
 import type { Manifest, Type } from "@cms/manifest";
 import { StudioError, type Operation } from "./types.js";
+import { componentTitle, nodeContract } from "./composed.js";
 export interface Field {
   name: string;
   schema: Type;
@@ -25,10 +26,7 @@ export function designFields(node: Node, manifest: Manifest): ("padding" | "gap"
   ];
 }
 export function fields(doc: IrDocument, node: Node, manifest: Manifest, locale = "ru"): Field[] {
-  const contract =
-    (builtinCatalogue as unknown as Record<string, { props?: Record<string, Type> }>)[node.type] ??
-    manifest.primitives?.[node.type] ??
-    manifest.components?.[node.type];
+  const contract = nodeContract(node, manifest);
   return Object.entries(contract?.props ?? {}).map(([name, schema]) => {
     const binding = node.bindings?.[name];
     const local =
@@ -174,7 +172,13 @@ export function layers(document: IrDocument): Layer[] {
     if (!node || seen.has(id)) return;
     seen.add(id);
     locked ||= node.locked === true || node.zone?.locked === true;
-    result.push({ id, depth, parent, label: node.name ?? node.type, locked });
+    result.push({
+      id,
+      depth,
+      parent,
+      label: node.name ?? componentTitle(node) ?? node.type,
+      locked,
+    });
     for (const child of [...(node.children ?? []), ...Object.values(node.slots ?? {}).flat()])
       walk(child, depth + 1, id, locked);
   }

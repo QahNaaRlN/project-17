@@ -14,8 +14,16 @@ import {
 } from "./types.js";
 import { applyOperations } from "./operations.js";
 import { scopeProblems } from "./data-sources.js";
+import { componentRefs, registerComponents } from "./composed.js";
+import { location, type Place } from "./structure.js";
 import type { ContentOperation } from "./types.js";
 export interface EditorState {
+  /** Components referenced by Composed instances of the open document (STU-414). */
+  components: Record<string, IrDocument>;
+  /** Uncertain component.extract awaiting a retry with the same body and key (STU-413). */
+  extractRetry: boolean;
+  /** Page to return to while a component document is open in Structure (STU-415). */
+  pageReturn: string | null;
   bindingRetry: boolean;
   remotePending: boolean;
   contentRetry: boolean;
@@ -50,6 +58,9 @@ export function createEditor(
   } = {},
 ) {
   const store = createStore<EditorState>(() => ({
+    components: {},
+    extractRetry: false,
+    pageReturn: null,
     bindingRetry: false,
     remotePending: false,
     contentRetry: false,
@@ -162,6 +173,137 @@ export function createEditor(
     key: string;
   } | null = null;
   let remoteReading = false;
+  let pendingExtract: {
+    session: Session;
+    operations: Operation[];
+    key: string;
+    place: Place | null;
+    reason: string;
+  } | null = null;
+  let componentsRead: { key: string; controller: AbortController } | null = null;
+  // Components follow the authoritative document and seq: a CS edit can change them.
+  store.subscribe((state) => {
+    const session = state.session,
+      doc = state.document;
+    if (!session?.record || !doc || !api.components) return;
+    const refs = componentRefs(doc);
+    const key = `${session.changeset.id}:${session.changeset.seq}:${refs.join(",")}`;
+    if (componentsRead?.key === key) return;
+    componentsRead?.controller.abort();
+    const controller = new AbortController();
+    componentsRead = { key, controller };
+    if (!refs.length) {
+      registerComponents({});
+      if (Object.keys(state.components).length) store.setState({ components: {} });
+      return;
+    }
+    void api
+      .components({ ...session, record: session.record }, refs, controller.signal)
+      .then((components) => {
+        if (controller.signal.aborted || componentsRead?.controller !== controller) return;
+        registerComponents(components);
+        store.setState({ components });
+      })
+      .catch(() => {
+        /* Unresolved components keep instances read-only; CMS reports diagnostics. */
+      });
+  });
+  type ExtractOutcome =
+    | { ok: true }
+    | { ok: false; code: string; uncertain: boolean; operation?: StudioError["operation"] };
+  /** STU-413: one group; an uncertain outcome is retried only with the frozen body and key. */
+  async function extract(operation?: Operation, name = ""): Promise<ExtractOutcome> {
+    const state = store.getState(),
+      session = state.session;
+    if (operation && pendingExtract)
+      return { ok: false, code: "EXTRACT_RETRY_PENDING", uncertain: true };
+    if (
+      !session?.record ||
+      !state.document ||
+      session.record.kind !== "page" ||
+      !session.review.canEdit ||
+      session.changeset.state !== "open" ||
+      session.changeset.kind !== "standard" ||
+      (operation ? state.status !== "ready" : !["ready", "uncertain"].includes(state.status)) ||
+      Object.entries(state.dirtyFields).some(([k, v]) => v && k !== "componentExtract")
+    )
+      return { ok: false, code: "EXTRACT_UNAVAILABLE", uncertain: false };
+    const attempt =
+      operation !== undefined
+        ? {
+            session: { ...session, record: session.record },
+            operations: [operation],
+            key: crypto.randomUUID(),
+            place: location(state.document, String(operation.payload.nodeId)),
+            reason: `Studio: save as component «${name}»`,
+          }
+        : pendingExtract;
+    if (!attempt) return { ok: false, code: "EXTRACT_UNAVAILABLE", uncertain: false };
+    pendingExtract = attempt;
+    const stamp = epoch;
+    store.setState({ status: "saving", error: null, extractRetry: false });
+    let failure: StudioError | null = null;
+    try {
+      await api.apply(
+        attempt.session,
+        attempt.operations,
+        attempt.key,
+        lifecycle.signal,
+        attempt.reason,
+      );
+    } catch (error) {
+      failure = error instanceof StudioError ? error : new StudioError("SAVE_UNCERTAIN", true);
+    }
+    if (stamp !== epoch || lifecycle.signal.aborted)
+      return { ok: false, code: "EXTRACT_CANCELLED", uncertain: false };
+    const uncertain =
+      !!failure &&
+      (failure.uncertain ||
+        ["NETWORK_UNCERTAIN", "SAVE_UNCERTAIN", "RESPONSE_INVALID"].includes(failure.code));
+    if (!uncertain) pendingExtract = null;
+    if (uncertain) {
+      store.setState({ status: "uncertain", error: failure!.code, extractRetry: true });
+      return { ok: false, code: failure!.code, uncertain: true };
+    }
+    try {
+      const current = await readContext(attempt.session);
+      if (stamp !== epoch || lifecycle.signal.aborted)
+        return { ok: false, code: "EXTRACT_CANCELLED", uncertain: false };
+      const body = current.record?.body;
+      const parent = attempt.place ? body?.nodes[attempt.place.parentId] : undefined;
+      const list = attempt.place?.slot ? parent?.slots?.[attempt.place.slot] : parent?.children;
+      const instance = attempt.place ? list?.[attempt.place.index] : undefined;
+      store.setState({
+        ...historyRead(),
+        session: current,
+        document: body ? structuredClone(body) : null,
+        status: "ready",
+        error: failure ? failure.code : null,
+        selected: failure
+          ? body?.nodes[state.selected ?? ""]
+            ? state.selected
+            : (body?.root ?? null)
+          : instance && body?.nodes[instance]
+            ? instance
+            : (body?.root ?? null),
+        instance: null,
+      });
+      invalidate();
+    } catch (error) {
+      store.setState({
+        status: "uncertain",
+        error: error instanceof StudioError ? error.code : "REFRESH_FAILED",
+      });
+    }
+    return failure
+      ? {
+          ok: false,
+          code: failure.code,
+          uncertain: false,
+          ...(failure.operation ? { operation: failure.operation } : {}),
+        }
+      : { ok: true };
+  }
   function historyRead() {
     return { historyRevision: store.getState().historyRevision + 1 };
   }
@@ -259,7 +401,10 @@ export function createEditor(
       error: null,
       connected: false,
       previewError: null,
+      pageReturn: null,
+      extractRetry: false,
     });
+    pendingExtract = null;
     try {
       const session = await api.open(documentId, changesetId, lifecycle.signal);
       if (stamp !== epoch || lifecycle.signal.aborted) return;
@@ -270,7 +415,8 @@ export function createEditor(
         selected: session.record.body.root,
         status: "ready",
       });
-      await preview(session, stamp);
+      // A component has no route: its effect is previewed on the page with the instance.
+      if (session.record.kind === "page") await preview(session, stamp);
     } catch (error) {
       if (stamp === epoch && !lifecycle.signal.aborted)
         store.setState({
@@ -311,6 +457,11 @@ export function createEditor(
       });
       invalidate();
     } catch (error) {
+      // A background reread can overlap this tab's own write; the snapshot is retried later.
+      if (remote && error instanceof StudioError && error.code === "CHANGESET_SEQ_CONFLICT") {
+        if (stamp === epoch) store.setState({ remotePending: true });
+        return;
+      }
       if (
         session.work &&
         error instanceof StudioError &&
@@ -895,14 +1046,20 @@ export function createEditor(
           if (!state.connected) invalidate();
         }
       } else if (initialized && data.type === "node.click" && typeof p.nodeId === "string") {
-        select(
-          p.nodeId,
-          typeof p.instance === "string" && p.instance.length <= 2000 ? p.instance : null,
-        );
+        const instance =
+          typeof p.instance === "string" && p.instance.length <= 2000 ? p.instance : null;
+        // STU-412: a node inside a Composed instance selects the page's instance node.
+        const nodeId =
+          state.document && !Object.hasOwn(state.document.nodes, p.nodeId) && instance
+            ? (instance
+                .split("/")
+                .find((segment) => state.document!.nodes[segment]?.type === "Composed") ?? p.nodeId)
+            : p.nodeId;
+        select(nodeId, nodeId === p.nodeId ? instance : null);
         if (
           state.mode === "design" &&
           state.document &&
-          Object.hasOwn(state.document.nodes, p.nodeId)
+          Object.hasOwn(state.document.nodes, nodeId)
         )
           store.setState({ canvasPick: state.canvasPick + 1 });
       } else if (
@@ -993,6 +1150,29 @@ export function createEditor(
     store,
     open,
     apply,
+    extract,
+    retryExtract: () => extract(),
+    /** STU-401: server plan for the selected page node; the client never authorizes. */
+    extractPlan(nodeId: string) {
+      const session = store.getState().session;
+      if (!session?.record || !api.extractPlan)
+        return Promise.reject(new StudioError("EXTRACT_UNAVAILABLE"));
+      return api.extractPlan({ ...session, record: session.record }, nodeId, lifecycle.signal);
+    },
+    /** STU-415: open the component in Structure of the same CS and remember the page. */
+    async openComponent(id: string) {
+      const session = store.getState().session;
+      if (!session?.record || session.record.kind !== "page") return;
+      const page = session.record.id;
+      await open(id, session.changeset.id);
+      if (store.getState().session?.record?.id === id)
+        store.setState({ pageReturn: page, viewMode: "structure" });
+    },
+    async returnToPage() {
+      const state = store.getState();
+      if (!state.pageReturn || !state.session) return;
+      await open(state.pageReturn, state.session.changeset.id);
+    },
     applyBindings,
     applyContent,
     retryContent: sendContent,

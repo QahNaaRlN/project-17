@@ -19,7 +19,8 @@ import type { DiffIndex, DiffPage } from "./types.js";
 import { validateQueue, validateQueueCard } from "./work-queue.js";
 import { checkCreatedWork, canRetryWork, workTitle, clearWorkAttempt } from "./work-creation.js";
 import type { WorkQueueItem, WorkQueueCard, WorkContext } from "./types.js";
-import { validateDocument } from "@cms/ir";
+import { validateDocument, type IrDocument } from "@cms/ir";
+import { validPlan } from "./component-extract.js";
 import { jsonValue } from "@cms/runtime";
 import { canonicalJson } from "@cms/manifest";
 import { capability, type CapabilityRequest, type CapabilityResult } from "./capabilities.js";
@@ -68,6 +69,28 @@ function checkUpload(value: Upload, uncertain = false): Upload {
   )
     throw new StudioError("RESPONSE_INVALID", uncertain);
   return value;
+}
+// Only codes and JSON pointers: messages and params may contain draft values.
+function operationProblem(params: unknown): StudioError["operation"] {
+  const p = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+  const code = /^[A-Z0-9_]{1,80}$/;
+  if (typeof p.operationCode !== "string" || !code.test(p.operationCode)) return undefined;
+  const diagnostics = (Array.isArray(p.diagnostics) ? p.diagnostics : []).flatMap((entry) => {
+    const d = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+    return typeof d.code === "string" &&
+      code.test(d.code) &&
+      typeof d.pointer === "string" &&
+      d.pointer.length <= 4000
+      ? [
+          {
+            code: d.code,
+            pointer: d.pointer,
+            ...(typeof d.nodeId === "string" && d.nodeId.length <= 200 ? { nodeId: d.nodeId } : {}),
+          },
+        ]
+      : [];
+  });
+  return { code: p.operationCode, diagnostics: diagnostics.slice(0, 50) };
 }
 export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => void): Api {
   let csrf: string | undefined,
@@ -120,11 +143,13 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
     if (!response.ok) {
       let code = "CMS_REQUEST_FAILED";
       let diagnostics: StudioError["diagnostics"] = [];
+      let operation: StudioError["operation"];
       try {
         const value = await response.json();
         if (typeof value.code === "string" && /^[A-Z0-9_]{1,80}$/.test(value.code))
           code = value.code;
         diagnostics = [...problemDiagnostics(value.params), ...safeDiagnostics(value.diagnostics)];
+        operation = operationProblem(value.params);
       } catch {
         /* no server detail/secrets in UI */
       }
@@ -135,7 +160,13 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
           code === "PROJECT_ACCESS_REQUIRED")
       )
         onSessionLost?.();
-      throw new StudioError(code, body !== undefined && response.status >= 500, diagnostics);
+      const failure = new StudioError(
+        code,
+        body !== undefined && response.status >= 500,
+        diagnostics,
+      );
+      if (operation) failure.operation = operation;
+      throw failure;
     }
     try {
       return (await response.json()) as T;
@@ -1039,10 +1070,13 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         !Number.isSafeInteger(changeset.seq) ||
         changeset.seq < 0 ||
         !validateDocument(record.body).valid ||
-        record.kind !== "page" ||
-        typeof record.path !== "string" ||
-        !record.path.startsWith("/") ||
-        record.path.startsWith("//") ||
+        // STU-415: a component document has no route and opens in Structure only.
+        (record.kind === "component"
+          ? record.path !== null || record.body.kind !== "component"
+          : record.kind !== "page" ||
+            typeof record.path !== "string" ||
+            !record.path.startsWith("/") ||
+            record.path.startsWith("//")) ||
         !/^sha256:[a-f0-9]{64}$/.test(active?.manifestHash) ||
         active.manifest?.manifestVersion !== "1.0" ||
         !active.manifest.tokens ||
@@ -1063,7 +1097,7 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         throw new StudioError("CHANGESET_SEQ_CONFLICT");
       return { config, changeset, record, history, review, ...active };
     },
-    async apply(session, operations, key, signal) {
+    async apply(session, operations, key, signal, reason = "Studio: edit page draft") {
       await request(
         "/api/v1/commands/apply-operations",
         signal,
@@ -1074,10 +1108,50 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
             operations,
             group: true,
           },
-          reason: "Studio: edit page draft",
+          reason,
         },
         key,
       );
+    },
+    async extractPlan(session, nodeId, signal) {
+      if (!/^[A-Za-z0-9_-]{4,32}$/.test(nodeId)) throw new StudioError("IDENTIFIER_INVALID");
+      const query = new URLSearchParams({
+        changesetId: session.changeset.id,
+        nodeId,
+        environment: session.config.environment,
+      });
+      return validPlan(
+        await request<unknown>(
+          `/api/v1/documents/${session.record.id}/component-extract-plan?${query}`,
+          signal,
+        ),
+        nodeId,
+      );
+    },
+    async components(session, ids, signal) {
+      const result: Record<string, IrDocument> = {};
+      await Promise.all(
+        ids
+          .filter((id) => uuid.test(id))
+          .map(async (id) => {
+            try {
+              const record = await request<DocumentRecord>(
+                `/api/v1/documents/${id}?changesetId=${session.changeset.id}`,
+                signal,
+              );
+              if (
+                record?.id === id &&
+                validateDocument(record.body).valid &&
+                record.body.kind === "component"
+              )
+                result[id] = record.body;
+            } catch (cause) {
+              if (signal?.aborted) throw cause;
+              /* An unresolved component stays a server diagnostic; the instance is read-only. */
+            }
+          }),
+      );
+      return result;
     },
     async preview(session, signal) {
       const result = await request<{ result: { token: string; expiresAt: string } }>(
