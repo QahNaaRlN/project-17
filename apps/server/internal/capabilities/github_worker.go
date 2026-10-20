@@ -238,6 +238,9 @@ func (s *GithubService) finishGithub(ctx context.Context, args GithubArgs, claim
 		if e = q.InsertCapabilityGithubObservation(ctx, store.InsertCapabilityGithubObservationParams{ID: uuid.Must(uuid.NewV7()), ProjectID: l.ProjectID, RequestID: l.RequestID, LinkID: l.ID, Generation: l.Generation, ConfigRevision: l.ConfigRevision, Fingerprint: l.Fingerprint, SyncID: l.SyncID, Body: b, Digest: gh.Digest(observation)}); e != nil {
 			return e
 		}
+		if e = archiveClosedPreviews(ctx, q, l, parse(b)); e != nil {
+			return e
+		}
 		l.LastError = ""
 		l.State = "idle"
 		l.Attempts = 0

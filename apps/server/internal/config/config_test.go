@@ -72,3 +72,13 @@ func TestInvalidDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestSTU328PreviewAppOrigins(t *testing.T) {
+	cfg, err := FromEnv(env(map[string]string{"CMS_DATABASE_URL": "postgres://x", "CMS_PREVIEW_APP_ORIGINS": "https://pr.example.test"}))
+	if err != nil || len(cfg.PreviewOrigins.Origins()) != 1 {
+		t.Fatalf("origins: %v %v", cfg.PreviewOrigins.Origins(), err)
+	}
+	if _, err := FromEnv(env(map[string]string{"CMS_DATABASE_URL": "postgres://x", "CMS_PREVIEW_APP_ORIGINS": "https://*.example.test"})); err == nil {
+		t.Fatal("wildcard origin accepted")
+	}
+}

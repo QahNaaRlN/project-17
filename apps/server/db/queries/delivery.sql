@@ -31,7 +31,7 @@ JOIN object_versions v ON v.id = pp.version_id
 WHERE pp.environment_id = $1 AND pp.object_id = $2 AND o.kind = 'document';
 
 -- name: GetEnvironmentPreviewKey :one
-SELECT e.id, e.name, e.preview_key, p.id AS project_id, p.slug AS project_slug
+SELECT e.id, e.name, e.preview_key, e.registration_seq, e.source_pull_number, COALESCE((SELECT b.name FROM environments b WHERE b.id = e.source_base_environment_id), '')::text AS source_base_name, p.id AS project_id, p.slug AS project_slug
 FROM environments e JOIN projects p ON p.id = e.project_id
 WHERE p.slug = $1 AND e.name = $2;
 

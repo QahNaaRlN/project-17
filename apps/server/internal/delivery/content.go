@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilities"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
@@ -180,5 +181,11 @@ func draftDocument(ctx context.Context, q *store.Queries, a Access, id uuid.UUID
 	if diagnostics == nil {
 		diagnostics = []ir.Diagnostic{}
 	}
-	return Document{ObjectID: d.ID, VersionID: d.VersionID, Path: d.Path, Document: d.Body, Diagnostics: diagnostics}, nil
+	// STU-322: only this preview response of a PR environment resolves pending
+	// markers; the stored draft and its diagnostics keep them.
+	projected, err := capabilities.ProjectPreview(ctx, q, a.ProjectID, a.EnvironmentID, a.ChangesetID, d.ID, d.Body)
+	if err != nil {
+		return Document{}, err
+	}
+	return Document{ObjectID: d.ID, VersionID: d.VersionID, Path: d.Path, Document: projected, Diagnostics: diagnostics}, nil
 }

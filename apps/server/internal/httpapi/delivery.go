@@ -179,7 +179,10 @@ func authenticateDelivery(d Deps) func(http.Handler) http.Handler {
 				writeError(w, r, d.Log, err)
 				return
 			}
-			if chi.URLParam(r, "project") != a.ProjectSlug || chi.URLParam(r, "env") != a.Environment {
+			// A PR deployment runs against its base environment; only its preview
+			// token may read the PR environment's drafts there (STU-322).
+			base := a.Draft && a.BaseEnvironment != "" && chi.URLParam(r, "env") == a.BaseEnvironment
+			if chi.URLParam(r, "project") != a.ProjectSlug || chi.URLParam(r, "env") != a.Environment && !base {
 				writeError(w, r, d.Log, commandbus.NewError(http.StatusForbidden, "FORBIDDEN", "Ключ выдан для другого окружения",
 					fmt.Sprintf("Ключ действует для %s/%s", a.ProjectSlug, a.Environment)))
 				return

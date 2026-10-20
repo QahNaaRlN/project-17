@@ -115,6 +115,9 @@ const copy = {
 type Copy = typeof copy.ru;
 const errorText: Record<"ru" | "en", Record<string, string>> = {
   ru: {
+    PREVIEW_READ_ONLY:
+      "Режим предпросмотра PR: только просмотр. Вернитесь в рабочее окружение для правки.",
+    PREVIEW_OUTDATED: "Сборка preview изменилась. Перезапустите предпросмотр.",
     FIELD_DRAFT_PENDING:
       "Сохраните или сбросьте введённое значение перед выбором другого элемента.",
     CONTENT_DRAFT_PENDING: "Сохраните контент или сбросьте ввод перед другой правкой.",
@@ -148,6 +151,8 @@ const errorText: Record<"ru" | "en", Record<string, string>> = {
     PREVIEW_DOCUMENT_MISMATCH: "Приложение открыло другую страницу. Проверьте её маршрут.",
   },
   en: {
+    PREVIEW_READ_ONLY: "PR preview mode is view-only. Return to the working environment to edit.",
+    PREVIEW_OUTDATED: "The preview build changed. Restart the preview.",
     FIELD_DRAFT_PENDING: "Save or discard the field input before selecting another element.",
     BINDING_VALUE_MISSING: "The content value is missing in the selected locale.",
     DATA_SCOPE_CHANGED:
@@ -515,6 +520,7 @@ export function Studio({
   const zoom = fitCanvas ? Math.min(1, canvasWidth / state.width) : 1;
   const disabled =
     busy ||
+    !!state.viewTarget ||
     jsonDirty ||
     !!state.dirtyFields["property-behavior"] ||
     !session?.review.canEdit ||
@@ -820,6 +826,24 @@ export function Studio({
                     />
                   </DeferredPanel>
                 )}
+                {state.viewTarget && (
+                  <div role="status" className="preview-banner">
+                    {state.locale === "ru"
+                      ? `Режим предпросмотра PR #${state.viewTarget.pullNumber}: только просмотр · ${state.viewTarget.environment} · коммит `
+                      : `PR #${state.viewTarget.pullNumber} preview mode: view only · ${state.viewTarget.environment} · commit `}
+                    <code title={state.viewTarget.commit}>
+                      {state.viewTarget.commit.slice(0, 7)}
+                    </code>
+                    <button onClick={() => void editor.viewEnvironment(state.viewTarget)}>
+                      {state.locale === "ru" ? "Перезапустить предпросмотр" : "Restart preview"}
+                    </button>
+                    <button onClick={() => void editor.viewEnvironment(null)}>
+                      {state.locale === "ru"
+                        ? "Вернуться в рабочее окружение"
+                        : "Back to the working environment"}
+                    </button>
+                  </div>
+                )}
                 {state.previewError && (
                   <div role="alert" className="preview-error">
                     {errorText[state.locale][state.previewError] ?? state.previewError}
@@ -874,9 +898,13 @@ export function Studio({
                 )}
               </section>
               <aside className="properties">
-                <ContentBindingsPanel {...{ api, editor, rights }} />
-                <DataSourcesPanel {...{ editor, rights }} />
-                <BehaviorPanel {...{ editor, rights }} />
+                {/* STU-330: editing panels are view-only in a PR preview; the
+                    request card stays usable to return or restart. */}
+                <div inert={state.viewTarget ? true : undefined}>
+                  <ContentBindingsPanel {...{ api, editor, rights }} />
+                  <DataSourcesPanel {...{ editor, rights }} />
+                  <BehaviorPanel {...{ editor, rights }} />
+                </div>
                 <CapabilityComposer {...{ api, editor, rights }} />
                 <h2>{t.properties}</h2>
                 {selected && session && doc ? (

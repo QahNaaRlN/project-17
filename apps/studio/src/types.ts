@@ -6,6 +6,8 @@ export interface Config {
   project: string;
   environment: string;
   appOrigin: string;
+  /** Exact origins of PR preview deployments (STU-328). */
+  previewAppOrigins?: string[];
 }
 export interface Changeset {
   id: string;
@@ -240,7 +242,16 @@ export interface Api {
     ids: string[],
     signal?: AbortSignal,
   ): Promise<Record<string, IrDocument>>;
-  preview(session: Session, signal: AbortSignal): Promise<{ token: string; expiresAt: string }>;
+  preview(
+    session: Session,
+    signal: AbortSignal,
+    environment?: string,
+  ): Promise<{ token: string; expiresAt: string; registrationSeq?: number }>;
+  capabilityPreview?(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<import("./capability-preview.js").PreviewList>;
+  previewArgs?(attempt: import("./capability-preview.js").PreviewArgsAttempt): Promise<void>;
 }
 export interface AgentConfig {
   provider: "openrouter";

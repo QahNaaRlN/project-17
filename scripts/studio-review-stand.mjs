@@ -143,6 +143,34 @@ if (capabilityDeliveryStand) {
   );
   await ready(`http://127.0.0.1:${receiverPort}/healthz`);
 }
+// STU-334: PR preview stand. The catalogue credential is never used: the
+// acceptance records GitHub facts in the isolated database instead of calling GitHub.
+const capabilityPreviewStand = process.env.CMS_REVIEW_CAPABILITY_PREVIEW === "true";
+const previewOrigin = `http://127.0.0.1:${basePort + 5}`;
+if (capabilityPreviewStand) {
+  const githubConfig = join(local, "github.private.json");
+  writeFileSync(
+    githubConfig,
+    JSON.stringify({
+      repositories: [
+        {
+          configId: "local",
+          projectId,
+          environment: "staging",
+          repositoryId: "42",
+          owner: "local",
+          name: "store",
+          baseBranch: "dev",
+          credentialId: "local",
+          token: "local-acceptance-unused",
+          requiredChecks: [{ source: "check_run", name: "Check", target: "head", appId: "15368" }],
+        },
+      ],
+    }),
+  );
+  env.CMS_CAPABILITY_GITHUB_CONFIG_FILE = githubConfig;
+  env.CMS_PREVIEW_APP_ORIGINS = previewOrigin;
+}
 const apiPid = start(binary, ["serve"], {}, "studio-work-api.log");
 await ready(apiOrigin + "/healthz");
 const baseUrl = apiOrigin;
@@ -238,9 +266,10 @@ const reviewer = await command("create-role", {
     ...(capabilityStand ? ["code.propose"] : []),
   ],
 });
-const deliveryAdmin = capabilityDeliveryStand
-  ? await command("create-role", { name: "delivery-operator", capabilities: ["project.admin"] })
-  : null;
+const deliveryAdmin =
+  capabilityDeliveryStand || capabilityPreviewStand
+    ? await command("create-role", { name: "delivery-operator", capabilities: ["project.admin"] })
+    : null;
 const studioFile = join(local, "studio-work-ui.private.json");
 writeFileSync(
   studioFile,
@@ -256,6 +285,7 @@ writeFileSync(
       : {}),
     studioOrigin,
     appOrigin,
+    ...(capabilityPreviewStand ? { previewAppOrigins: [previewOrigin] } : {}),
   }),
 );
 const delivery = await command("create-delivery-key", {
@@ -304,6 +334,7 @@ writeFileSync(
     studioOrigin,
     appOrigin,
     ...(tokenFile ? { tokenFile } : {}),
+    ...(capabilityPreviewStand ? { previewOrigin } : {}),
   }),
 );
 writeFileSync(

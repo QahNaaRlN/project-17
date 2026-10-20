@@ -27,6 +27,7 @@
 | `CMS_ASSET_SIGNING_KEY` | — | Отдельный hex ключ браузерных URL, не менее 32 байт |
 | `CMS_IMGPROXY_URL` | — | Внутренний base URL imgproxy |
 | `CMS_IMGPROXY_KEY` / `CMS_IMGPROXY_SALT` | — | Hex key ≥32 bytes / salt ≥16 bytes, совпадают с imgproxy |
+| `CMS_PREVIEW_APP_ORIGINS` | — | Точные origin preview-развёртываний PR через запятую (https, http только loopback); шаблоны `*.` отклоняются при старте |
 
 Endpoint должен быть доступен и серверу, и клиенту: его host входит в подпись
 pre-signed URL, заменять host после подписания нельзя. Для контейнеров используйте
@@ -64,6 +65,7 @@ curl localhost:8080/api/v1/environments -H "Authorization: Bearer cms_svc_…" -
 | Метод | Путь | Назначение |
 |---|---|---|
 | `POST` | `/api/v1/commands/create-environment` | Окружение проекта |
+| `POST` | `/api/v1/commands/delete-environment` | Архив preview-окружения (MF-032) |
 | `POST` | `/api/v1/commands/create-changeset` | Новый Change Set |
 | `POST` | `/api/v1/commands/apply-operations` | Пакет операций над документами (атомарно, с `expectedSeq`) |
 | `POST` | `/api/v1/commands/undo` | Отмена последнего действия CS: группа или старая одиночная операция |
@@ -304,3 +306,17 @@ Merged/success не означает deployed/fulfilled и не снимает �
 репозиторий и пять прав чтения. Cache, обновление и отзыв обрабатывает CMS.
 Секреты не выдаются браузеру; установка App во внешнем GitHub подтверждается
 отдельно. [Полная инструкция и границы](../../docs/studio-capability-github-app.md).
+
+### Preview/<ref> для проверенного PR
+
+Миграция 00023 добавляет источник preview-окружения (base standard, конфигурация
+GitHub, repository ID, номер PR), журнал регистраций `preview_registrations`,
+аргументы предпросмотра и аудит. CI создаёт `preview/pr-<N>` командой
+`create-environment` с `source`, загружает code index и вызывает
+`register-manifest` с `headSha` (полный commit индекса) и необязательным `appUrl`
+из `CMS_PREVIEW_APP_ORIGINS`. Сопоставление с запросом вычисляется при чтении по
+head SHA наблюдения GitHub; Delivery preview подставляет действие вместо
+`pending:<id>` только в ответе preview-окружения. Публикация с заглушкой по-прежнему
+блокируется. `delete-environment`, River-задача `capability_preview_expiry` (раз в час,
+14 дней без регистраций) и проверенное наблюдение закрытого/слитого PR архивируют
+окружение. [Пакет](../../docs/studio-capability-preview.md).

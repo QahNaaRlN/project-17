@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -158,4 +159,38 @@ func TestDeliveryDraft(t *testing.T) {
 	expectProblem(t, resp, body, 403, "FORBIDDEN")
 	resp, body = e.do(t, "GET", "/delivery/v1/store/staging/routes?changesetId="+cs, "", bearer(e.command(t, "create-delivery-key", `{"environment":"staging","name":"k2"}`)["key"].(string)))
 	expectProblem(t, resp, body, 400, "PARAM_INVALID")
+}
+
+// STU-322: a PR deployment is configured for its base environment and reads
+// the PR preview's drafts there with its preview token, never elsewhere.
+func TestSTU322PRPreviewTokenOnBaseEnvironment(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := e.pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var project, admin string
+	if err := e.pool.QueryRow(ctx, `SELECT p.id, a.id FROM projects p JOIN actors a ON a.project_id=p.id WHERE p.slug='store' LIMIT 1`).Scan(&project, &admin); err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO capability_github_configs(id,project_id,environment_id,environment,config_id,fingerprint,credential_id,enabled,changed_by)
+		SELECT gen_random_uuid(),project_id,id,name,'repo','f','key',true,$1 FROM environments WHERE project_id=$2 AND name='staging'`, admin, project)
+	exec(`INSERT INTO environments(id,project_id,name,kind,expires_at,source_base_environment_id,source_config_id,source_repository_id,source_pull_number,registration_seq)
+		SELECT gen_random_uuid(),s.project_id,'preview/pr-1','preview',now()+interval '14 days',s.id,c.id,'42',1,1
+		FROM environments s JOIN capability_github_configs c ON c.environment_id=s.id WHERE s.project_id=$1 AND s.name='staging'`, project)
+	cs := e.command(t, "create-changeset", `{"title":"pr","targets":["staging"]}`)["id"].(string)
+	token := e.command(t, "create-preview-token", `{"environment":"preview/pr-1","changesetId":"`+cs+`"}`)["token"].(string)
+	preview := map[string]string{"Authorization": "Preview " + token}
+	if resp, body := e.do(t, "GET", "/delivery/v1/store/staging/routes?changesetId="+cs, "", preview); resp.StatusCode != 200 {
+		t.Fatalf("base environment path: %d %v", resp.StatusCode, body)
+	}
+	resp, body := e.do(t, "GET", "/delivery/v1/store/production/routes?changesetId="+cs, "", preview)
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
+	// A standard draft token never gains another environment.
+	standard := e.command(t, "create-preview-token", `{"environment":"staging","changesetId":"`+cs+`"}`)["token"].(string)
+	resp, body = e.do(t, "GET", "/delivery/v1/store/production/routes?changesetId="+cs, "", map[string]string{"Authorization": "Preview " + standard})
+	expectProblem(t, resp, body, 403, "FORBIDDEN")
 }

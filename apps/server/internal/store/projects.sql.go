@@ -14,7 +14,7 @@ import (
 const createEnvironment = `-- name: CreateEnvironment :one
 INSERT INTO environments (id, project_id, name, kind, app_url)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key
+RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason
 `
 
 type CreateEnvironmentParams struct {
@@ -44,6 +44,15 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.PreviewKey,
+		&i.SourceBaseEnvironmentID,
+		&i.SourceConfigID,
+		&i.SourceRepositoryID,
+		&i.SourcePullNumber,
+		&i.RegistrationSeq,
+		&i.LastRegisteredAt,
+		&i.ArchivedAt,
+		&i.ArchivedName,
+		&i.ArchiveReason,
 	)
 	return i, err
 }
@@ -90,7 +99,7 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (Project, e
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key FROM environments WHERE project_id = $1 ORDER BY name
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND archived_at IS NULL ORDER BY name
 `
 
 func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]Environment, error) {
@@ -112,6 +121,15 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.PreviewKey,
+			&i.SourceBaseEnvironmentID,
+			&i.SourceConfigID,
+			&i.SourceRepositoryID,
+			&i.SourcePullNumber,
+			&i.RegistrationSeq,
+			&i.LastRegisteredAt,
+			&i.ArchivedAt,
+			&i.ArchivedName,
+			&i.ArchiveReason,
 		); err != nil {
 			return nil, err
 		}

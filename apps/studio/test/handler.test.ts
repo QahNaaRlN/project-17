@@ -824,3 +824,77 @@ it("STU-295/308: GitHub routes enforce human writes and environment scope", asyn
     ).status,
   ).toBe(403);
 });
+it("STU-327/328: PR preview routes, exact preview origins and CSP", async () => {
+  expect(() =>
+    checkConfig({ ...config, previewAppOrigins: ["https://*.preview.example.test"] }),
+  ).toThrow("STUDIO_CONFIG_INVALID");
+  for (const bad of [
+    "http://pr.example.test",
+    "https://pr.example.test/path",
+    "https://user@pr.example.test",
+    "not a url",
+  ])
+    expect(() => checkConfig({ ...config, previewAppOrigins: [bad] })).toThrow();
+  expect(() =>
+    checkConfig({ ...config, previewAppOrigins: "https://pr.example.test" as unknown as string[] }),
+  ).toThrow();
+  expect(checkConfig({ ...config, previewAppOrigins: ["https://pr.example.test"] })).toMatchObject({
+    previewAppOrigins: ["https://pr.example.test"],
+  });
+
+  const directory = await mkdtemp(join(tmpdir(), "studio-preview-"));
+  const holder: { handler?: ReturnType<typeof createStudioHandler> } = {};
+  const server = createServer((req, res) => void holder.handler!(req, res));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const studio = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  holder.handler = createStudioHandler(
+    { ...config, studioOrigin: studio, previewAppOrigins: ["https://pr.example.test"] },
+    directory,
+    vi.fn<typeof fetch>(),
+  );
+  cleanups.push(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  });
+  const response = await fetch(studio + "/api/studio/config");
+  expect(response.headers.get("content-security-policy")).toContain(
+    "frame-src http://127.0.0.1:18083 https://pr.example.test",
+  );
+  expect(await response.json()).toMatchObject({ previewAppOrigins: ["https://pr.example.test"] });
+
+  const { origin, post, fetcher } = await setup();
+  const base = "/api/studio/api/v1/";
+  const route = origin + base + "capability-requests/" + documentId + "/preview";
+  expect((await fetch(route + "?environment=staging")).status).toBe(200);
+  expect((await fetch(route + "?environment=preview/pr-1")).status).toBe(403);
+  expect((await fetch(route + "?environment=staging&x=1")).status).toBe(400);
+  const token = (environment: string, cs: unknown = changesetId) =>
+    post(base + "commands/create-preview-token", {
+      payload: { environment, changesetId: cs },
+      reason: "Preview",
+    });
+  expect((await token("preview/pr-12")).status).toBe(200);
+  expect((await token("preview/pr-12", "invalid")).status).toBe(403);
+  expect((await token("preview/feature")).status).toBe(403);
+  expect((await token("production")).status).toBe(403);
+  const args = (payload: Record<string, unknown>) =>
+    post(base + "commands/set-capability-preview-args", { payload, reason: "Args" });
+  const valid = {
+    requestId: documentId,
+    expectedRequestRevision: 2,
+    environment: "preview/pr-1",
+    manifestHash: "sha256:" + "a".repeat(64),
+    handlers: [{ action: "store.favorite" }],
+    expectedArgsRevision: 0,
+  };
+  fetcher.mockClear();
+  expect((await args(valid)).status).toBe(200);
+  expect(String(fetcher.mock.calls[0]![0])).toContain(
+    "/api/v1/capability-requests/" + documentId + "?environment=staging",
+  );
+  expect((await args({ ...valid, environment: "staging" })).status).toBe(400);
+  expect((await args({ ...valid, requestId: "x" })).status).toBe(400);
+  expect((await args({ ...valid, url: "https://evil" })).status).toBe(400);
+  fetcher.mockResolvedValueOnce(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
+  expect((await args(valid)).status).toBe(404);
+});

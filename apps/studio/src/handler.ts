@@ -20,6 +20,27 @@ export function checkConfig(config: ServerConfig): ServerConfig {
     base = new URL(config.baseUrl),
     app = new URL(config.appOrigin);
   const upload = config.assetUploadOrigin ? new URL(config.assetUploadOrigin) : undefined;
+  // STU-328: exact origins only; no wildcard patterns, paths or credentials.
+  const previews = config.previewAppOrigins ?? [];
+  if (
+    !Array.isArray(previews) ||
+    previews.length > 32 ||
+    previews.some((origin) => {
+      if (typeof origin !== "string" || origin.includes("*")) return true;
+      try {
+        const url = new URL(origin);
+        return (
+          !(local(url) || url.protocol === "https:") ||
+          url.origin !== origin ||
+          url.username !== "" ||
+          url.password !== ""
+        );
+      } catch {
+        return true;
+      }
+    })
+  )
+    throw new Error("STUDIO_CONFIG_INVALID");
   if (
     !(local(studio) || (config.authMode === "oidc" && studio.protocol === "https:")) ||
     !(local(base) || (config.authMode === "oidc" && base.protocol === "https:")) ||
@@ -58,7 +79,7 @@ export function createStudioHandler(
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader(
       "Content-Security-Policy",
-      `default-src 'self'; connect-src 'self'${config.assetUploadOrigin ? " " + config.assetUploadOrigin : ""}; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src ${config.appOrigin}; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`,
+      `default-src 'self'; connect-src 'self'${config.assetUploadOrigin ? " " + config.assetUploadOrigin : ""}; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src ${[config.appOrigin, ...(config.previewAppOrigins ?? [])].join(" ")}; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`,
     );
     function error(status: number, code: string, diagnostics = problemDiagnostics(undefined)) {
       res.writeHead(status, { "Content-Type": "application/problem+json" });
@@ -97,6 +118,9 @@ export function createStudioHandler(
             project: config.project,
             environment: config.environment,
             appOrigin: config.appOrigin,
+            ...(config.previewAppOrigins?.length
+              ? { previewAppOrigins: config.previewAppOrigins }
+              : {}),
             ...(config.assetUploadOrigin ? { assetUploadOrigin: config.assetUploadOrigin } : {}),
             ...(config.authMode === "oidc" ? { authMode: "oidc" } : {}),
           }),
@@ -118,8 +142,10 @@ export function createStudioHandler(
           `^/api/v1/(?:capability-delivery-(?:endpoints|target)|capability-deliveries/${uuid}|capability-requests/${uuid}/(?:delivery-preview|deliveries))$`,
         ).test(path);
         const githubRoute = new RegExp(
-          `^/api/v1/(?:capability-github-config|capability-requests/${uuid}/github(?:-observations)?)$`,
+          `^/api/v1/(?:capability-github-config|capability-requests/${uuid}/github(?:-observations)?|capability-requests/${uuid}/preview)$`,
         ).test(path);
+        // PR preview environments of this Studio's base environment (STU-327).
+        const previewEnvironment = /^preview\/pr-[1-9][0-9]{0,18}$/;
         const allowedGet =
           githubRoute ||
           queueRoute ||
@@ -142,6 +168,7 @@ export function createStudioHandler(
           new RegExp(`^/api/v1/(documents|changesets)/${uuid}$`).test(path);
         const allowedPost = [
           ...githubCommands.map((name) => "/api/v1/commands/" + name),
+          "/api/v1/commands/set-capability-preview-args",
           ...deliveryCommands.map((name) => "/api/v1/commands/" + name),
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
@@ -400,6 +427,36 @@ export function createStudioHandler(
               if (!check.ok) return error(check.status, "CAPABILITY_GITHUB_NOT_FOUND");
             }
           }
+          if (path.endsWith("/set-capability-preview-args")) {
+            const p = envelope.payload;
+            if (
+              Object.keys(p).some(
+                (k) =>
+                  ![
+                    "requestId",
+                    "expectedRequestRevision",
+                    "environment",
+                    "manifestHash",
+                    "handlers",
+                    "expectedArgsRevision",
+                  ].includes(k),
+              ) ||
+              !new RegExp(`^${uuid}$`).test(String(p.requestId)) ||
+              !previewEnvironment.test(String(p.environment))
+            )
+              return error(400, "PAYLOAD_INVALID");
+            const check = await fetcher(
+              new URL(
+                "/api/v1/capability-requests/" +
+                  p.requestId +
+                  "?environment=" +
+                  encodeURIComponent(config.environment),
+                config.baseUrl,
+              ),
+              { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+            );
+            if (!check.ok) return error(check.status, "CAPABILITY_REQUEST_UNAVAILABLE");
+          }
           if (deliveryCommands.some((name) => path.endsWith("/" + name))) {
             if (config.authMode !== "oidc") return error(403, "CAPABILITY_DELIVERY_FORBIDDEN");
             const p = envelope.payload;
@@ -581,7 +638,11 @@ export function createStudioHandler(
             return error(400, "PAYLOAD_INVALID");
           if (
             (path.endsWith("create-preview-token") &&
-              envelope.payload.environment !== config.environment) ||
+              envelope.payload.environment !== config.environment &&
+              !(
+                previewEnvironment.test(String(envelope.payload.environment)) &&
+                new RegExp(`^${uuid}$`).test(String(envelope.payload.changesetId))
+              )) ||
             (path.endsWith("create-changeset") &&
               (!Array.isArray(envelope.payload.targets) ||
                 envelope.payload.targets.length !== 1 ||

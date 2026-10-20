@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,8 +30,11 @@ type previewClaims struct {
 	Project     string     `json:"prj"`
 	Environment string     `json:"env"`
 	Changeset   *uuid.UUID `json:"cs,omitempty"`
-	Subject     uuid.UUID  `json:"sub"`
-	Expires     int64      `json:"exp"`
+	// Registration pins a token of a preview environment with a source to the
+	// build it was issued for (STU-329).
+	Registration *int32    `json:"reg,omitempty"`
+	Subject      uuid.UUID `json:"sub"`
+	Expires      int64     `json:"exp"`
 }
 
 var jwtHeader = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
@@ -89,7 +93,9 @@ type PreviewToken struct {
 	Token       string     `json:"token"`
 	Environment string     `json:"environment"`
 	ChangesetID *uuid.UUID `json:"changesetId"`
-	ExpiresAt   time.Time  `json:"expiresAt"`
+	// RegistrationSeq — сборка preview/pr-<N>, для которой выпущен токен (STU-329).
+	RegistrationSeq *int32    `json:"registrationSeq,omitempty"`
+	ExpiresAt       time.Time `json:"expiresAt"`
 }
 
 type previewPayload struct {
@@ -110,16 +116,28 @@ func handleCreatePreviewToken(ctx context.Context, tx pgx.Tx, actor auth.Actor, 
 	if err != nil {
 		return PreviewToken{}, err
 	}
+	var targets []string
 	if p.ChangesetID != nil {
-		if _, err := changes.GetChangeset(ctx, q, actor.ProjectID, *p.ChangesetID); err != nil {
+		cs, err := changes.GetChangeset(ctx, q, actor.ProjectID, *p.ChangesetID)
+		if err != nil {
 			return PreviewToken{}, err
 		}
+		targets = cs.Targets
+	}
+	var registration *int32
+	if env.SourcePullNumber != nil {
+		// STU-327: a PR preview shows a draft of its base environment only to
+		// those who may read design.
+		if !actor.Rights.Has(auth.DesignRead) || p.ChangesetID == nil || len(targets) > 0 && !slices.Contains(targets, env.SourceBaseName) {
+			return PreviewToken{}, commandbus.NewError(http.StatusForbidden, "FORBIDDEN", "Нет доступа к предпросмотру PR", "Нужны design.read и Change Set базового окружения")
+		}
+		registration = &env.RegistrationSeq
 	}
 	expires := now().Add(PreviewTTL).Truncate(time.Second)
 	token := signToken(env.PreviewKey, previewClaims{
-		Project: actor.ProjectSlug, Environment: env.Name, Changeset: p.ChangesetID, Subject: actor.ID, Expires: expires.Unix(),
+		Project: actor.ProjectSlug, Environment: env.Name, Changeset: p.ChangesetID, Registration: registration, Subject: actor.ID, Expires: expires.Unix(),
 	})
-	return PreviewToken{Token: token, Environment: env.Name, ChangesetID: p.ChangesetID, ExpiresAt: expires}, nil
+	return PreviewToken{Token: token, Environment: env.Name, ChangesetID: p.ChangesetID, RegistrationSeq: registration, ExpiresAt: expires}, nil
 }
 
 // AuthenticatePreview проверяет заголовок Authorization: Preview <JWT> (API-041).
@@ -142,8 +160,12 @@ func AuthenticatePreview(ctx context.Context, q *store.Queries, authorization st
 	if verifyToken(env.PreviewKey, token, now()) != nil {
 		return Access{}, ErrUnauthenticated
 	}
+	// A new build of a PR preview invalidates tokens of the previous one.
+	if env.SourcePullNumber != nil && (c.Registration == nil || *c.Registration != env.RegistrationSeq) {
+		return Access{}, ErrUnauthenticated
+	}
 	return Access{ProjectID: env.ProjectID, ProjectSlug: c.Project, EnvironmentID: env.ID, Environment: env.Name,
-		Draft: true, ChangesetID: c.Changeset, ExpiresAt: time.Unix(c.Expires, 0), PreviewKeyHash: previewFingerprint(env.PreviewKey)}, nil
+		Draft: true, ChangesetID: c.Changeset, ExpiresAt: time.Unix(c.Expires, 0), PreviewKeyHash: previewFingerprint(env.PreviewKey), BaseEnvironment: env.SourceBaseName}, nil
 }
 
 func previewFingerprint(key []byte) string {
