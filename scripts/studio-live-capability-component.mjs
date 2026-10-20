@@ -10,7 +10,7 @@ import { resolve, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, URL, URLSearchParams } from "node:url";
 import vm from "node:vm";
-const { fetch, setTimeout } = globalThis;
+const { fetch } = globalThis;
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const require = createRequire(new URL("../examples/react-store/package.json", import.meta.url));
 const { chromium, expect } = require("@playwright/test");
