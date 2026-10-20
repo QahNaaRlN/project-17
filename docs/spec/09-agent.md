@@ -189,6 +189,9 @@ STU-295…314, слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaR
 Пакет [автоматического fulfillment и групп requiredBy](../studio-capability-fulfillment.md),
 STU-335…354, слит в dev 2026-10-20 в [PR #71](https://github.com/QahNaaRlN/project-17/pull/71), merge `4a76e82`: строка
 «Выполнение» ниже реализована для `kind: action`.
+Пакет [запросов недостающих компонентов](../studio-capability-component.md),
+STU-355…374, слит в dev 2026-10-21 в [PR #73](https://github.com/QahNaaRlN/project-17/pull/73), merge `4262d93`: вид
+`component` с заглушкой-узлом и тем же автоматическим выполнением.
 Доставка с отдельным
 согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
 автоматические шаги жизненного цикла ниже по-прежнему целевые.
