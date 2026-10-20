@@ -67,7 +67,7 @@ func fulfillmentError(code string) error {
 func registerFulfillment(bus *commandbus.Bus) {
 	commandbus.Register(bus, commandbus.Command[AttachRequest, object]{Name: "attach-capability-request", Authorize: func(a auth.Actor, _ AttachRequest) error { return attachRights(a) }, Validate: func(p AttachRequest) error {
 		node := p.Placement == nil && p.InitialProps == nil && validAnchor(p.NodeID, p.Event)
-		instance := p.NodeID == "" && p.Event == "" && !p.ConfirmReplaceExisting && validPlacement(p.Placement) && len(p.InitialProps) <= 64<<10 && (p.InitialProps == nil || obj(jsonValue(p.InitialProps)) != nil)
+		instance := p.NodeID == "" && p.Event == "" && !p.ConfirmReplaceExisting && (validPlacement(p.Placement) || validPlacementFor(KindDataSource, p.Placement) || validPlacementFor(KindToken, p.Placement)) && len(p.InitialProps) <= 64<<10 && (p.InitialProps == nil || obj(jsonValue(p.InitialProps)) != nil)
 		if p.RequestID == uuid.Nil || p.ExpectedRequestRevision < 1 || p.ChangesetID == uuid.Nil || p.DocumentID == uuid.Nil || p.ExpectedSeq < 0 || !codeHash(p.ExpectedManifestHash) || !node && !instance {
 			return fail("CAPABILITY_REQUEST_INVALID")
 		}
@@ -148,7 +148,7 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 	if r.Revision != p.ExpectedRequestRevision {
 		return nil, fail("CAPABILITY_REVISION_CONFLICT")
 	}
-	if (r.Kind == KindComponent) != (p.Placement != nil) {
+	if (r.Kind == KindAction) == (p.Placement != nil) {
 		return nil, fail("CAPABILITY_REQUEST_INVALID")
 	}
 	if existing, e := q.AnchorAt(ctx, store.AnchorAtParams{ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: p.NodeID, Event: p.Event}); e == nil {

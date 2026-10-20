@@ -107,7 +107,7 @@ func dataSourceCompatible(r store.CapabilityRequest, actual object) bool {
 			return false
 		}
 	}
-	return (contract["paginated"] == true) == (actual["paginated"] == true) && bindingdoc.SimpleContentCompatible(obj(actual["result"]), obj(contract["result"]))
+	return (contract["paginated"] == true) == (actual["paginated"] == true) && bindingdoc.SimpleContentCompatible(obj(contract["result"]), obj(actual["result"]))
 }
 
 // designPath — the anchor path of a token placement in the node's current
