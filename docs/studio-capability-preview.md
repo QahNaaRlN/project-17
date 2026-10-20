@@ -1,6 +1,8 @@
 # Studio: preview/<ref> для проверенного PR
 
-Статус: **одобрена пользователем 2026-10-19; открытые вопросы решены (§11); код не начат**.
+Статус: **одобрена пользователем 2026-10-19; открытые вопросы решены (§11); реализована
+и слита в dev 2026-10-20 в [PR #68](https://github.com/QahNaaRlN/project-17/pull/68), merge `59ce50f`**
+([реализация и проверка](studio-capability-preview-acceptance.md)).
 Дата: 2026-10-19. Требования: STU-315…334.
 Основа: `origin/dev` на `566f4b1` (после [PR #64](https://github.com/QahNaaRlN/project-17/pull/64));
 функциональная база — [PR #62](https://github.com/QahNaaRlN/project-17/pull/62),
@@ -12,7 +14,7 @@ merge `359981e31c188d02a28a0bafa26ed418f2235ecb`,
 [регистрацию manifest](manifest-registration.md). Архитектурная цель — строка
 «Preview» в [жизненном цикле Missing Capability](spec/09-agent.md#51-жизненный-цикл)
 и [окружения preview](spec/04-manifest.md#6-окружения-preview) MF-030…MF-033.
-Пакет №1 очереди M5 в [плане MVP](spec/14-mvp-plan.md#текущее-состояние-и-приоритет--2026-10-19).
+Пакет M5 из [плана MVP](spec/14-mvp-plan.md#текущее-состояние-и-приоритет--2026-10-20).
 
 ## 1. Результат и границы
 
