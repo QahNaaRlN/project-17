@@ -23,19 +23,19 @@ import (
 
 // Типы операций над узлами.
 const (
-	NodeInsert         = "node.insert"
-	NodeRemove         = "node.remove"
-	NodeMove           = "node.move"
-	NodeSetProps       = "node.setProps"
-	NodeSetDesign      = "node.setDesign"
-	NodeSetBinding     = "node.setBinding"
-	NodeSetCondition   = "node.setCondition"
-	NodeSetBehavior    = "node.setBehavior"
-	NodeRename         = "node.rename"
+	NodeInsert       = "node.insert"
+	NodeRemove       = "node.remove"
+	NodeMove         = "node.move"
+	NodeSetProps     = "node.setProps"
+	NodeSetDesign    = "node.setDesign"
+	NodeSetBinding   = "node.setBinding"
+	NodeSetCondition = "node.setCondition"
+	NodeSetBehavior  = "node.setBehavior"
+	NodeRename       = "node.rename"
 	// NodeClearPending снимает метку заглушки компонента (STU-370); обратная
 	// NodeSetPending восстанавливает её из журнала.
-	NodeClearPending = "node.clearPending"
-	NodeSetPending   = "node.setPending"
+	NodeClearPending   = "node.clearPending"
+	NodeSetPending     = "node.setPending"
 	LocalContentSet    = "localContent.set"
 	LocalContentRemove = "localContent.remove"
 )
