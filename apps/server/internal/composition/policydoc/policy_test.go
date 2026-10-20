@@ -301,3 +301,22 @@ func TestSTU357PlaceholderRequiresCode(t *testing.T) {
 		t.Fatal("inside CODE")
 	}
 }
+
+// STU-377/378: data source and token placeholders require a CODE document or zone.
+func TestSTU377_378DataTokenPlaceholdersRequireCode(t *testing.T) {
+	d := map[string]any{"irVersion": "1.0", "kind": "page", "root": "n_root",
+		"dataSources": map[string]any{"rec": map[string]any{"source": "store.rec", "pending": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"}},
+		"nodes":       map[string]any{"n_root": map[string]any{"id": "n_root", "type": "Box", "design": map[string]any{"padding": "pending:0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c12"}}}}
+	count := 0
+	for _, diag := range Validate(d, nil, Options{}).Diagnostics {
+		if diag.Code == "POLICY_PENDING_REQUIRES_CODE" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatal("both placeholders outside CODE", count)
+	}
+	if TokenCategory("padding") != "spacing" || TokenCategory("unknown") != "" {
+		t.Fatal("token categories")
+	}
+}

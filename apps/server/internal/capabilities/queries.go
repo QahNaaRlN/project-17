@@ -156,6 +156,8 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 			if r.Status == "fulfilled" && r.Kind == KindComponent {
 				n := obj(obj(d["nodes"])[r.NodeID])
 				out["fulfillmentReverted"] = n == nil || n["pending"] != nil || n["type"] != r.Key
+			} else if r.Status == "fulfilled" && r.Kind != KindAction {
+				out["fulfillmentReverted"] = dataTokenPending(r, d)
 			} else if r.Status == "fulfilled" {
 				value := obj(obj(obj(d["nodes"])[r.NodeID])["on"])[r.Event]
 				calls := arr(value)

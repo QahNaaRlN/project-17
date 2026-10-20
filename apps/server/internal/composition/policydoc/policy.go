@@ -161,6 +161,12 @@ func Validate(doc map[string]any, app any, o Options) Result {
 	}
 	p := c.level(policy{mode: System, max: System}, project, "/project/settings", "")
 	p = c.child(p, obj(doc["policy"]), "/policy", "")
+	// STU-377: a data source placeholder needs a CODE document.
+	for _, key := range keys(obj(doc["dataSources"])) {
+		if _, placeholder := obj(obj(doc["dataSources"])[key])["pending"].(string); placeholder && p.mode < Code {
+			c.error("POLICY_PENDING_REQUIRES_CODE", ir.Pointer("dataSources", key, "pending"), "", nil)
+		}
+	}
 	nodes := obj(doc["nodes"])
 	var walk func(string, string, policy)
 	walk = func(id, parent string, p policy) {
@@ -208,6 +214,10 @@ func Validate(doc map[string]any, app any, o Options) Result {
 		}
 		if _, placeholder := n["pending"].(string); placeholder && p.mode < Code {
 			c.error("POLICY_PENDING_REQUIRES_CODE", ir.Pointer("nodes", id, "pending"), id, nil)
+		}
+		// STU-378: a token placeholder needs a CODE zone too.
+		if p.mode < Code && strings.Contains(fmt.Sprint(n["design"]), "pending:") {
+			c.error("POLICY_PENDING_REQUIRES_CODE", ir.Pointer("nodes", id, "design"), id, nil)
 		}
 		if c.app != nil {
 			c.design(n, typ, parent, p, id)

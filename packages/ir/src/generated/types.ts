@@ -346,6 +346,7 @@ export interface SlotDef {
  */
 export interface DataSourceUse {
   source: string;
+  pending?: Uuid;
   params?: {
     [k: string]: Operand;
   };

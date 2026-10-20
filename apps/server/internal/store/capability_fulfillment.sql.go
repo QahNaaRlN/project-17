@@ -482,7 +482,7 @@ func (q *Queries) GetSystemActor(ctx context.Context, projectID *uuid.UUID) (Act
 
 const insertCapabilityAnchor = `-- name: InsertCapabilityAnchor :one
 INSERT INTO capability_request_anchors (id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, original, anchor_kind)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7::text = '' THEN 'node' ELSE 'event' END)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind
 `
 
@@ -496,6 +496,7 @@ type InsertCapabilityAnchorParams struct {
 	Event       string    `json:"event"`
 	OwnerID     uuid.UUID `json:"ownerId"`
 	Original    bool      `json:"original"`
+	AnchorKind  string    `json:"anchorKind"`
 }
 
 func (q *Queries) InsertCapabilityAnchor(ctx context.Context, arg InsertCapabilityAnchorParams) (CapabilityRequestAnchor, error) {
@@ -509,6 +510,7 @@ func (q *Queries) InsertCapabilityAnchor(ctx context.Context, arg InsertCapabili
 		arg.Event,
 		arg.OwnerID,
 		arg.Original,
+		arg.AnchorKind,
 	)
 	var i CapabilityRequestAnchor
 	err := row.Scan(

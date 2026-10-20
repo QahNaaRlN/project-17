@@ -35,9 +35,14 @@ func Register(bus *commandbus.Bus) {
 			if !keyPattern.MatchString(p.Key) || len(p.Key) > 200 || !validAnchor(p.NodeID, p.Event) || p.Placement != nil || p.InitialProps != nil {
 				return fail("CAPABILITY_REQUEST_INVALID")
 			}
-		case KindComponent:
-			if !componentPattern.MatchString(p.Key) || p.NodeID != "" || p.Event != "" || !validPlacement(p.Placement) || len(p.InitialProps) > 64<<10 || p.InitialProps != nil && obj(jsonValue(p.InitialProps)) == nil {
+		case KindComponent, KindDataSource, KindToken:
+			key := map[string]bool{KindComponent: componentPattern.MatchString(p.Key), KindDataSource: keyPattern.MatchString(p.Key) && len(p.Key) <= 200, KindToken: tokenKey.MatchString(p.Key)}[p.Kind]
+			initial := p.InitialProps == nil || p.Kind != KindToken && len(p.InitialProps) <= 64<<10 && obj(jsonValue(p.InitialProps)) != nil
+			if !key || p.NodeID != "" || p.Event != "" || !validPlacementFor(p.Kind, p.Placement) || !initial {
 				return fail("CAPABILITY_REQUEST_INVALID")
+			}
+			if category, _ := tokenParts(p.Key); p.Kind == KindToken && parse(p.ProposedContract)["category"] != category {
+				return fail("CAPABILITY_CONTRACT_INVALID")
 			}
 		default:
 			return fail("CAPABILITY_REQUEST_INVALID")
@@ -120,11 +125,25 @@ func create(ctx context.Context, tx pgx.Tx, a auth.Actor, p Create) (Result, err
 			r.InitialProps = p.InitialProps
 		}
 	}
+	if p.Kind == KindDataSource || p.Kind == KindToken {
+		// STU-383: a data source anchor is its page key; a token anchor is the
+		// node and the design path computed from the page below.
+		r.Kind, r.Placement, r.NodeID, r.InitialProps = p.Kind, raw(p.Placement), p.Placement.DataSourceKey, raw(object{})
+		if p.Kind == KindToken {
+			r.NodeID = p.Placement.NodeID
+		}
+		if p.InitialProps != nil {
+			r.InitialProps = p.InitialProps
+		}
+	}
 	s, e := loadContext(ctx, q, a, r, p.ExpectedSeq, p.ExpectedManifestHash, true)
 	if e != nil {
 		return Result{}, e
 	}
-	if r.Kind == KindComponent && !validInitialProps(r, obj(jsonValue(r.InitialProps)), s.app) {
+	if r.Kind == KindToken {
+		r.Event, _ = designPath(obj(obj(s.doc["nodes"])[r.NodeID]), placementOf(r))
+	}
+	if !validInitial(r, s.app) {
 		return Result{}, fail("CAPABILITY_PROPS_INVALID")
 	}
 	r, e = q.InsertCapabilityRequest(ctx, store.InsertCapabilityRequestParams{ID: r.ID, ProjectID: r.ProjectID, EnvironmentID: s.envID, Environment: r.Environment, SourceManifestID: s.m.ID, Key: r.Key, Title: r.Title, Description: r.Description, ProposedContract: r.ProposedContract, Acceptance: r.Acceptance, ChangesetID: r.ChangesetID, DocumentID: r.DocumentID, NodeID: r.NodeID, Event: r.Event, CreatorID: r.CreatorID, OwnerID: r.OwnerID, AgentSessionID: r.AgentSessionID, Kind: r.Kind, Placement: r.Placement, InitialProps: r.InitialProps})
@@ -134,7 +153,7 @@ func create(ctx context.Context, tx pgx.Tx, a auth.Actor, p Create) (Result, err
 	if e != nil {
 		return Result{}, e
 	}
-	if _, e = q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: r.ID, ChangesetID: r.ChangesetID, DocumentID: r.DocumentID, NodeID: r.NodeID, Event: r.Event, OwnerID: r.OwnerID, Original: true}); e != nil {
+	if _, e = q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: r.ID, ChangesetID: r.ChangesetID, DocumentID: r.DocumentID, NodeID: r.NodeID, Event: r.Event, OwnerID: r.OwnerID, Original: true, AnchorKind: anchorKind(r.Kind)}); e != nil {
 		return Result{}, e
 	}
 	if e = audit(ctx, q, a, r, "created"); e != nil {
@@ -287,7 +306,7 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		if r.Kind == KindAction && len(handlerChain(obj(obj(obj(s.doc["nodes"])[r.NodeID])["on"])[r.Event])) > 0 && !p.ConfirmReplaceExisting {
 			return out, fail("CAPABILITY_REPLACE_CONFIRM_REQUIRED")
 		}
-		if r.Kind == KindComponent && !validInitialProps(r, obj(jsonValue(r.InitialProps)), s.app) {
+		if !validInitial(r, s.app) {
 			return out, fail("CAPABILITY_PROPS_INVALID")
 		}
 		r.Status = "submitted"
@@ -295,7 +314,7 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		if e != nil {
 			return out, e
 		}
-		op := marker(r)
+		op := marker(r, s.doc)
 		change, e := changes.ApplyInTx(ctx, tx, a, r.ChangesetID, s.cs.Seq, []changes.OperationInput{{Type: op.Type, Target: &r.DocumentID, Payload: op.Payload}})
 		if e != nil {
 			return out, e
@@ -328,11 +347,11 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 			return out, fail("CAPABILITY_NOT_AVAILABLE")
 		}
 		var op ops.Op
-		if r.Kind == KindComponent {
+		if r.Kind != KindAction {
 			if p.Handlers != nil {
 				return out, fail("CAPABILITY_HANDLERS_INVALID")
 			}
-			if !componentCompatible(r, actual) {
+			if !contractCompatible(r, actual) {
 				return out, fail("CAPABILITY_CONTRACT_MISMATCH")
 			}
 			// The marker may be removed only for a fulfilled request (STU-370).
@@ -341,6 +360,9 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 				return out, e
 			}
 			op = clearMarker(r.NodeID)
+			if r.Kind != KindComponent {
+				op = dataTokenClear(r, s.doc)
+			}
 		} else {
 			if !contractCompatible(r, actual) {
 				return out, fail("CAPABILITY_CONTRACT_MISMATCH")
@@ -358,8 +380,8 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		// Ordinary drafts may retain warnings. Fulfillment must reject invalid actual
 		// calls/scopes/references in the affected event (or the instance's props
 		// against the real component) before recording success.
-		if r.Kind == KindComponent {
-			if nodeErrors(map[string]map[string][]ir.Diagnostic{r.Environment: change.Warnings[r.Environment]}, r.NodeID) {
+		if r.Kind != KindAction {
+			if placeErrors(r, r.NodeID, r.Event, map[string]map[string][]ir.Diagnostic{r.Environment: change.Warnings[r.Environment]}) {
 				return out, fail("CAPABILITY_PROPS_INVALID")
 			}
 		} else {

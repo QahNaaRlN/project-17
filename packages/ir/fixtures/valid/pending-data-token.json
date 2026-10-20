@@ -1,0 +1,32 @@
+{
+  "irVersion": "1.0",
+  "kind": "page",
+  "root": "n_root",
+  "policy": {
+    "mode": "CODE",
+    "maxMode": "CODE"
+  },
+  "nodes": {
+    "n_root": {
+      "id": "n_root",
+      "type": "Box",
+      "design": {
+        "padding": {
+          "base": "md",
+          "lg": "pending:0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c12"
+        }
+      }
+    }
+  },
+  "dataSources": {
+    "recommended": {
+      "source": "store.recommendations",
+      "pending": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11",
+      "params": {
+        "limit": {
+          "lit": 4
+        }
+      }
+    }
+  }
+}

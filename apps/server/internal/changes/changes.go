@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -488,7 +489,7 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 
 func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayload) (ApplyResult, error) {
 	for _, op := range p.Operations {
-		if actor.System && op.Type != ops.NodeSetBehavior && op.Type != ops.NodeClearPending {
+		if actor.System && !slices.Contains([]string{ops.NodeSetBehavior, ops.NodeClearPending, ops.DocumentSetDataSource, ops.NodeSetDesign}, op.Type) {
 			return ApplyResult{}, systemForbidden()
 		}
 	}

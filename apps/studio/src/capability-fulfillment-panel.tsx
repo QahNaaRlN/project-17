@@ -108,7 +108,7 @@ export function CapabilityFulfillmentPanel({
   const action = session?.manifest.actions?.[request.key]?.args as Record<string, Type> | undefined;
   const args = (action ?? request.proposedContract.args ?? {}) as Record<string, Type>;
   // STU-370: a component instance has no fulfillment arguments.
-  const component = request.kind === "component";
+  const component = request.kind !== "action";
   const locked = pending || uncertain;
   const payload = (a: FulfillmentAnchor) => ({
     requestId: request.id,

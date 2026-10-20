@@ -8,7 +8,12 @@ import {
 import { createReactRegistry, defineReactComponent } from "@cms/react";
 import { Storefront, Hero, Collection, Item, Empty, About, Promo } from "./sections.js";
 import { productField as product, productsField as products } from "./contracts.js";
-import { favoriteProduct, loadProducts, loadCollectionProducts } from "./operations.js";
+import {
+  favoriteProduct,
+  loadProducts,
+  loadCollectionProducts,
+  loadRecommendations,
+} from "./operations.js";
 const text = t.text().content().required().max(2000);
 const string = t.string().required().max(2000);
 const fields = {
@@ -25,7 +30,9 @@ const fields = {
 } as const;
 const strings = (values: Record<string, unknown>) =>
   Object.values(values).every((value) => typeof value === "string" && value.length <= 2000);
-export const storeTokens = { spacing: { sm: "8px", md: "16px", lg: "24px", xl: "32px" } };
+export const storeTokens = {
+  spacing: { sm: "8px", md: "16px", lg: "24px", xl: "32px", huge: "48px" },
+};
 export const registry = createRegistry({
   breakpoints: { sm: 640, md: 768, lg: 1024 },
   tokens: storeTokens,
@@ -46,6 +53,12 @@ export const registry = createRegistry({
       },
       result: t.object({ items: products }),
       loader: loadCollectionProducts,
+    }),
+    defineDataSource({
+      name: "store.recommendations",
+      params: { limit: t.number().int().min(1).max(64).required() },
+      result: t.list(t.object({ title: t.string().required().max(2000) })).max(64),
+      loader: loadRecommendations,
     }),
     defineDataSource({
       name: "store.products",

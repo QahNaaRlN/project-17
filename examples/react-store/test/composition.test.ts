@@ -4,6 +4,7 @@ import { storeComposition, definitionsFor } from "../src/composition.js";
 import { loadStore } from "../src/load.js";
 import { cms, page } from "./fixtures.js";
 import { catalog } from "../scripts/catalog.js";
+import { loadRecommendations } from "../src/operations.js";
 import { buildManifest } from "@cms/component-registry/manifest";
 import { registry, storeDefinitions, storeRegistry } from "../src/registry.js";
 import { validateManifest } from "@cms/manifest";
@@ -127,4 +128,17 @@ it("STU-374: PromoBanner renders its title, tone and nested blocks", () => {
   expect(html).toContain("Sale");
   expect(html).toContain("Buy");
   expect(storeDefinitions.PromoBanner!.validate!({ title: 1 })).toBe(false);
+});
+
+it("STU-394: recommendations return product titles up to the limit", () => {
+  const controller = new AbortController();
+  const items = loadRecommendations({ limit: 2 }, {
+    app: { catalog },
+    signal: controller.signal,
+  } as never);
+  expect(items).toEqual(catalog.products.slice(0, 2).map((p) => ({ title: p.title })));
+  controller.abort();
+  expect(() =>
+    loadRecommendations({ limit: 1 }, { app: { catalog }, signal: controller.signal } as never),
+  ).toThrow("STORE_SOURCE_CANCELED");
 });

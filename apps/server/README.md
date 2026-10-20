@@ -343,3 +343,13 @@ head SHA наблюдения GitHub; Delivery preview подставляет д
 диагностиками runtime, должны допускать `CMS_COMPONENT_PENDING_CAPABILITY` в preview.
 [Пакет](../../docs/studio-capability-component.md),
 [приёмка](../../docs/studio-capability-component-acceptance.md).
+
+### Запросы недостающих источников данных и токенов
+
+Миграция 00026 добавляет виды `dataSource` и `token`. Заглушка источника —
+подключение страницы с меткой `pending` (не загружается, `CMS_SOURCE_PENDING`),
+заглушка токена — дизайн-значение `pending:<id>` (в preview черновика —
+предлагаемое значение). Публикация блокируется; выполнение — общие условия,
+замена — снятие метки или запись имени токена от `cms-system`.
+[Пакет](../../docs/studio-capability-data-token.md),
+[приёмка](../../docs/studio-capability-data-token-acceptance.md).

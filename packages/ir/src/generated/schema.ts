@@ -1046,6 +1046,9 @@ export const irSchema = {
           "type": "string",
           "pattern": "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$"
         },
+        "pending": {
+          "$ref": "#/$defs/uuid"
+        },
         "params": {
           "type": "object",
           "additionalProperties": {

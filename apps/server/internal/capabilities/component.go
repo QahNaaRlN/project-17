@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
@@ -17,21 +18,58 @@ import (
 
 // Kinds of capability requests (STU-355).
 const (
-	KindAction    = "action"
-	KindComponent = "component"
+	KindAction     = "action"
+	KindComponent  = "component"
+	KindDataSource = "dataSource"
+	KindToken      = "token"
 )
+
+// anchorKind — the place an anchor of the kind points at (STU-362/383).
+func anchorKind(kind string) string {
+	switch kind {
+	case KindComponent:
+		return "node"
+	case KindDataSource:
+		return "source"
+	case KindToken:
+		return "design"
+	}
+	return "event"
+}
 
 var componentPattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{0,63}$`)
 
-// Placement — where a component placeholder is inserted (STU-359).
+// Placement — where a placeholder goes: a component's parent, slot and index
+// (STU-359), a page data source key (STU-380) or a node design property with
+// an optional breakpoint (STU-380).
 type Placement struct {
-	ParentID string `json:"parentId"`
-	Slot     string `json:"slot,omitempty"`
-	Index    int    `json:"index"`
+	ParentID      string `json:"parentId,omitempty"`
+	Slot          string `json:"slot,omitempty"`
+	Index         int    `json:"index,omitempty"`
+	DataSourceKey string `json:"dataSourceKey,omitempty"`
+	NodeID        string `json:"nodeId,omitempty"`
+	Property      string `json:"property,omitempty"`
+	Breakpoint    string `json:"breakpoint,omitempty"`
 }
 
 func validPlacement(p *Placement) bool {
-	return p != nil && nodeIDPattern.MatchString(p.ParentID) && (p.Slot == "" || identifierPattern.MatchString(p.Slot)) && p.Index >= 0 && p.Index <= 1000
+	return validPlacementFor(KindComponent, p)
+}
+
+// validPlacementFor checks the placement shape of a kind.
+func validPlacementFor(kind string, p *Placement) bool {
+	if p == nil {
+		return false
+	}
+	switch kind {
+	case KindComponent:
+		return nodeIDPattern.MatchString(p.ParentID) && (p.Slot == "" || identifierPattern.MatchString(p.Slot)) && p.Index >= 0 && p.Index <= 1000 && p.DataSourceKey == "" && p.NodeID == "" && p.Property == "" && p.Breakpoint == ""
+	case KindDataSource:
+		return identifierPattern.MatchString(p.DataSourceKey) && len(p.DataSourceKey) <= 64 && *p == Placement{DataSourceKey: p.DataSourceKey}
+	case KindToken:
+		return nodeIDPattern.MatchString(p.NodeID) && fieldPattern.MatchString(p.Property) && (p.Breakpoint == "" || fieldPattern.MatchString(p.Breakpoint)) && p.ParentID == "" && p.Slot == "" && p.Index == 0 && p.DataSourceKey == ""
+	}
+	return false
 }
 
 var (
@@ -93,14 +131,26 @@ func validComponentContract(contract object) error {
 
 // definition — the manifest element a request asks for, or nil.
 func definition(app object, r store.CapabilityRequest) object {
-	if r.Kind == KindComponent {
+	switch r.Kind {
+	case KindComponent:
 		return obj(obj(app["components"])[r.Key])
+	case KindDataSource:
+		return obj(obj(app["dataSources"])[r.Key])
+	case KindToken:
+		category, name := tokenParts(r.Key)
+		if value, ok := obj(obj(app["tokens"])[category])[name]; ok {
+			return object{"value": value}
+		}
+		return nil
 	}
 	return obj(obj(app["actions"])[r.Key])
 }
 
 // taken — the key already names a manifest or builtin element of the kind.
 func taken(app object, r store.CapabilityRequest) bool {
+	if r.Kind == KindDataSource || r.Kind == KindToken {
+		return definition(app, r) != nil
+	}
 	if r.Kind == KindComponent {
 		return manifest.BuiltinContract(r.Key) != nil || obj(app["primitives"])[r.Key] != nil || obj(app["components"])[r.Key] != nil
 	}
@@ -110,14 +160,22 @@ func taken(app object, r store.CapabilityRequest) bool {
 // proposedFields — the typed fields of the proposed contract (args or props).
 func proposedFields(r store.CapabilityRequest) object {
 	contract := parse(r.ProposedContract)
-	if r.Kind == KindComponent {
+	switch r.Kind {
+	case KindComponent:
 		return obj(contract["props"])
+	case KindDataSource:
+		return obj(contract["params"])
+	case KindToken:
+		return object{}
 	}
 	return obj(contract["args"])
 }
 
 // marker — the IR gesture that writes the request's marker at its anchor.
-func marker(r store.CapabilityRequest) ops.Op {
+func marker(r store.CapabilityRequest, doc object) ops.Op {
+	if r.Kind == KindDataSource || r.Kind == KindToken {
+		return dataTokenMarker(r, doc)
+	}
 	if r.Kind != KindComponent {
 		return behavior(r, pending(r))
 	}
@@ -322,5 +380,46 @@ func anchorContext(r store.CapabilityRequest, s snapshot, ancestors, structure [
 		out["placement"] = placement
 		out["initialProps"] = jsonValue(r.InitialProps)
 	}
+	switch r.Kind {
+	case KindDataSource:
+		// STU-386: the page key, initial params and the binding paths that use it.
+		delete(out, "event")
+		delete(out, "nodeId")
+		out["dataSourceKey"] = r.NodeID
+		out["initialParams"] = jsonValue(r.InitialProps)
+		out["bindings"] = dataPaths(s.doc, r.NodeID)
+	case KindToken:
+		category, _ := tokenParts(r.Key)
+		delete(out, "event")
+		out["designPath"] = r.Event
+		out["tokens"] = keys(obj(obj(s.app["tokens"])[category]))
+	}
 	return out
+}
+
+// dataPaths — binding paths of the page that read $data.<key>, sorted.
+func dataPaths(doc object, key string) []string {
+	seen := map[string]bool{}
+	var walk func(any, int)
+	walk = func(v any, depth int) {
+		if depth > 32 {
+			return
+		}
+		switch t := v.(type) {
+		case string:
+			if t == "$data."+key || strings.HasPrefix(t, "$data."+key+".") {
+				seen[t] = true
+			}
+		case map[string]any:
+			for _, child := range t {
+				walk(child, depth+1)
+			}
+		case []any:
+			for _, child := range t {
+				walk(child, depth+1)
+			}
+		}
+	}
+	walk(doc["nodes"], 0)
+	return keysBool(seen)
 }

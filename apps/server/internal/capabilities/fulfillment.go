@@ -67,7 +67,7 @@ func fulfillmentError(code string) error {
 func registerFulfillment(bus *commandbus.Bus) {
 	commandbus.Register(bus, commandbus.Command[AttachRequest, object]{Name: "attach-capability-request", Authorize: func(a auth.Actor, _ AttachRequest) error { return attachRights(a) }, Validate: func(p AttachRequest) error {
 		node := p.Placement == nil && p.InitialProps == nil && validAnchor(p.NodeID, p.Event)
-		instance := p.NodeID == "" && p.Event == "" && !p.ConfirmReplaceExisting && validPlacement(p.Placement) && len(p.InitialProps) <= 64<<10 && (p.InitialProps == nil || obj(jsonValue(p.InitialProps)) != nil)
+		instance := p.NodeID == "" && p.Event == "" && !p.ConfirmReplaceExisting && (validPlacement(p.Placement) || validPlacementFor(KindDataSource, p.Placement) || validPlacementFor(KindToken, p.Placement)) && len(p.InitialProps) <= 64<<10 && (p.InitialProps == nil || obj(jsonValue(p.InitialProps)) != nil)
 		if p.RequestID == uuid.Nil || p.ExpectedRequestRevision < 1 || p.ChangesetID == uuid.Nil || p.DocumentID == uuid.Nil || p.ExpectedSeq < 0 || !codeHash(p.ExpectedManifestHash) || !node && !instance {
 			return fail("CAPABILITY_REQUEST_INVALID")
 		}
@@ -148,7 +148,7 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 	if r.Revision != p.ExpectedRequestRevision {
 		return nil, fail("CAPABILITY_REVISION_CONFLICT")
 	}
-	if (r.Kind == KindComponent) != (p.Placement != nil) {
+	if (r.Kind == KindAction) == (p.Placement != nil) {
 		return nil, fail("CAPABILITY_REQUEST_INVALID")
 	}
 	if existing, e := q.AnchorAt(ctx, store.AnchorAtParams{ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: p.NodeID, Event: p.Event}); e == nil {
@@ -172,20 +172,36 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 			target.InitialProps = p.InitialProps
 		}
 	}
+	if r.Kind == KindDataSource || r.Kind == KindToken {
+		// STU-384: another page key or design property joins the group.
+		target.Status, target.Placement, target.NodeID, target.Event, target.InitialProps = "draft", raw(p.Placement), p.Placement.DataSourceKey, "", raw(object{})
+		if r.Kind == KindToken {
+			target.NodeID = p.Placement.NodeID
+		}
+		if p.InitialProps != nil {
+			target.InitialProps = p.InitialProps
+		}
+	}
+	if r.Kind != KindAction && !validPlacementFor(r.Kind, p.Placement) {
+		return nil, fail("CAPABILITY_REQUEST_INVALID")
+	}
 	s, e := loadContext(ctx, q, a, target, p.ExpectedSeq, p.ExpectedManifestHash, true)
 	if e != nil {
 		return nil, e
 	}
-	if r.Kind == KindComponent && !validInitialProps(target, obj(jsonValue(target.InitialProps)), s.app) {
+	if r.Kind == KindToken {
+		target.Event, _ = designPath(obj(obj(s.doc["nodes"])[target.NodeID]), placementOf(target))
+	}
+	if !validInitial(target, s.app) {
 		return nil, fail("CAPABILITY_PROPS_INVALID")
 	}
 	if r.Kind == KindAction && len(handlerChain(obj(obj(obj(s.doc["nodes"])[p.NodeID])["on"])[p.Event])) > 0 && !p.ConfirmReplaceExisting {
 		return nil, fail("CAPABILITY_REPLACE_CONFIRM_REQUIRED")
 	}
-	anchor, e := q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: target.NodeID, Event: target.Event, OwnerID: a.ID})
+	anchor, e := q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: target.NodeID, Event: target.Event, OwnerID: a.ID, AnchorKind: anchorKind(r.Kind)})
 	var change changes.ApplyResult
 	if e == nil {
-		op := marker(target)
+		op := marker(target, s.doc)
 		change, e = changes.ApplyInTx(ctx, tx, a, p.ChangesetID, s.cs.Seq, []changes.OperationInput{{Type: op.Type, Target: &p.DocumentID, Payload: op.Payload}})
 	}
 	if e == nil {
@@ -243,6 +259,13 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 		if r.Kind == KindComponent {
 			op = ops.Op{Type: ops.NodeRemove, Payload: raw(object{"nodeId": anchor.NodeID})}
 		}
+		if r.Kind == KindDataSource || r.Kind == KindToken {
+			doc, e := changes.GetDocument(ctx, q, a.ProjectID, anchor.DocumentID, &anchor.ChangesetID)
+			if e != nil {
+				return nil, e
+			}
+			op = dataTokenDetach(target, parse(doc.Body))
+		}
 		var change changes.ApplyResult
 		if _, e = changes.Lock(ctx, q, a.ProjectID, anchor.ChangesetID); e == nil {
 			change, e = changes.ApplyInTx(ctx, tx, a, anchor.ChangesetID, p.ExpectedSeq, []changes.OperationInput{{Type: op.Type, Target: &anchor.DocumentID, Payload: op.Payload}})
@@ -252,7 +275,7 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 		}
 		next, out["change"] = "detached", change
 	case "set-capability-fulfillment-args":
-		if r.Kind == KindComponent || !a.Rights.Has(auth.BehaviorUse) || anchor.State == "replaced" || terminal(r.Status) && r.Status != "fulfilled" {
+		if r.Kind != KindAction || !a.Rights.Has(auth.BehaviorUse) || anchor.State == "replaced" || terminal(r.Status) && r.Status != "fulfilled" {
 			return nil, fail("CAPABILITY_STATE_INVALID")
 		}
 		calls := arr(jsonValue(p.Handlers))

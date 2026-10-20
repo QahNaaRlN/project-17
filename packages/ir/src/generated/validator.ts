@@ -472,6 +472,7 @@ const schema31 = {
       required: ["source"],
       properties: {
         source: { type: "string", pattern: "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$" },
+        pending: { $ref: "#/$defs/uuid" },
         params: { type: "object", additionalProperties: { $ref: "#/$defs/operand" } },
       },
       additionalProperties: false,
@@ -507,7 +508,7 @@ const schema83 = {
   },
   additionalProperties: false,
 };
-const schema86 = {
+const schema87 = {
   type: "object",
   required: ["type", "value"],
   properties: {
@@ -526,8 +527,8 @@ const schema36 = {
 };
 const pattern4 = new RegExp("^[A-Za-z0-9_-]{4,32}$", "u");
 const pattern11 = new RegExp("^[A-Za-z][A-Za-z0-9_]*$", "u");
-const pattern39 = new RegExp("^t_[a-z0-9_]{2,40}$", "u");
-const pattern40 = new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u");
+const pattern40 = new RegExp("^t_[a-z0-9_]{2,40}$", "u");
+const pattern41 = new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u");
 const pattern8 = new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "u");
 const schema34 = {
   type: "object",
@@ -8042,6 +8043,7 @@ const schema85 = {
   required: ["source"],
   properties: {
     source: { type: "string", pattern: "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$" },
+    pending: { $ref: "#/$defs/uuid" },
     params: { type: "object", additionalProperties: { $ref: "#/$defs/operand" } },
   },
   additionalProperties: false,
@@ -8078,7 +8080,7 @@ function validate71(
       errors++;
     }
     for (const key0 in data) {
-      if (!(key0 === "source" || key0 === "params")) {
+      if (!(key0 === "source" || key0 === "pending" || key0 === "params")) {
         const err1 = {
           instancePath,
           schemaPath: "#/additionalProperties",
@@ -8128,15 +8130,52 @@ function validate71(
         errors++;
       }
     }
+    if (data.pending !== undefined) {
+      let data1 = data.pending;
+      if (typeof data1 === "string") {
+        if (!pattern8.test(data1)) {
+          const err4 = {
+            instancePath: instancePath + "/pending",
+            schemaPath: "#/$defs/uuid/pattern",
+            keyword: "pattern",
+            params: { pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+            message:
+              'must match pattern "' +
+              "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" +
+              '"',
+          };
+          if (vErrors === null) {
+            vErrors = [err4];
+          } else {
+            vErrors.push(err4);
+          }
+          errors++;
+        }
+      } else {
+        const err5 = {
+          instancePath: instancePath + "/pending",
+          schemaPath: "#/$defs/uuid/type",
+          keyword: "type",
+          params: { type: "string" },
+          message: "must be string",
+        };
+        if (vErrors === null) {
+          vErrors = [err5];
+        } else {
+          vErrors.push(err5);
+        }
+        errors++;
+      }
+    }
     if (data.params !== undefined) {
-      let data1 = data.params;
-      if (data1 && typeof data1 == "object" && !Array.isArray(data1)) {
-        for (const key1 in data1) {
+      let data2 = data.params;
+      if (data2 && typeof data2 == "object" && !Array.isArray(data2)) {
+        for (const key1 in data2) {
           if (
-            !validate38(data1[key1], {
+            !validate38(data2[key1], {
               instancePath:
                 instancePath + "/params/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),
-              parentData: data1,
+              parentData: data2,
               parentDataProperty: key1,
               rootData,
               dynamicAnchors,
@@ -8147,7 +8186,7 @@ function validate71(
           }
         }
       } else {
-        const err4 = {
+        const err6 = {
           instancePath: instancePath + "/params",
           schemaPath: "#/properties/params/type",
           keyword: "type",
@@ -8155,15 +8194,15 @@ function validate71(
           message: "must be object",
         };
         if (vErrors === null) {
-          vErrors = [err4];
+          vErrors = [err6];
         } else {
-          vErrors.push(err4);
+          vErrors.push(err6);
         }
         errors++;
       }
     }
   } else {
-    const err5 = {
+    const err7 = {
       instancePath,
       schemaPath: "#/type",
       keyword: "type",
@@ -8171,9 +8210,9 @@ function validate71(
       message: "must be object",
     };
     if (vErrors === null) {
-      vErrors = [err5];
+      vErrors = [err7];
     } else {
-      vErrors.push(err5);
+      vErrors.push(err7);
     }
     errors++;
   }
@@ -9070,7 +9109,7 @@ function validate20(
         for (const key9 in data22) {
           const _errs59 = errors;
           if (typeof key9 === "string") {
-            if (!pattern39.test(key9)) {
+            if (!pattern40.test(key9)) {
               const err41 = {
                 instancePath: instancePath + "/localContent",
                 schemaPath: "#/properties/localContent/propertyNames/pattern",
@@ -9175,7 +9214,7 @@ function validate20(
                     "/type",
                   schemaPath: "#/$defs/localContentItem/properties/type/enum",
                   keyword: "enum",
-                  params: { allowedValues: schema86.properties.type.enum },
+                  params: { allowedValues: schema87.properties.type.enum },
                   message: "must be equal to one of the allowed values",
                 };
                 if (vErrors === null) {
@@ -9211,7 +9250,7 @@ function validate20(
                 for (const key12 in data25) {
                   const _errs68 = errors;
                   if (typeof key12 === "string") {
-                    if (!pattern40.test(key12)) {
+                    if (!pattern41.test(key12)) {
                       const err48 = {
                         instancePath:
                           instancePath +
