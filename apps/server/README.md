@@ -332,3 +332,14 @@ head SHA наблюдения GitHub; Delivery preview подставляет д
 по-прежнему требует проверки и согласования человеком.
 [Пакет](../../docs/studio-capability-fulfillment.md),
 [приёмка](../../docs/studio-capability-fulfillment-acceptance.md).
+
+### Запросы недостающих компонентов
+
+Миграция 00025 добавляет вид запроса `component`: контракт свойств/слотов, место
+вставки и начальные значения. Отправка вставляет узел-заглушку с полем `pending`
+(IR-053), он проверяется по предложенному контракту и блокирует публикацию
+(`COMPONENT_PENDING_CAPABILITY`). Выполнение — те же условия, что у действий; замена —
+операция `node.clearPending` от `cms-system`. Приложения, отклоняющие страницы с
+диагностиками runtime, должны допускать `CMS_COMPONENT_PENDING_CAPABILITY` в preview.
+[Пакет](../../docs/studio-capability-component.md),
+[приёмка](../../docs/studio-capability-component-acceptance.md).

@@ -77,7 +77,7 @@ export async function loadStore(
     if (
       model.plan.diagnostics.some(
         (d) =>
-          !/^CMS_(SOURCE_|REPEAT_|DATA_VALUE_INVALID$|IMAGE_UNAVAILABLE$|ACTION_|EVENT_|VALUE_)/.test(
+          !/^CMS_(SOURCE_|REPEAT_|DATA_VALUE_INVALID$|IMAGE_UNAVAILABLE$|ACTION_|EVENT_|VALUE_|COMPONENT_PENDING_CAPABILITY$)/.test(
             d.code,
           ),
       )
