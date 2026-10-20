@@ -381,6 +381,8 @@ type CapabilityRequest struct {
 	FulfillmentObservationID *uuid.UUID `json:"fulfillmentObservationId"`
 	FulfillmentBasis         []byte     `json:"fulfillmentBasis"`
 	FulfilledAt              *time.Time `json:"fulfilledAt"`
+	Placement                []byte     `json:"placement"`
+	InitialProps             []byte     `json:"initialProps"`
 }
 
 type CapabilityRequestAnchor struct {
@@ -402,6 +404,7 @@ type CapabilityRequestAnchor struct {
 	Original        bool       `json:"original"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
+	AnchorKind      string     `json:"anchorKind"`
 }
 
 type CapabilityRequestAudit struct {

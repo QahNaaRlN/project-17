@@ -6,8 +6,8 @@ VALUES ($1, 'service', $2, 'cms-system', true);
 SELECT * FROM actors WHERE project_id = $1 AND system;
 
 -- name: InsertCapabilityAnchor :one
-INSERT INTO capability_request_anchors (id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, original)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO capability_request_anchors (id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, original, anchor_kind)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7::text = '' THEN 'node' ELSE 'event' END)
 RETURNING *;
 
 -- name: LockCapabilityAnchor :one

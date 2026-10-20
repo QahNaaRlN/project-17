@@ -13,6 +13,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -127,7 +128,7 @@ func matchPreview(ctx context.Context, q *store.Queries, r store.CapabilityReque
 		return m, e
 	}
 	m.Hash = man.Hash
-	m.Action = obj(obj(parse(man.Body)["actions"])[r.Key])
+	m.Action = definition(parse(man.Body), r)
 	if m.Action == nil {
 		m.State = PreviewKeyMissing
 		return m, nil
@@ -146,6 +147,9 @@ func matchPreview(ctx context.Context, q *store.Queries, r store.CapabilityReque
 
 // contractCompatible repeats the resolve rule (STU-268) against another manifest.
 func contractCompatible(r store.CapabilityRequest, action object) bool {
+	if r.Kind == KindComponent {
+		return componentCompatible(r, action)
+	}
 	proposed := obj(parse(r.ProposedContract)["args"])
 	args := obj(action["args"])
 	for key, field := range proposed {
@@ -175,6 +179,14 @@ func ready(state string) bool { return state == PreviewReady || state == Preview
 // substitute replaces the exact pending chain of the request with one call. It
 // returns false when the anchor no longer holds that pending marker.
 func substitute(doc object, r store.CapabilityRequest, call object) bool {
+	if r.Kind == KindComponent {
+		// STU-367: the placeholder renders as the real component in this response only.
+		if !exactPlaceholder(r, doc) {
+			return false
+		}
+		delete(obj(obj(doc["nodes"])[r.NodeID]), "pending")
+		return true
+	}
 	on := obj(obj(obj(doc["nodes"])[r.NodeID])["on"])
 	if on == nil || !exactPending(r, doc) {
 		return false
@@ -203,7 +215,7 @@ func previewCall(ctx context.Context, q *store.Queries, r store.CapabilityReques
 		return false, e
 	}
 	for _, d := range problems[r.DocumentID.String()] {
-		if d.NodeID == r.NodeID && (strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
+		if d.NodeID == r.NodeID && (r.Kind == KindComponent && d.Severity == ir.SeverityError || strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
 			return false, nil
 		}
 	}
@@ -435,12 +447,19 @@ func ProjectPreview(ctx context.Context, q *store.Queries, project, environment 
 	return raw(doc), nil
 }
 
-// pendingRequests lists request IDs of pending markers in stable node order.
+// pendingRequests lists request IDs of pending markers (actions and component
+// placeholders) in stable node order.
 func pendingRequests(doc object) []uuid.UUID {
 	seen := map[uuid.UUID]bool{}
 	out := []uuid.UUID{}
 	nodes := obj(doc["nodes"])
 	for _, nodeID := range keys(nodes) {
+		if marker, ok := obj(nodes[nodeID])["pending"].(string); ok {
+			if id, err := uuid.Parse(marker); err == nil && !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
 		on := obj(obj(nodes[nodeID])["on"])
 		for _, event := range keys(on) {
 			for _, call := range handlerChain(on[event]) {

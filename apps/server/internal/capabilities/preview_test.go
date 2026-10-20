@@ -33,7 +33,10 @@ type previewFixture struct {
 // previewSetup: a submitted request linked to PR #1 of the configured repository,
 // a CI bus with preview sources and one allowed preview origin.
 func previewSetup(t *testing.T) previewFixture {
-	g := githubSetup(t)
+	return previewSetupWith(t, githubSetup(t))
+}
+
+func previewSetupWith(t *testing.T, g githubFixture) previewFixture {
 	origins, e := previeworigins.Parse("https://pr.example.test, http://127.0.0.1:4100")
 	if e != nil {
 		t.Fatal(e)
@@ -68,13 +71,22 @@ func (f previewFixture) createEnv() object {
 // build uploads a code index for commit and returns the manifest payload.
 func (f previewFixture) build(commit string, args object) manifestregistry.Payload {
 	f.e.T.Helper()
+	return f.buildWith(commit, func(m object) {
+		if args != nil {
+			m["actions"] = object{"store.favorite": object{"args": args}}
+		}
+	})
+}
+
+// buildWith uploads a code index for commit and returns the manifest that
+// change produces.
+func (f previewFixture) buildWith(commit string, change func(object)) manifestregistry.Payload {
+	f.e.T.Helper()
 	index := object{"repo": object{"root": ".", "commit": commit}, "elements": object{}, "conventions": object{"registry": "src/registry.ts", "testCommand": "pnpm test", "manifestCommand": "pnpm cms build"}}
 	indexHash, _ := manifest.Hash(index)
 	m := parse([]byte(cmstest.DefaultManifest))
 	m["codeIndex"] = object{"uploaded": false, "hash": indexHash}
-	if args != nil {
-		m["actions"] = object{"store.favorite": object{"args": args}}
-	}
+	change(m)
 	hash, _ := manifest.Hash(m)
 	var upload manifestregistry.UploadedIndex
 	f.e.Must(f.e.Admin, "upload-code-index", object{"manifestHash": hash, "indexHash": indexHash, "index": index}, &upload)

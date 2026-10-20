@@ -450,7 +450,7 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID, changesetID u
 				return Check{}, err
 			}
 			if system {
-				set = auth.RightSet{auth.BehaviorUse: true, auth.ContentRead: true}
+				set = auth.RightSet{auth.BehaviorUse: true, auth.DesignCompose: true, auth.ContentRead: true}
 				rights[key] = set
 			}
 		}

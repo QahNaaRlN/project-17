@@ -286,3 +286,18 @@ func TestDiagnosticContractAndExtendedTypography(t *testing.T) {
 		}
 	}
 }
+
+// STU-357: a component placeholder requires an effective CODE zone.
+func TestSTU357PlaceholderRequiresCode(t *testing.T) {
+	d := map[string]any{"irVersion": "1.0", "kind": "page", "root": "n_root", "nodes": map[string]any{
+		"n_root":  map[string]any{"id": "n_root", "type": "Box", "children": []any{"n_promo"}},
+		"n_promo": map[string]any{"id": "n_promo", "type": "PromoBanner", "pending": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"},
+	}}
+	if !has(Validate(d, nil, Options{}), "POLICY_PENDING_REQUIRES_CODE") {
+		t.Fatal("outside CODE")
+	}
+	d["nodes"].(map[string]any)["n_root"].(map[string]any)["zone"] = map[string]any{"id": "lab", "mode": "CODE"}
+	if has(Validate(d, nil, Options{Project: map[string]any{"maxMode": "CODE"}}), "POLICY_PENDING_REQUIRES_CODE") {
+		t.Fatal("inside CODE")
+	}
+}

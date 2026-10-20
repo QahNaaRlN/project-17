@@ -50,9 +50,14 @@ type Create struct {
 	ChangesetID          uuid.UUID `json:"changesetId"`
 	ExpectedSeq          int32     `json:"expectedSeq"`
 	DocumentID           uuid.UUID `json:"documentId"`
-	NodeID               string    `json:"nodeId"`
-	Event                string    `json:"event"`
+	NodeID               string    `json:"nodeId,omitempty"`
+	Event                string    `json:"event,omitempty"`
 	Key                  string    `json:"key"`
+	// Kind — action (default) or component (STU-355); a component request has
+	// a placement and initial props instead of a node event.
+	Kind         string          `json:"kind,omitempty"`
+	Placement    *Placement      `json:"placement,omitempty"`
+	InitialProps json.RawMessage `json:"initialProps,omitempty"`
 }
 type Update struct {
 	ID               uuid.UUID `json:"id"`
@@ -89,7 +94,25 @@ func human(a auth.Actor) error {
 	}
 	return author(a)
 }
+// validDraft checks the texts and a contract of either kind; handlers repeat
+// the contract check for the request's own kind.
 func validDraft(d Draft) error {
+	if e := validTexts(d); e != nil {
+		return e
+	}
+	contract := parse(d.ProposedContract)
+	if validActionContract(contract) != nil && validComponentContract(contract) != nil {
+		return fail("CAPABILITY_CONTRACT_INVALID")
+	}
+	return nil
+}
+func validContract(kind string, raw json.RawMessage) error {
+	if kind == KindComponent {
+		return validComponentContract(parse(raw))
+	}
+	return validActionContract(parse(raw))
+}
+func validTexts(d Draft) error {
 	if !codeindex.Text(d.Title, 200) || strings.TrimSpace(d.Title) == "" || !descriptionText(d.Description) || len(d.Acceptance) < 1 || len(d.Acceptance) > 16 {
 		return fail("CAPABILITY_REQUEST_INVALID")
 	}
@@ -98,7 +121,9 @@ func validDraft(d Draft) error {
 			return fail("CAPABILITY_REQUEST_INVALID")
 		}
 	}
-	contract := parse(d.ProposedContract)
+	return nil
+}
+func validActionContract(contract object) error {
 	args := obj(contract["args"])
 	if len(contract) != 1 || args == nil || len(args) > 32 {
 		return fail("CAPABILITY_CONTRACT_INVALID")

@@ -16,8 +16,8 @@ DELETE FROM code_index_uploads WHERE NOT linked AND created_at < now()-interval 
 AND NOT EXISTS(SELECT 1 FROM capability_context_packs p WHERE p.index_id=code_index_uploads.id);
 
 -- name: InsertCapabilityRequest :one
-INSERT INTO capability_requests(id,project_id,environment_id,environment,source_manifest_id,key,title,description,proposed_contract,acceptance,changeset_id,document_id,node_id,event,creator_id,owner_id,agent_session_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+INSERT INTO capability_requests(id,project_id,environment_id,environment,source_manifest_id,key,title,description,proposed_contract,acceptance,changeset_id,document_id,node_id,event,creator_id,owner_id,agent_session_id,kind,placement,initial_props)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 ON CONFLICT DO NOTHING RETURNING *;
 
 -- name: GetCapabilityRequest :one

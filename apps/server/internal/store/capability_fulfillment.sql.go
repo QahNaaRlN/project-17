@@ -13,7 +13,7 @@ import (
 )
 
 const anchorAt = `-- name: AnchorAt :one
-SELECT a.id, a.project_id, a.request_id, a.changeset_id, a.document_id, a.node_id, a.event, a.owner_id, a.state, a.revision, a.fulfillment_args, a.attempts, a.next_at, a.last_error, a.replaced_batch_id, a.original, a.created_at, a.updated_at, r.status AS request_status, r.key AS request_key FROM capability_request_anchors a
+SELECT a.id, a.project_id, a.request_id, a.changeset_id, a.document_id, a.node_id, a.event, a.owner_id, a.state, a.revision, a.fulfillment_args, a.attempts, a.next_at, a.last_error, a.replaced_batch_id, a.original, a.created_at, a.updated_at, a.anchor_kind, r.status AS request_status, r.key AS request_key FROM capability_request_anchors a
 JOIN capability_requests r ON r.project_id = a.project_id AND r.id = a.request_id
 WHERE a.project_id = $1 AND a.request_id = $2 AND a.changeset_id = $3 AND a.document_id = $4 AND a.node_id = $5 AND a.event = $6
   AND a.state NOT IN ('detached', 'changeset_closed')
@@ -47,6 +47,7 @@ type AnchorAtRow struct {
 	Original        bool       `json:"original"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
+	AnchorKind      string     `json:"anchorKind"`
 	RequestStatus   string     `json:"requestStatus"`
 	RequestKey      string     `json:"requestKey"`
 }
@@ -80,6 +81,7 @@ func (q *Queries) AnchorAt(ctx context.Context, arg AnchorAtParams) (AnchorAtRow
 		&i.Original,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AnchorKind,
 		&i.RequestStatus,
 		&i.RequestKey,
 	)
@@ -87,7 +89,7 @@ func (q *Queries) AnchorAt(ctx context.Context, arg AnchorAtParams) (AnchorAtRow
 }
 
 const changesetCapabilityAnchors = `-- name: ChangesetCapabilityAnchors :many
-SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at FROM capability_request_anchors WHERE project_id = $1 AND changeset_id = $2 AND state = 'queued' ORDER BY created_at, id FOR UPDATE
+SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind FROM capability_request_anchors WHERE project_id = $1 AND changeset_id = $2 AND state = 'queued' ORDER BY created_at, id FOR UPDATE
 `
 
 type ChangesetCapabilityAnchorsParams struct {
@@ -123,6 +125,7 @@ func (q *Queries) ChangesetCapabilityAnchors(ctx context.Context, arg ChangesetC
 			&i.Original,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AnchorKind,
 		); err != nil {
 			return nil, err
 		}
@@ -324,7 +327,7 @@ UPDATE capability_requests SET status = 'fulfilled', revision = revision + 1, fu
   fulfillment_state = 'fulfilled', fulfillment_reason = '', fulfillment_mode = $5, fulfillment_commit = $6,
   fulfillment_observation_id = $7, fulfillment_basis = $8, fulfilled_at = now(), updated_at = now()
 WHERE project_id = $1 AND id = $2 AND revision = $3 AND status IN ('submitted', 'accepted', 'in_progress', 'pr_open')
-RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at
+RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at, placement, initial_props
 `
 
 type FulfillCapabilityRequestParams struct {
@@ -382,12 +385,14 @@ func (q *Queries) FulfillCapabilityRequest(ctx context.Context, arg FulfillCapab
 		&i.FulfillmentObservationID,
 		&i.FulfillmentBasis,
 		&i.FulfilledAt,
+		&i.Placement,
+		&i.InitialProps,
 	)
 	return i, err
 }
 
 const fulfillmentCandidates = `-- name: FulfillmentCandidates :many
-SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at FROM capability_requests
+SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at, placement, initial_props FROM capability_requests
 WHERE project_id = $1 AND environment_id = $2 AND status IN ('submitted', 'accepted', 'in_progress', 'pr_open')
   AND ($3::uuid IS NULL OR id = $3::uuid)
 ORDER BY created_at, id LIMIT 100
@@ -440,6 +445,8 @@ func (q *Queries) FulfillmentCandidates(ctx context.Context, arg FulfillmentCand
 			&i.FulfillmentObservationID,
 			&i.FulfillmentBasis,
 			&i.FulfilledAt,
+			&i.Placement,
+			&i.InitialProps,
 		); err != nil {
 			return nil, err
 		}
@@ -474,9 +481,9 @@ func (q *Queries) GetSystemActor(ctx context.Context, projectID *uuid.UUID) (Act
 }
 
 const insertCapabilityAnchor = `-- name: InsertCapabilityAnchor :one
-INSERT INTO capability_request_anchors (id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, original)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at
+INSERT INTO capability_request_anchors (id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, original, anchor_kind)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7::text = '' THEN 'node' ELSE 'event' END)
+RETURNING id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind
 `
 
 type InsertCapabilityAnchorParams struct {
@@ -523,6 +530,7 @@ func (q *Queries) InsertCapabilityAnchor(ctx context.Context, arg InsertCapabili
 		&i.Original,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AnchorKind,
 	)
 	return i, err
 }
@@ -569,7 +577,7 @@ func (q *Queries) IsSystemActor(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 const listCapabilityAnchors = `-- name: ListCapabilityAnchors :many
-SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 ORDER BY created_at, id
+SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 ORDER BY created_at, id
 `
 
 type ListCapabilityAnchorsParams struct {
@@ -605,6 +613,7 @@ func (q *Queries) ListCapabilityAnchors(ctx context.Context, arg ListCapabilityA
 			&i.Original,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AnchorKind,
 		); err != nil {
 			return nil, err
 		}
@@ -617,7 +626,7 @@ func (q *Queries) ListCapabilityAnchors(ctx context.Context, arg ListCapabilityA
 }
 
 const lockCapabilityAnchor = `-- name: LockCapabilityAnchor :one
-SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at FROM capability_request_anchors WHERE project_id = $1 AND id = $2 FOR UPDATE
+SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind FROM capability_request_anchors WHERE project_id = $1 AND id = $2 FOR UPDATE
 `
 
 type LockCapabilityAnchorParams struct {
@@ -647,6 +656,7 @@ func (q *Queries) LockCapabilityAnchor(ctx context.Context, arg LockCapabilityAn
 		&i.Original,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AnchorKind,
 	)
 	return i, err
 }
@@ -703,7 +713,7 @@ func (q *Queries) OpenCapabilityRequestByKey(ctx context.Context, arg OpenCapabi
 }
 
 const originalCapabilityAnchor = `-- name: OriginalCapabilityAnchor :one
-SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 AND original
+SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 AND original
 `
 
 type OriginalCapabilityAnchorParams struct {
@@ -733,6 +743,7 @@ func (q *Queries) OriginalCapabilityAnchor(ctx context.Context, arg OriginalCapa
 		&i.Original,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AnchorKind,
 	)
 	return i, err
 }
@@ -790,7 +801,7 @@ const saveCapabilityAnchor = `-- name: SaveCapabilityAnchor :one
 UPDATE capability_request_anchors SET state = $3, revision = revision + 1, fulfillment_args = $4, attempts = $5,
   next_at = $6, last_error = $7, replaced_batch_id = $8, updated_at = now()
 WHERE project_id = $1 AND id = $2
-RETURNING id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at
+RETURNING id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at, anchor_kind
 `
 
 type SaveCapabilityAnchorParams struct {
@@ -835,6 +846,7 @@ func (q *Queries) SaveCapabilityAnchor(ctx context.Context, arg SaveCapabilityAn
 		&i.Original,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AnchorKind,
 	)
 	return i, err
 }

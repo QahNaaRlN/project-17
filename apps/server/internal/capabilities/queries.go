@@ -18,7 +18,11 @@ import (
 )
 
 func projection(r store.CapabilityRequest) object {
-	return object{"id": r.ID, "kind": r.Kind, "environment": r.Environment, "sourceManifestId": r.SourceManifestID, "key": r.Key, "title": r.Title, "description": r.Description, "proposedContract": jsonValue(r.ProposedContract), "acceptance": jsonValue(r.Acceptance), "changesetId": r.ChangesetID, "documentId": r.DocumentID, "nodeId": r.NodeID, "event": r.Event, "creatorId": r.CreatorID, "ownerId": r.OwnerID, "status": r.Status, "revision": r.Revision, "externalRefs": jsonValue(r.ExternalRefs), "fulfilledManifestId": r.FulfilledManifestID, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt}
+	out := object{"id": r.ID, "kind": r.Kind, "environment": r.Environment, "sourceManifestId": r.SourceManifestID, "key": r.Key, "title": r.Title, "description": r.Description, "proposedContract": jsonValue(r.ProposedContract), "acceptance": jsonValue(r.Acceptance), "changesetId": r.ChangesetID, "documentId": r.DocumentID, "nodeId": r.NodeID, "event": r.Event, "creatorId": r.CreatorID, "ownerId": r.OwnerID, "status": r.Status, "revision": r.Revision, "externalRefs": jsonValue(r.ExternalRefs), "fulfilledManifestId": r.FulfilledManifestID, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt}
+	if r.Kind == KindComponent {
+		out["placement"] = jsonValue(r.Placement) // structure only; values stay with the owner
+	}
+	return out
 }
 func owns(a auth.Actor, r store.CapabilityRequest) bool {
 	if a.Kind == auth.ActorAgent {
@@ -130,6 +134,9 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 			return nil, e
 		}
 		out["changesetState"] = cs.State
+		if r.Kind == KindComponent {
+			out["initialProps"] = jsonValue(r.InitialProps)
+		}
 		out["seq"] = cs.Seq
 		doc, e := changes.GetDocument(ctx, q, a.ProjectID, r.DocumentID, &r.ChangesetID)
 		if e != nil {
@@ -146,7 +153,10 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 				return nil, e
 			}
 			out["anchorChanged"] = version.Deleted || !exactPending(r, d)
-			if r.Status == "fulfilled" {
+			if r.Status == "fulfilled" && r.Kind == KindComponent {
+				n := obj(obj(d["nodes"])[r.NodeID])
+				out["fulfillmentReverted"] = n == nil || n["pending"] != nil || n["type"] != r.Key
+			} else if r.Status == "fulfilled" {
 				value := obj(obj(obj(d["nodes"])[r.NodeID])["on"])[r.Event]
 				calls := arr(value)
 				if calls == nil {
