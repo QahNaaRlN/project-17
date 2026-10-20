@@ -111,3 +111,20 @@ it("STORE-001: reads the historical one-node draft without mutating it", async (
   ]);
   expect(JSON.stringify(response.document)).toBe(before);
 });
+
+it("STU-374: PromoBanner renders its title, tone and nested blocks", () => {
+  const Promo = storeRegistry.PromoBanner!;
+  const html = renderToString(
+    createElement(Promo, {
+      values: { title: "Sale", tone: "accent" },
+      className: "x",
+      nodeId: "n",
+      instanceId: "n",
+      children: createElement("button", null, "Buy"),
+    }),
+  );
+  expect(html).toContain("promo-accent");
+  expect(html).toContain("Sale");
+  expect(html).toContain("Buy");
+  expect(storeDefinitions.PromoBanner!.validate!({ title: 1 })).toBe(false);
+});

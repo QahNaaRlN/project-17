@@ -14,7 +14,9 @@ const block = original.match(/ {2}actions: \[[\s\S]*?\n {2}\],\n {2}dataSources:
 if (!block || !block[0].includes('name: "store.favorite"'))
   throw Error("Unexpected fixture registry");
 // STU-374: the requested component is absent from the baseline too.
-const promo = original.match(/ {4}defineReactComponent\(\{\n {6}name: "PromoBanner",[\s\S]*?\n {4}\}\),\n/);
+const promo = original.match(
+  / {4}defineReactComponent\(\{\n {6}name: "PromoBanner",[\s\S]*?\n {4}\}\),\n/,
+);
 if (!promo) throw Error("Unexpected fixture registry");
 const fixture = original
   .replace(block[0], "  actions: [],\n  dataSources:")
