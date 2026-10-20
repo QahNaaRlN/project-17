@@ -322,6 +322,12 @@ func TestSTU343_347ReviewClosedAndChangedAnchors(t *testing.T) {
 	if anchorFor(rows, cs2).State != "changeset_in_review" || anchorFor(rows, cs3).State != "anchor_changed" || anchorFor(rows, f.cs).State != "replaced" {
 		t.Fatal("STU-343/347 per Change Set outcome", rows)
 	}
+	// A failed or changes-requested draft also waits until it is reopened.
+	f.e.Exec(`UPDATE changesets SET state='failed' WHERE id=$1`, cs2)
+	f.run()
+	if anchorFor(f.anchors(), cs2).State != "changeset_in_review" {
+		t.Fatal("STU-347 failed draft waits", anchorFor(f.anchors(), cs2).State)
+	}
 	f.e.Exec(`UPDATE changesets SET state='open' WHERE id=$1`, cs2)
 	f.run()
 	if anchorFor(f.anchors(), cs2).State != "replaced" || f.clickOf(cs2, doc2)["action"] != "store.favorite" {

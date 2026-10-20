@@ -104,7 +104,7 @@ func (s *session) validateSystem(target uuid.UUID, before, after map[string]any)
 				continue
 			}
 			old := chainOf(oldOn[event])
-			name, _ := old[0].(map[string]any)["action"].(string)
+			name := actionOf(old[0])
 			requestID, err := uuid.Parse(strings.TrimPrefix(name, "pending:"))
 			if len(old) != 1 || !strings.HasPrefix(name, "pending:") || err != nil {
 				return systemForbidden()
@@ -117,8 +117,7 @@ func (s *session) validateSystem(target uuid.UUID, before, after map[string]any)
 				return err
 			}
 			calls := chainOf(chain)
-			action, _ := calls[0].(map[string]any)["action"].(string)
-			if a.RequestStatus != "fulfilled" || len(calls) != 1 || action != a.RequestKey {
+			if a.RequestStatus != "fulfilled" || len(calls) != 1 || actionOf(calls[0]) != a.RequestKey {
 				return systemForbidden()
 			}
 		}
@@ -130,10 +129,14 @@ func chainOf(v any) []any {
 	if calls, ok := v.([]any); ok && len(calls) > 0 {
 		return calls
 	}
-	if v == nil {
-		return []any{map[string]any{}}
-	}
 	return []any{v}
+}
+
+// actionOf — the action name of one handler call, "" when it is not a call.
+func actionOf(v any) string {
+	call, _ := v.(map[string]any)
+	name, _ := call["action"].(string)
+	return name
 }
 
 // withoutEvents removes event handlers so the remaining nodes can be compared.

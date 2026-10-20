@@ -43,13 +43,13 @@ SELECT
 -- name: DueAnchorChangesets :many
 SELECT DISTINCT a.project_id, a.changeset_id FROM capability_request_anchors a
 JOIN changesets c ON c.id = a.changeset_id
-WHERE (a.state = 'queued' AND a.next_at <= now()) OR (a.state = 'changeset_in_review' AND c.state IN ('open', 'changes_requested'))
+WHERE (a.state = 'queued' AND a.next_at <= now()) OR (a.state = 'changeset_in_review' AND c.state = 'open')
 LIMIT 100;
 
 -- name: RequeueReviewedAnchors :exec
 UPDATE capability_request_anchors a SET state = 'queued', revision = revision + 1, next_at = now(), updated_at = now()
 FROM changesets c
-WHERE c.id = a.changeset_id AND a.project_id = $1 AND a.changeset_id = $2 AND a.state = 'changeset_in_review' AND c.state IN ('open', 'changes_requested');
+WHERE c.id = a.changeset_id AND a.project_id = $1 AND a.changeset_id = $2 AND a.state = 'changeset_in_review' AND c.state = 'open';
 
 -- name: EnqueueFulfillmentActivation :exec
 INSERT INTO capability_fulfillment_jobs (id, project_id, environment_id, manifest_id)
@@ -111,3 +111,6 @@ WHERE project_id = $1 AND environment = $2 AND key = $3 AND status IN ('submitte
 
 -- name: OwnsCapabilityAnchor :one
 SELECT EXISTS (SELECT 1 FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 AND owner_id = $3 AND state <> 'detached')::bool;
+
+-- name: IsSystemActor :one
+SELECT EXISTS (SELECT 1 FROM actors WHERE id = $1 AND system)::bool;

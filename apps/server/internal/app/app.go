@@ -16,6 +16,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/agents"
 	"github.com/qahnaarln/project-17/apps/server/internal/capabilities"
+	"github.com/qahnaarln/project-17/apps/server/internal/capabilitygithub"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
@@ -128,7 +129,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	capabilityGithub.Register(bus)
 	githubRecovery := &capabilities.GithubRecoveryWorker{Service: capabilityGithub}
 	deliveryRecovery := &capabilities.DeliveryRecoveryWorker{Service: capabilityDelivery}
-	capabilityFulfillment := &capabilities.FulfillmentService{Pool: pool, Github: capabilityGithub}
+	capabilityFulfillment := &capabilities.FulfillmentService{Pool: pool, Github: capabilityGithub, Comparer: capabilitygithub.NewClient()}
 	agentService := &agents.Service{Pool: pool, Provider: agents.OpenRouter{Key: cfg.OpenRouterKey}, DefaultModel: cfg.OpenRouterModel}
 	agentService.Register(bus)
 	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) }, func(w *river.Workers) error {

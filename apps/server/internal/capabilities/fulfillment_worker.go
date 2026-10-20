@@ -23,7 +23,7 @@ import (
 type FulfillmentService struct {
 	Pool     *pgxpool.Pool
 	Github   *GithubService
-	Comparer gh.Comparer
+	Comparer gh.Comparer // GitHub compare; required
 	Queue    *jobs.Client
 	Now      func() time.Time
 }
@@ -180,11 +180,7 @@ func (s *FulfillmentService) decide(ctx context.Context, q *store.Queries, r sto
 	}
 	basis := object{"pullNumber": l.PullNumber, "repositoryId": repo.RepositoryID, "integrationSha": merge, "commit": commit, "observationId": o.ID, "observedAt": o.ObservedAt}
 	if commit != merge {
-		comparer := s.Comparer
-		if comparer == nil {
-			comparer = gh.NewClient()
-		}
-		cmp, e := comparer.Compare(ctx, repo, merge, commit)
+		cmp, e := s.Comparer.Compare(ctx, repo, merge, commit)
 		if e != nil {
 			return decision{reason: "comparison_unavailable"}, nil
 		}
@@ -211,16 +207,14 @@ func (s *FulfillmentService) refresh(ctx context.Context, r store.CapabilityRequ
 	if e != nil || count >= 20 {
 		return e
 	}
-	if _, e = q.SetCapabilityGithubLink(ctx, store.SetCapabilityGithubLinkParams{ID: l.ID, ProjectID: l.ProjectID, RequestID: l.RequestID, ConfigID: l.ConfigID, ConfigRevision: l.ConfigRevision, Fingerprint: l.Fingerprint, PullNumber: l.PullNumber, InitiatedBy: l.InitiatedBy, SyncID: uuid.Must(uuid.NewV7())}); e != nil {
-		return e
+	if _, e = q.SetCapabilityGithubLink(ctx, store.SetCapabilityGithubLinkParams{ID: l.ID, ProjectID: l.ProjectID, RequestID: l.RequestID, ConfigID: l.ConfigID, ConfigRevision: l.ConfigRevision, Fingerprint: l.Fingerprint, PullNumber: l.PullNumber, InitiatedBy: l.InitiatedBy, SyncID: uuid.Must(uuid.NewV7())}); e == nil {
+		e = q.InsertCapabilityGithubAudit(ctx, store.InsertCapabilityGithubAuditParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: &r.ID, Event: "refresh", Generation: l.Generation + 1, Reason: "fulfillment_check"})
 	}
-	if e = q.InsertCapabilityGithubAudit(ctx, store.InsertCapabilityGithubAuditParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: &r.ID, Event: "refresh", Generation: l.Generation + 1, Reason: "fulfillment_check"}); e != nil {
-		return e
+	if e == nil && s.Queue != nil {
+		_, e = s.Queue.InsertTx(ctx, tx, GithubArgs{ProjectID: r.ProjectID, RequestID: r.ID}, nil)
 	}
-	if s.Queue != nil {
-		if _, e = s.Queue.InsertTx(ctx, tx, GithubArgs{ProjectID: r.ProjectID, RequestID: r.ID}, nil); e != nil {
-			return e
-		}
+	if e != nil {
+		return e
 	}
 	return tx.Commit(ctx)
 }
@@ -229,10 +223,10 @@ func (s *FulfillmentService) refresh(ctx context.Context, r store.CapabilityRequ
 func (s *FulfillmentService) record(ctx context.Context, r store.CapabilityRequest, m store.Manifest, d decision) error {
 	return inProject(ctx, s.Pool, r.ProjectID, func(q *store.Queries) (bool, error) {
 		current, e := q.LockCapabilityRequest(ctx, store.LockCapabilityRequestParams{ProjectID: r.ProjectID, ID: r.ID})
-		if e != nil {
-			return false, e
+		var env store.Environment
+		if e == nil {
+			env, e = q.GetEnvironmentByID(ctx, store.GetEnvironmentByIDParams{ProjectID: r.ProjectID, ID: r.EnvironmentID})
 		}
-		env, e := q.GetEnvironmentByID(ctx, store.GetEnvironmentByIDParams{ProjectID: r.ProjectID, ID: r.EnvironmentID})
 		if e != nil {
 			return false, e
 		}
@@ -247,16 +241,16 @@ func (s *FulfillmentService) record(ctx context.Context, r store.CapabilityReque
 		}
 		mode := "automatic"
 		fulfilled, e := q.FulfillCapabilityRequest(ctx, store.FulfillCapabilityRequestParams{ProjectID: r.ProjectID, ID: r.ID, Revision: r.Revision, FulfilledManifestID: &m.ID, FulfillmentMode: &mode, FulfillmentCommit: &d.commit, FulfillmentObservationID: &d.observation, FulfillmentBasis: raw(d.basis)})
-		if e != nil {
-			return false, e
+		if e == nil {
+			e = q.QueueRequestAnchors(ctx, store.QueueRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID})
 		}
-		if e = q.QueueRequestAnchors(ctx, store.QueueRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID}); e != nil {
-			return false, e
+		if e == nil {
+			e = q.InsertCapabilityAudit(ctx, store.InsertCapabilityAuditParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: r.ID, Revision: fulfilled.Revision, ActorID: mustSystem(ctx, q, r.ProjectID), Event: "fulfilled_automatically", Reason: "manifest " + m.Hash, Data: raw(object{"status": fulfilled.Status, "basis": d.basis})})
 		}
-		if e = q.InsertCapabilityAudit(ctx, store.InsertCapabilityAuditParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: r.ID, Revision: fulfilled.Revision, ActorID: mustSystem(ctx, q, r.ProjectID), Event: "fulfilled_automatically", Reason: "manifest " + m.Hash, Data: raw(object{"status": fulfilled.Status, "basis": d.basis})}); e != nil {
-			return false, e
+		if e == nil {
+			e = fulfillmentAudit(ctx, q, r.ProjectID, r.ID, nil, nil, "fulfilled", "automatic", d.basis)
 		}
-		return true, fulfillmentAudit(ctx, q, r.ProjectID, r.ID, nil, nil, "fulfilled", "automatic", d.basis)
+		return e == nil, e
 	})
 }
 
@@ -279,13 +273,13 @@ func (s *FulfillmentService) Replace(ctx context.Context, project, cs uuid.UUID)
 		e = inProject(ctx, s.Pool, project, func(q *store.Queries) (bool, error) {
 			for id, why := range bad {
 				a, e := q.LockCapabilityAnchor(ctx, store.LockCapabilityAnchorParams{ProjectID: project, ID: id})
+				if e == nil {
+					_, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: project, ID: id, State: why, FulfillmentArgs: a.FulfillmentArgs, Attempts: a.Attempts + 1, NextAt: s.now(), LastError: why, ReplacedBatchID: a.ReplacedBatchID})
+				}
+				if e == nil {
+					e = fulfillmentAudit(ctx, q, project, a.RequestID, &a.ID, nil, "replacement_refused", why, object{})
+				}
 				if e != nil {
-					return false, e
-				}
-				if _, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: project, ID: id, State: why, FulfillmentArgs: a.FulfillmentArgs, Attempts: a.Attempts + 1, NextAt: s.now(), LastError: why, ReplacedBatchID: a.ReplacedBatchID}); e != nil {
-					return false, e
-				}
-				if e = fulfillmentAudit(ctx, q, project, a.RequestID, &a.ID, nil, "replacement_refused", why, object{}); e != nil {
 					return false, e
 				}
 			}
@@ -311,17 +305,17 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 	}
 	defer tx.Rollback(ctx)
 	q := store.New(tx)
-	if e = validation.LockProjectEnvironments(ctx, q, project); e != nil {
-		return nil, e
+	var cs store.Changeset
+	var anchors []store.CapabilityRequestAnchor
+	if e = validation.LockProjectEnvironments(ctx, q, project); e == nil {
+		cs, e = changes.Lock(ctx, q, project, csID)
 	}
-	cs, e := changes.Lock(ctx, q, project, csID)
-	if e != nil {
-		return nil, e
+	if e == nil {
+		e = q.RequeueReviewedAnchors(ctx, store.RequeueReviewedAnchorsParams{ProjectID: project, ChangesetID: csID})
 	}
-	if e = q.RequeueReviewedAnchors(ctx, store.RequeueReviewedAnchorsParams{ProjectID: project, ChangesetID: csID}); e != nil {
-		return nil, e
+	if e == nil {
+		anchors, e = q.ChangesetCapabilityAnchors(ctx, store.ChangesetCapabilityAnchorsParams{ProjectID: project, ChangesetID: csID})
 	}
-	anchors, e := q.ChangesetCapabilityAnchors(ctx, store.ChangesetCapabilityAnchorsParams{ProjectID: project, ChangesetID: csID})
 	if e != nil || len(anchors) == 0 {
 		return nil, e
 	}
@@ -329,18 +323,15 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 		_, e := q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: project, ID: a.ID, State: state, FulfillmentArgs: a.FulfillmentArgs, Attempts: a.Attempts, NextAt: s.now(), LastError: why, ReplacedBatchID: a.ReplacedBatchID})
 		return e
 	}
-	// STU-347: Change Sets under review keep their approval; closed ones never change.
-	if cs.State == "in_review" || cs.State == "approved" || cs.State == "changes_requested" || cs.Kind != "standard" && cs.State != "merged" && cs.State != "abandoned" {
-		for _, a := range anchors {
-			if e = mark(a, "changeset_in_review", ""); e != nil {
-				return nil, e
-			}
-		}
-		return nil, tx.Commit(ctx)
-	}
+	// STU-347: merged or abandoned Change Sets never change; any other state
+	// that is not open (review, approval, failed checks) waits for a reopen.
 	if cs.State != "open" || cs.Kind != "standard" {
+		state := "changeset_in_review"
+		if cs.State == "merged" || cs.State == "abandoned" || cs.Kind != "standard" {
+			state = "changeset_closed"
+		}
 		for _, a := range anchors {
-			if e = mark(a, "changeset_closed", ""); e != nil {
+			if e = mark(a, state, ""); e != nil {
 				return nil, e
 			}
 		}
@@ -357,38 +348,32 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 			continue
 		}
 		env, e := q.GetEnvironmentByID(ctx, store.GetEnvironmentByIDParams{ProjectID: project, ID: r.EnvironmentID})
-		if e != nil {
-			return nil, e
-		}
 		var action object
-		if env.ActiveManifestID != nil {
-			m, e := q.GetManifestByID(ctx, store.GetManifestByIDParams{ProjectID: project, ID: *env.ActiveManifestID})
-			if e != nil {
-				return nil, e
-			}
+		if e == nil && env.ActiveManifestID != nil {
+			var m store.Manifest
+			m, e = q.GetManifestByID(ctx, store.GetManifestByIDParams{ProjectID: project, ID: *env.ActiveManifestID})
 			action = obj(obj(parse(m.Body)["actions"])[r.Key])
 		}
-		if action == nil {
-			if e = mark(a, "failed", "key_missing"); e != nil {
-				return nil, e
-			}
-			continue
+		var doc changes.Document
+		if e == nil {
+			doc, e = changes.GetDocument(ctx, q, project, a.DocumentID, &csID)
 		}
-		doc, e := changes.GetDocument(ctx, q, project, a.DocumentID, &csID)
 		if e != nil && !isNotFound(e) {
 			return nil, e
 		}
-		if e != nil || !anchorPending(r, a, parse(doc.Body)) {
-			if e = mark(a, "anchor_changed", ""); e != nil {
-				return nil, e
-			}
-			continue
-		}
-		call := object{"action": r.Key}
-		if a.FulfillmentArgs != nil {
+		state, why, call := "", "", object{"action": r.Key}
+		switch {
+		case action == nil:
+			state, why = "failed", "key_missing"
+		case e != nil || !anchorPending(r, a, parse(doc.Body)):
+			state = "anchor_changed"
+		case a.FulfillmentArgs != nil:
 			call = parse(a.FulfillmentArgs)
-		} else if needsArgs(action) {
-			if e = mark(a, "awaiting_args", ""); e != nil {
+		case needsArgs(action):
+			state = "awaiting_args"
+		}
+		if state != "" {
+			if e = mark(a, state, why); e != nil {
 				return nil, e
 			}
 			continue
@@ -437,10 +422,10 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 		batch = &change.Operations[0].ID
 	}
 	for _, p := range replacements {
-		if _, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: project, ID: p.anchor.ID, State: "replaced", FulfillmentArgs: p.anchor.FulfillmentArgs, Attempts: p.anchor.Attempts, NextAt: s.now(), LastError: "", ReplacedBatchID: batch}); e != nil {
-			return nil, e
+		if _, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: project, ID: p.anchor.ID, State: "replaced", FulfillmentArgs: p.anchor.FulfillmentArgs, Attempts: p.anchor.Attempts, NextAt: s.now(), LastError: "", ReplacedBatchID: batch}); e == nil {
+			e = fulfillmentAudit(ctx, q, project, p.anchor.RequestID, &p.anchor.ID, &system.ID, "replaced", "automatic", object{"changesetId": csID, "seq": change.Changeset.Seq})
 		}
-		if e = fulfillmentAudit(ctx, q, project, p.anchor.RequestID, &p.anchor.ID, &system.ID, "replaced", "automatic", object{"changesetId": csID, "seq": change.Changeset.Seq}); e != nil {
+		if e != nil {
 			return nil, e
 		}
 	}

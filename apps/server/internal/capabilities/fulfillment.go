@@ -124,13 +124,14 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 	if e != nil {
 		return nil, e
 	}
-	if e = validation.LockProjectEnvironments(ctx, q, a.ProjectID); e != nil {
-		return nil, e
+	// Lock order: environments, Change Set, request (as submit and resolve).
+	if e = validation.LockProjectEnvironments(ctx, q, a.ProjectID); e == nil {
+		_, e = changes.Lock(ctx, q, a.ProjectID, p.ChangesetID)
 	}
-	if _, e = changes.Lock(ctx, q, a.ProjectID, p.ChangesetID); e != nil {
-		return nil, e
+	if e == nil {
+		r, e = q.LockCapabilityRequest(ctx, store.LockCapabilityRequestParams{ProjectID: a.ProjectID, ID: p.RequestID})
 	}
-	if r, e = q.LockCapabilityRequest(ctx, store.LockCapabilityRequestParams{ProjectID: a.ProjectID, ID: p.RequestID}); e != nil {
+	if e != nil {
 		return nil, e
 	}
 	if r.Status == "draft" || terminal(r.Status) {
@@ -161,15 +162,15 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 		return nil, fail("CAPABILITY_REPLACE_CONFIRM_REQUIRED")
 	}
 	anchor, e := q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: p.NodeID, Event: p.Event, OwnerID: a.ID})
-	if e != nil {
-		return nil, e
+	var change changes.ApplyResult
+	if e == nil {
+		op := behavior(target, pending(r))
+		change, e = changes.ApplyInTx(ctx, tx, a, p.ChangesetID, s.cs.Seq, []changes.OperationInput{{Type: op.Type, Target: &p.DocumentID, Payload: op.Payload}})
 	}
-	op := behavior(target, pending(r))
-	change, e := changes.ApplyInTx(ctx, tx, a, p.ChangesetID, s.cs.Seq, []changes.OperationInput{{Type: op.Type, Target: &p.DocumentID, Payload: op.Payload}})
-	if e != nil {
-		return nil, e
+	if e == nil {
+		e = fulfillmentAudit(ctx, q, a.ProjectID, r.ID, &anchor.ID, &a.ID, "attached", commandbus.ReasonFrom(ctx), object{"changesetId": p.ChangesetID})
 	}
-	if e = fulfillmentAudit(ctx, q, a.ProjectID, r.ID, &anchor.ID, &a.ID, "attached", commandbus.ReasonFrom(ctx), object{"changesetId": p.ChangesetID}); e != nil {
+	if e != nil {
 		return nil, e
 	}
 	return object{"anchor": anchorView(anchor, true, anchor.State), "change": change}, nil
@@ -189,10 +190,10 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 	if e != nil {
 		return nil, e
 	}
-	if e = validation.LockProjectEnvironments(ctx, q, a.ProjectID); e != nil {
-		return nil, e
+	var anchor store.CapabilityRequestAnchor
+	if e = validation.LockProjectEnvironments(ctx, q, a.ProjectID); e == nil {
+		anchor, e = q.LockCapabilityAnchor(ctx, store.LockCapabilityAnchorParams{ProjectID: a.ProjectID, ID: p.AnchorID})
 	}
-	anchor, e := q.LockCapabilityAnchor(ctx, store.LockCapabilityAnchorParams{ProjectID: a.ProjectID, ID: p.AnchorID})
 	if errors.Is(e, pgx.ErrNoRows) || e == nil && (anchor.RequestID != r.ID || anchor.OwnerID != a.ID) {
 		return nil, notFound()
 	}
@@ -208,26 +209,24 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 	save := func(state string, args []byte, errText string) (store.CapabilityRequestAnchor, error) {
 		return q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: a.ProjectID, ID: anchor.ID, State: state, FulfillmentArgs: args, Attempts: 0, NextAt: time.Now(), LastError: errText, ReplacedBatchID: anchor.ReplacedBatchID})
 	}
-	var out object
+	out := object{}
+	next, args := "queued", anchor.FulfillmentArgs
 	switch name {
 	case "detach-capability-request":
 		if anchor.Original || anchor.State == "replaced" {
 			return nil, fail("CAPABILITY_STATE_INVALID")
 		}
-		if _, e = changes.Lock(ctx, q, a.ProjectID, anchor.ChangesetID); e != nil {
-			return nil, e
-		}
 		target := r
 		target.NodeID, target.Event = anchor.NodeID, anchor.Event
 		op := behavior(target, nil)
-		change, e := changes.ApplyInTx(ctx, tx, a, anchor.ChangesetID, p.ExpectedSeq, []changes.OperationInput{{Type: op.Type, Target: &anchor.DocumentID, Payload: op.Payload}})
+		var change changes.ApplyResult
+		if _, e = changes.Lock(ctx, q, a.ProjectID, anchor.ChangesetID); e == nil {
+			change, e = changes.ApplyInTx(ctx, tx, a, anchor.ChangesetID, p.ExpectedSeq, []changes.OperationInput{{Type: op.Type, Target: &anchor.DocumentID, Payload: op.Payload}})
+		}
 		if e != nil {
 			return nil, e
 		}
-		if anchor, e = save("detached", anchor.FulfillmentArgs, ""); e != nil {
-			return nil, e
-		}
-		out = object{"change": change}
+		next, out["change"] = "detached", change
 	case "set-capability-fulfillment-args":
 		if !a.Rights.Has(auth.BehaviorUse) || anchor.State == "replaced" || terminal(r.Status) && r.Status != "fulfilled" {
 			return nil, fail("CAPABILITY_STATE_INVALID")
@@ -236,12 +235,9 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 		if len(calls) != 1 || obj(calls[0])["action"] != r.Key {
 			return nil, fulfillmentError("CAPABILITY_FULFILLMENT_ARGS_INVALID")
 		}
-		state := anchor.State
-		if r.Status == "fulfilled" {
-			state = "queued"
-		}
-		if anchor, e = save(state, raw(calls[0]), ""); e != nil {
-			return nil, e
+		args = raw(calls[0])
+		if r.Status != "fulfilled" {
+			next = anchor.State
 		}
 	default: // retry-capability-fulfillment
 		if r.Status != "fulfilled" {
@@ -256,15 +252,12 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 				return nil, fail("CAPABILITY_STATE_INVALID")
 			}
 		}
-		if anchor, e = save("queued", anchor.FulfillmentArgs, ""); e != nil {
-			return nil, e
-		}
 	}
-	if e = fulfillmentAudit(ctx, q, a.ProjectID, r.ID, &anchor.ID, &a.ID, name, commandbus.ReasonFrom(ctx), object{"state": anchor.State}); e != nil {
+	if anchor, e = save(next, args, ""); e == nil {
+		e = fulfillmentAudit(ctx, q, a.ProjectID, r.ID, &anchor.ID, &a.ID, name, commandbus.ReasonFrom(ctx), object{"state": anchor.State})
+	}
+	if e != nil {
 		return nil, e
-	}
-	if out == nil {
-		out = object{}
 	}
 	out["anchor"] = anchorView(anchor, true, anchor.State)
 	return out, nil

@@ -88,6 +88,26 @@ func TestCapabilityQueriesAreScopedBoundedAndNoStore(t *testing.T) {
 			t.Fatal(path, response.StatusCode, value)
 		}
 	}
+	// STU-351/336: fulfillment and open-request lookups are scoped and never cached.
+	for path, status := range map[string]int{
+		root + "/fulfillment?environment=staging":                                 200,
+		root + "/fulfillment":                                                     200,
+		root + "/fulfillment?environment=production":                              404,
+		root + "/fulfillment?x=1":                                                 422,
+		"/api/v1/capability-requests/invalid/fulfillment":                         0,
+		"/api/v1/capability-requests/open?environment=staging&key=store.favorite": 200,
+		"/api/v1/capability-requests/open?environment=staging&key=missing.key":    404,
+		"/api/v1/capability-requests/open?environment=staging":                    422,
+		"/api/v1/capability-requests/open?environment=staging&key=a&x=1":          422,
+	} {
+		response, value := e.do(t, "GET", path, "", e.authed(nil))
+		if status == 0 && (response.StatusCode < 400 || response.StatusCode >= 500) || status != 0 && response.StatusCode != status {
+			t.Fatal(path, response.StatusCode, value)
+		}
+		if status == 200 && response.Header.Get("Cache-Control") != "private, no-store" {
+			t.Fatal("no-store", path)
+		}
+	}
 	response, pack := e.do(t, "GET", root+"/context-pack?version=2&environment=staging", "", e.authed(nil))
 	if response.StatusCode != 200 || !strings.Contains(response.Header.Get("Content-Disposition"), "attachment;") || response.Header.Get("X-Context-Hash") == "" {
 		t.Fatal(response.StatusCode, pack)

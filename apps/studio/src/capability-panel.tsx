@@ -397,6 +397,7 @@ export function CapabilityComposer({
     setScope(null);
     setCreated(null);
     setLocalError("");
+    setAttached(false);
   };
   return (
     <section className="capability-panel" aria-label={text("Запрос действия", "Action request")}>
@@ -539,6 +540,11 @@ export function CapabilityComposer({
                       "The node is attached to the request; a placeholder was added.",
                     )}
                   </p>
+                )}
+                {attached && (
+                  <button type="button" onClick={close}>
+                    {text("Закрыть", "Close")}
+                  </button>
                 )}
                 <button disabled={command.pending || command.uncertain || !eligible}>
                   {text("Сохранить черновик запроса", "Save request draft")}

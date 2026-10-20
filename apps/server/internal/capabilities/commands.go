@@ -333,16 +333,16 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		// STU-341: the manual path fulfills the request; the other anchors of
 		// the group are replaced for their owners by the same mechanism (§6).
 		original, e := q.OriginalCapabilityAnchor(ctx, store.OriginalCapabilityAnchorParams{ProjectID: r.ProjectID, RequestID: r.ID})
+		if e == nil {
+			_, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: r.ProjectID, ID: original.ID, State: "replaced", FulfillmentArgs: original.FulfillmentArgs, NextAt: time.Now()})
+		}
+		if e == nil {
+			e = q.MarkManualFulfillment(ctx, store.MarkManualFulfillmentParams{ProjectID: r.ProjectID, ID: r.ID})
+		}
+		if e == nil {
+			e = q.QueueRequestAnchors(ctx, store.QueueRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID, Skip: &original.ID})
+		}
 		if e != nil {
-			return out, e
-		}
-		if _, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: r.ProjectID, ID: original.ID, State: "replaced", FulfillmentArgs: original.FulfillmentArgs, NextAt: time.Now()}); e != nil {
-			return out, e
-		}
-		if e = q.MarkManualFulfillment(ctx, store.MarkManualFulfillmentParams{ProjectID: r.ProjectID, ID: r.ID}); e != nil {
-			return out, e
-		}
-		if e = q.QueueRequestAnchors(ctx, store.QueueRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID, Skip: &original.ID}); e != nil {
 			return out, e
 		}
 		out.Change = &change

@@ -221,7 +221,7 @@ func (q *Queries) DetachRequestAnchors(ctx context.Context, arg DetachRequestAnc
 const dueAnchorChangesets = `-- name: DueAnchorChangesets :many
 SELECT DISTINCT a.project_id, a.changeset_id FROM capability_request_anchors a
 JOIN changesets c ON c.id = a.changeset_id
-WHERE (a.state = 'queued' AND a.next_at <= now()) OR (a.state = 'changeset_in_review' AND c.state IN ('open', 'changes_requested'))
+WHERE (a.state = 'queued' AND a.next_at <= now()) OR (a.state = 'changeset_in_review' AND c.state = 'open')
 LIMIT 100
 `
 
@@ -557,6 +557,17 @@ func (q *Queries) InsertFulfillmentAudit(ctx context.Context, arg InsertFulfillm
 	return err
 }
 
+const isSystemActor = `-- name: IsSystemActor :one
+SELECT EXISTS (SELECT 1 FROM actors WHERE id = $1 AND system)::bool
+`
+
+func (q *Queries) IsSystemActor(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isSystemActor, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listCapabilityAnchors = `-- name: ListCapabilityAnchors :many
 SELECT id, project_id, request_id, changeset_id, document_id, node_id, event, owner_id, state, revision, fulfillment_args, attempts, next_at, last_error, replaced_batch_id, original, created_at, updated_at FROM capability_request_anchors WHERE project_id = $1 AND request_id = $2 ORDER BY created_at, id
 `
@@ -762,7 +773,7 @@ func (q *Queries) QueueRequestAnchors(ctx context.Context, arg QueueRequestAncho
 const requeueReviewedAnchors = `-- name: RequeueReviewedAnchors :exec
 UPDATE capability_request_anchors a SET state = 'queued', revision = revision + 1, next_at = now(), updated_at = now()
 FROM changesets c
-WHERE c.id = a.changeset_id AND a.project_id = $1 AND a.changeset_id = $2 AND a.state = 'changeset_in_review' AND c.state IN ('open', 'changes_requested')
+WHERE c.id = a.changeset_id AND a.project_id = $1 AND a.changeset_id = $2 AND a.state = 'changeset_in_review' AND c.state = 'open'
 `
 
 type RequeueReviewedAnchorsParams struct {
