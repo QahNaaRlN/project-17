@@ -125,7 +125,7 @@ func (q *Queries) DeleteHumanSession(ctx context.Context, tokenHash []byte) erro
 }
 
 const getActiveHuman = `-- name: GetActiveHuman :one
-SELECT id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at, oidc_issuer FROM actors WHERE id=$1 AND kind='human' AND disabled_at IS NULL
+SELECT id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at, oidc_issuer, system FROM actors WHERE id=$1 AND kind='human' AND disabled_at IS NULL
 `
 
 func (q *Queries) GetActiveHuman(ctx context.Context, id uuid.UUID) (Actor, error) {
@@ -141,6 +141,7 @@ func (q *Queries) GetActiveHuman(ctx context.Context, id uuid.UUID) (Actor, erro
 		&i.DisabledAt,
 		&i.CreatedAt,
 		&i.OidcIssuer,
+		&i.System,
 	)
 	return i, err
 }
@@ -225,7 +226,7 @@ func (q *Queries) UnbindHumanRole(ctx context.Context, arg UnbindHumanRoleParams
 const upsertOIDCHuman = `-- name: UpsertOIDCHuman :one
 INSERT INTO actors (id,kind,display_name,oidc_issuer,oidc_subject) VALUES ($1,'human',$2,$3,$4)
 ON CONFLICT (oidc_issuer,oidc_subject) DO UPDATE SET display_name=EXCLUDED.display_name
-WHERE actors.kind='human' AND actors.disabled_at IS NULL RETURNING id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at, oidc_issuer
+WHERE actors.kind='human' AND actors.disabled_at IS NULL RETURNING id, kind, project_id, display_name, oidc_subject, email, disabled_at, created_at, oidc_issuer, system
 `
 
 type UpsertOIDCHumanParams struct {
@@ -253,6 +254,7 @@ func (q *Queries) UpsertOIDCHuman(ctx context.Context, arg UpsertOIDCHumanParams
 		&i.DisabledAt,
 		&i.CreatedAt,
 		&i.OidcIssuer,
+		&i.System,
 	)
 	return i, err
 }

@@ -898,3 +898,61 @@ it("STU-327/328: PR preview routes, exact preview origins and CSP", async () => 
   fetcher.mockResolvedValueOnce(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
   expect((await args(valid)).status).toBe(404);
 });
+it("STU-336/351: fulfillment routes pin environment and preflight the request or draft", async () => {
+  const { origin, post, fetcher } = await setup(true);
+  const base = origin + "/api/studio/api/v1/";
+  const route = base + "capability-requests/" + documentId + "/fulfillment";
+  expect((await fetch(route + "?environment=staging")).status).toBe(200);
+  expect((await fetch(route + "?environment=production")).status).toBe(403);
+  expect(
+    (await fetch(base + "capability-requests/open?environment=staging&key=store.favorite")).status,
+  ).toBe(200);
+  expect((await fetch(base + "capability-requests/open?environment=staging&x=1")).status).toBe(400);
+  const command = "/api/studio/api/v1/commands/";
+  fetcher.mockClear();
+  expect(
+    (
+      await post(command + "retry-capability-fulfillment", {
+        payload: { requestId: documentId },
+        reason: "r",
+      })
+    ).status,
+  ).toBe(200);
+  expect(String(fetcher.mock.calls[0]![0])).toContain(
+    "/capability-requests/" + documentId + "?environment=staging",
+  );
+  expect(
+    (await post(command + "retry-capability-fulfillment", { payload: { requestId: "x" } })).status,
+  ).toBe(400);
+  fetcher.mockClear();
+  fetcher.mockResolvedValueOnce(Response.json({ targets: ["staging"] }));
+  expect(
+    (
+      await post(command + "attach-capability-request", {
+        payload: { requestId: documentId, changesetId },
+        reason: "r",
+      })
+    ).status,
+  ).toBe(200);
+  expect(String(fetcher.mock.calls[0]![0])).toContain("/changesets/" + changesetId);
+  fetcher.mockResolvedValueOnce(Response.json({ targets: ["production"] }));
+  expect(
+    (
+      await post(command + "attach-capability-request", {
+        payload: { requestId: documentId, changesetId },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post(command + "attach-capability-request", {
+        payload: { requestId: documentId, changesetId: "x" },
+      })
+    ).status,
+  ).toBe(400);
+  fetcher.mockResolvedValueOnce(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
+  expect(
+    (await post(command + "check-capability-fulfillment", { payload: { requestId: documentId } }))
+      .status,
+  ).toBe(404);
+});

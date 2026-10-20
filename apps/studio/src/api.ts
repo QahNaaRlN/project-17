@@ -6,6 +6,12 @@ import {
   type GithubObservation,
 } from "./capability-github.js";
 import { previewList, type PreviewList } from "./capability-preview.js";
+import {
+  fulfillmentView,
+  openRequest,
+  type FulfillmentView,
+  type OpenRequest,
+} from "./capability-fulfillment.js";
 import { validateDiffIndex, validateDiffPage } from "./review-diff.js";
 import {
   publicationList,
@@ -428,6 +434,42 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         pack: pack as Record<string, unknown>,
         ...(typeof value.hash === "string" ? { hash: value.hash } : {}),
       };
+    },
+    async fulfillment(id, signal) {
+      if (!uuid.test(id)) throw new StudioError("PAYLOAD_INVALID");
+      const c = await api.config(signal);
+      return fulfillmentView(
+        await request<FulfillmentView>(
+          "/api/v1/capability-requests/" +
+            id +
+            "/fulfillment?" +
+            new URLSearchParams({ environment: c.environment }),
+          signal,
+        ),
+      );
+    },
+    async openRequest(key) {
+      const c = await api.config();
+      return openRequest(
+        await request<OpenRequest>(
+          "/api/v1/capability-requests/open?" +
+            new URLSearchParams({ environment: c.environment, key }),
+        ),
+      );
+    },
+    async fulfillmentCommand(attempt) {
+      const account = await api.account();
+      if (!account.authenticated || (attempt.actor && account.user?.id !== attempt.actor))
+        throw new StudioError("SESSION_CHANGED", true);
+      const v = await request<{ result: Record<string, unknown> }>(
+        "/api/v1/commands/" + attempt.name,
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      if (!v?.result || typeof v.result !== "object")
+        throw new StudioError("RESPONSE_INVALID", true);
+      return v.result;
     },
     async capabilityCommand(attempt) {
       const value = await request<{ result: CapabilityResult }>(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,7 @@ type Result struct {
 
 func Register(bus *commandbus.Bus) {
 	registerPreviewArgs(bus)
+	registerFulfillment(bus)
 	commandbus.Register(bus, commandbus.Command[Create, Result]{Name: "create-capability-request", Authorize: func(a auth.Actor, _ Create) error { return author(a) }, Validate: func(p Create) error {
 		if !keyPattern.MatchString(p.Key) || len(p.Key) > 200 || p.DocumentID == uuid.Nil || p.ChangesetID == uuid.Nil || !codeHash(p.ExpectedManifestHash) || !validAnchor(p.NodeID, p.Event) {
 			return fail("CAPABILITY_REQUEST_INVALID")
@@ -103,6 +105,9 @@ func create(ctx context.Context, tx pgx.Tx, a auth.Actor, p Create) (Result, err
 		return Result{}, fail("CAPABILITY_KEY_TAKEN")
 	}
 	if e != nil {
+		return Result{}, e
+	}
+	if _, e = q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: r.ProjectID, RequestID: r.ID, ChangesetID: r.ChangesetID, DocumentID: r.DocumentID, NodeID: r.NodeID, Event: r.Event, OwnerID: r.OwnerID, Original: true}); e != nil {
 		return Result{}, e
 	}
 	if e = audit(ctx, q, a, r, "created"); e != nil {
@@ -214,6 +219,13 @@ func update(ctx context.Context, tx pgx.Tx, a auth.Actor, p Update) (Result, err
 	if e != nil {
 		return Result{}, e
 	}
+	// A terminal request releases its anchors (STU-335); pending markers stay
+	// until their owners remove them explicitly (STU-273).
+	if r.Status == "cancelled" || r.Status == "rejected" {
+		if e = q.DetachRequestAnchors(ctx, store.DetachRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID}); e != nil {
+			return Result{}, e
+		}
+	}
 	if e = audit(ctx, q, a, r, "updated", object{"transition": p.Transition, "decisionReason": p.Reason, "prUrl": p.PRURL}); e != nil {
 		return Result{}, e
 	}
@@ -316,6 +328,21 @@ func act(ctx context.Context, tx pgx.Tx, a auth.Actor, p Action, name string) (R
 		r.FulfilledManifestID = &s.m.ID
 		r, e = save(ctx, q, r)
 		if e != nil {
+			return out, e
+		}
+		// STU-341: the manual path fulfills the request; the other anchors of
+		// the group are replaced for their owners by the same mechanism (§6).
+		original, e := q.OriginalCapabilityAnchor(ctx, store.OriginalCapabilityAnchorParams{ProjectID: r.ProjectID, RequestID: r.ID})
+		if e != nil {
+			return out, e
+		}
+		if _, e = q.SaveCapabilityAnchor(ctx, store.SaveCapabilityAnchorParams{ProjectID: r.ProjectID, ID: original.ID, State: "replaced", FulfillmentArgs: original.FulfillmentArgs, NextAt: time.Now()}); e != nil {
+			return out, e
+		}
+		if e = q.MarkManualFulfillment(ctx, store.MarkManualFulfillmentParams{ProjectID: r.ProjectID, ID: r.ID}); e != nil {
+			return out, e
+		}
+		if e = q.QueueRequestAnchors(ctx, store.QueueRequestAnchorsParams{ProjectID: r.ProjectID, RequestID: r.ID, Skip: &original.ID}); e != nil {
 			return out, e
 		}
 		out.Change = &change

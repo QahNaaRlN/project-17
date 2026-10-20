@@ -233,6 +233,12 @@ func handle(ctx context.Context, tx pgx.Tx, actor auth.Actor, p Payload, origins
 	if _, err := q.SetActiveManifest(ctx, store.SetActiveManifestParams{ProjectID: actor.ProjectID, ID: env.ID, ActiveManifestID: &m.ID}); err != nil {
 		return Registration{}, err
 	}
+	if env.Kind == "standard" && (env.ActiveManifestID == nil || *env.ActiveManifestID != m.ID) {
+		// STU-338: activation records the fulfillment evaluation in the outbox.
+		if err := q.EnqueueFulfillmentActivation(ctx, store.EnqueueFulfillmentActivationParams{ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, EnvironmentID: env.ID, ManifestID: m.ID}); err != nil {
+			return Registration{}, err
+		}
+	}
 	if err := Refresh(ctx, q, actor.ProjectID, env.Name); err != nil {
 		return Registration{}, err
 	}

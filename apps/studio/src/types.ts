@@ -137,6 +137,14 @@ export interface Api {
   capabilityCommand?(
     attempt: import("./capabilities.js").CapabilityAttempt,
   ): Promise<import("./capabilities.js").CapabilityResult>;
+  fulfillment?(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<import("./capability-fulfillment.js").FulfillmentView>;
+  openRequest?(key: string): Promise<import("./capability-fulfillment.js").OpenRequest>;
+  fulfillmentCommand?(
+    attempt: import("./capability-fulfillment.js").FulfillmentAttempt,
+  ): Promise<Record<string, unknown>>;
   createWork?(attempt: import("./work-creation.js").WorkCreationAttempt): Promise<Changeset>;
   workQueue?(
     filters: WorkQueueFilters,

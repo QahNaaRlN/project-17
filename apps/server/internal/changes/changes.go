@@ -174,6 +174,9 @@ func Lock(ctx context.Context, q *store.Queries, projectID, id uuid.UUID) (store
 
 // RequireOwner — изменять Change Set может только его владелец.
 func RequireOwner(cs store.Changeset, actor auth.Actor) error {
+	if actor.System && actor.OnBehalfOf != nil && *actor.OnBehalfOf == cs.OwnerID {
+		return nil
+	}
 	if actor.Kind == auth.ActorAgent && actor.AgentSessionID != nil && auth.AgentAllowsCS(actor, cs.ID) &&
 		(cs.OwnerID == actor.ID || (actor.DelegatorID != nil && cs.OwnerID == *actor.DelegatorID)) {
 		return nil
@@ -484,6 +487,11 @@ func (s *session) record(in recordInput) (AppliedOperation, error) {
 }
 
 func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayload) (ApplyResult, error) {
+	for _, op := range p.Operations {
+		if actor.System && op.Type != ops.NodeSetBehavior {
+			return ApplyResult{}, systemForbidden()
+		}
+	}
 	q := store.New(tx)
 	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
 		return ApplyResult{}, err

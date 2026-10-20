@@ -1,4 +1,5 @@
 import { githubCommands } from "./capability-github.js";
+import { fulfillmentCommands } from "./capability-fulfillment.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
@@ -142,7 +143,7 @@ export function createStudioHandler(
           `^/api/v1/(?:capability-delivery-(?:endpoints|target)|capability-deliveries/${uuid}|capability-requests/${uuid}/(?:delivery-preview|deliveries))$`,
         ).test(path);
         const githubRoute = new RegExp(
-          `^/api/v1/(?:capability-github-config|capability-requests/${uuid}/github(?:-observations)?|capability-requests/${uuid}/preview)$`,
+          `^/api/v1/(?:capability-github-config|capability-requests/${uuid}/github(?:-observations)?|capability-requests/${uuid}/(?:preview|fulfillment)|capability-requests/open)$`,
         ).test(path);
         // PR preview environments of this Studio's base environment (STU-327).
         const previewEnvironment = /^preview\/pr-[1-9][0-9]{0,18}$/;
@@ -169,6 +170,7 @@ export function createStudioHandler(
         const allowedPost = [
           ...githubCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/set-capability-preview-args",
+          ...fulfillmentCommands.map((name) => "/api/v1/commands/" + name),
           ...deliveryCommands.map((name) => "/api/v1/commands/" + name),
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
@@ -210,9 +212,11 @@ export function createStudioHandler(
               ? ["environment", "status", "kind", "key", "cursor", "limit"]
               : path.endsWith("/deliveries") || path.endsWith("/github-observations")
                 ? ["environment", "limit", "cursor"]
-                : path.endsWith("/context-pack")
-                  ? ["environment", "version"]
-                  : ["environment"];
+                : path.endsWith("/capability-requests/open")
+                  ? ["environment", "key"]
+                  : path.endsWith("/context-pack")
+                    ? ["environment", "version"]
+                    : ["environment"];
             if (
               [...url.searchParams.keys()].some(
                 (k) => !allowed.includes(k) || url.searchParams.getAll(k).length !== 1,
@@ -456,6 +460,34 @@ export function createStudioHandler(
               { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
             );
             if (!check.ok) return error(check.status, "CAPABILITY_REQUEST_UNAVAILABLE");
+          }
+          if (fulfillmentCommands.some((name) => path.endsWith("/" + name))) {
+            const p = envelope.payload;
+            if (
+              !new RegExp(`^${uuid}$`).test(String(p.requestId)) ||
+              (path.endsWith("/attach-capability-request") &&
+                !new RegExp(`^${uuid}$`).test(String(p.changesetId)))
+            )
+              return error(400, "PAYLOAD_INVALID");
+            // The attaching draft must target this Studio's environment.
+            const check = await fetcher(
+              new URL(
+                path.endsWith("/attach-capability-request")
+                  ? "/api/v1/changesets/" + p.changesetId
+                  : "/api/v1/capability-requests/" +
+                      p.requestId +
+                      "?environment=" +
+                      encodeURIComponent(config.environment),
+                config.baseUrl,
+              ),
+              { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+            );
+            if (!check.ok) return error(check.status, "CAPABILITY_REQUEST_UNAVAILABLE");
+            if (path.endsWith("/attach-capability-request")) {
+              const cs = await check.json();
+              if (!Array.isArray(cs?.targets) || !cs.targets.includes(config.environment))
+                return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            }
           }
           if (deliveryCommands.some((name) => path.endsWith("/" + name))) {
             if (config.authMode !== "oidc") return error(403, "CAPABILITY_DELIVERY_FORBIDDEN");

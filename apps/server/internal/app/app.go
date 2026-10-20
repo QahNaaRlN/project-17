@@ -128,6 +128,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	capabilityGithub.Register(bus)
 	githubRecovery := &capabilities.GithubRecoveryWorker{Service: capabilityGithub}
 	deliveryRecovery := &capabilities.DeliveryRecoveryWorker{Service: capabilityDelivery}
+	capabilityFulfillment := &capabilities.FulfillmentService{Pool: pool, Github: capabilityGithub}
 	agentService := &agents.Service{Pool: pool, Provider: agents.OpenRouter{Key: cfg.OpenRouterKey}, DefaultModel: cfg.OpenRouterModel}
 	agentService.Register(bus)
 	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) }, func(w *river.Workers) error {
@@ -136,6 +137,8 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return river.AddWorkerSafely(w, &capabilities.GithubWorker{Service: capabilityGithub})
 	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, githubRecovery) }, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.PreviewExpiryWorker{Pool: pool})
+	}, func(w *river.Workers) error {
+		return river.AddWorkerSafely(w, &capabilities.FulfillmentWorker{Service: capabilityFulfillment})
 	})
 	if err != nil {
 		return err
@@ -143,6 +146,8 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	githubRecovery.Queue = queue
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.GithubRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-github-recovery", RunOnStart: true}))
 	deliveryRecovery.Queue = queue
+	capabilityFulfillment.Queue = queue
+	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(10*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.FulfillmentArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-fulfillment", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return capabilities.PreviewExpiryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-preview-expiry", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.DeliveryRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-delivery-recovery", RunOnStart: true}))
 	defer func() {

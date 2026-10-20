@@ -13,6 +13,7 @@ import type { CapabilityAttempt, CapabilityCommand, CapabilityRequest } from "./
 import { capabilityMessage, capabilityURL } from "./capabilities.js";
 import { CapabilityDeliveryPanel } from "./capability-delivery-panel.js";
 import { CapabilityPreviewPanel } from "./capability-preview-panel.js";
+import { CapabilityFulfillmentPanel } from "./capability-fulfillment-panel.js";
 
 const types = ["string", "text", "number", "boolean", "enum", "reference", "link"] as const;
 type Arg = {
@@ -334,7 +335,40 @@ export function CapabilityComposer({
     [description, setDescription] = useState(""),
     [acceptance, setAcceptance] = useState(""),
     [args, setArgs] = useState<Arg[]>([]);
-  const [localError, setLocalError] = useState("");
+  const [localError, setLocalError] = useState(""),
+    [attaching, setAttaching] = useState(false),
+    [attached, setAttached] = useState(false);
+  // STU-336: join an open request instead of creating a duplicate.
+  async function attachExisting(target: { session: Session; node: string; event: string }) {
+    setAttaching(true);
+    setLocalError("");
+    try {
+      const open = await api.openRequest!(key);
+      const account = await api.account();
+      await api.fulfillmentCommand!({
+        name: "attach-capability-request",
+        payload: {
+          requestId: open.id,
+          expectedRequestRevision: open.revision,
+          changesetId: target.session.changeset.id,
+          expectedSeq: target.session.changeset.seq,
+          documentId: target.session.record.id,
+          nodeId: target.node,
+          event: target.event,
+          expectedManifestHash: target.session.manifestHash,
+        },
+        key: crypto.randomUUID(),
+        reason: "Studio: attach to an open capability request",
+        ...(account.user?.id ? { actor: account.user.id } : {}),
+      });
+      setAttached(true);
+      await editor.refresh();
+    } catch (e) {
+      setLocalError(e instanceof StudioError ? e.code : "CAPABILITY_REQUEST_FAILED");
+    } finally {
+      setAttaching(false);
+    }
+  }
   const command = useCommand(api, editor, async (r) => {
     setCreated(r);
     setCreated(await api.capability!(r.id));
@@ -483,6 +517,28 @@ export function CapabilityComposer({
                 />
                 {(localError || command.error) && (
                   <p role="alert">{capabilityMessage(localError || command.error, ru)}</p>
+                )}
+                {command.error === "CAPABILITY_KEY_TAKEN" &&
+                  api.openRequest &&
+                  api.fulfillmentCommand && (
+                    <button
+                      type="button"
+                      disabled={attaching}
+                      onClick={() => void attachExisting(scope)}
+                    >
+                      {text(
+                        "Присоединить к существующему запросу",
+                        "Attach to the existing request",
+                      )}
+                    </button>
+                  )}
+                {attached && (
+                  <p role="status">
+                    {text(
+                      "Узел присоединён к запросу; заглушка добавлена.",
+                      "The node is attached to the request; a placeholder was added.",
+                    )}
+                  </p>
                 )}
                 <button disabled={command.pending || command.uncertain || !eligible}>
                   {text("Сохранить черновик запроса", "Save request draft")}
@@ -652,6 +708,12 @@ export function CapabilityCard({
       )}
       {api.capabilityPreview && request.status !== "draft" && (
         <CapabilityPreviewPanel key={"preview-" + request.id} {...{ api, editor, request }} />
+      )}
+      {api.fulfillment && request.status !== "draft" && (
+        <CapabilityFulfillmentPanel
+          key={"fulfillment-" + request.id}
+          {...{ api, editor, request }}
+        />
       )}
       {api.deliveryCommand && api.deliveries && api.delivery && api.deliveryPreview && (
         <CapabilityDeliveryPanel {...{ api, editor, request }} />
