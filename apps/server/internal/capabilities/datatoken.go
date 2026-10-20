@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifestdoc"
@@ -89,7 +88,9 @@ func validTokenContract(contract object) error {
 	return nil
 }
 
-// dataSourceCompatible — STU-389 for a manifest data source.
+// dataSourceCompatible — STU-389 for a manifest data source: the same param
+// and result shapes by type; bounds of the real source are checked on the
+// page values at replacement (invalid_props), not here.
 func dataSourceCompatible(r store.CapabilityRequest, actual object) bool {
 	if actual == nil {
 		return false
@@ -98,7 +99,7 @@ func dataSourceCompatible(r store.CapabilityRequest, actual object) bool {
 	proposed := obj(contract["params"])
 	params := obj(actual["params"])
 	for key, field := range proposed {
-		if !bindingdoc.SimpleContentCompatible(obj(field), obj(params[key])) {
+		if !shapeCompatible(obj(field), obj(params[key]), 0) {
 			return false
 		}
 	}
@@ -107,7 +108,44 @@ func dataSourceCompatible(r store.CapabilityRequest, actual object) bool {
 			return false
 		}
 	}
-	return (contract["paginated"] == true) == (actual["paginated"] == true) && bindingdoc.SimpleContentCompatible(obj(contract["result"]), obj(actual["result"]))
+	return (contract["paginated"] == true) == (actual["paginated"] == true) && shapeCompatible(obj(contract["result"]), obj(actual["result"]), 0)
+}
+
+// shapeCompatible — the actual type provides the proposed one: the same type
+// (string and text interchange), proposed object fields present, list items
+// compatible, enum values offered, the same reference schema.
+func shapeCompatible(proposed, actual object, depth int) bool {
+	if proposed == nil || actual == nil || depth > 8 {
+		return false
+	}
+	p, a := proposed["type"], actual["type"]
+	text := func(t any) bool { return t == "string" || t == "text" }
+	if p != a && !(text(p) && text(a)) {
+		return false
+	}
+	switch p {
+	case "object":
+		for key, field := range obj(proposed["fields"]) {
+			if !shapeCompatible(obj(field), obj(obj(actual["fields"])[key]), depth+1) {
+				return false
+			}
+		}
+	case "list":
+		return shapeCompatible(obj(proposed["of"]), obj(actual["of"]), depth+1)
+	case "enum":
+		values := map[any]bool{}
+		for _, v := range arr(actual["values"]) {
+			values[v] = true
+		}
+		for _, v := range arr(proposed["values"]) {
+			if !values[v] {
+				return false
+			}
+		}
+	case "reference":
+		return proposed["schema"] == actual["schema"]
+	}
+	return true
 }
 
 // designPath — the anchor path of a token placement in the node's current

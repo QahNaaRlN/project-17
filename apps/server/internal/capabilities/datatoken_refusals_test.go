@@ -119,3 +119,38 @@ func TestSTU390SystemRuleForDataAndTokens(t *testing.T) {
 		t.Fatal("STU-390 the exact token name", e)
 	}
 }
+
+// STU-389: shapes, not bounds, decide data source compatibility.
+func TestSTU389DataSourceShapes(t *testing.T) {
+	r := store.CapabilityRequest{Kind: KindDataSource, ProposedContract: raw(recommendationsContract())}
+	real := func(result object, params object) object {
+		return object{"params": params, "result": result}
+	}
+	limit := object{"limit": object{"type": "number", "integer": true, "min": 1, "max": 64, "required": true}}
+	list := func(fields object) object {
+		return object{"type": "list", "max": 64, "of": object{"type": "object", "fields": fields}}
+	}
+	if !dataSourceCompatible(r, real(list(object{"title": object{"type": "text", "maxLength": 2000}, "price": object{"type": "number"}}), limit)) {
+		t.Fatal("bounds and extra fields are compatible")
+	}
+	for name, actual := range map[string]object{
+		"missing":     nil,
+		"no title":    real(list(object{"price": object{"type": "number"}}), limit),
+		"object":      real(object{"type": "object", "fields": object{}}, limit),
+		"param type":  real(list(object{"title": object{"type": "string"}}), object{"limit": object{"type": "string"}}),
+		"extra param": real(list(object{"title": object{"type": "string"}}), object{"limit": object{"type": "number"}, "region": object{"type": "string", "required": true}}),
+		"paginated":   {"params": limit, "result": list(object{"title": object{"type": "string"}}), "paginated": true},
+	} {
+		if dataSourceCompatible(r, actual) {
+			t.Error("incompatible", name)
+		}
+	}
+	enum := object{"type": "enum", "values": []any{"a", "b"}}
+	if !shapeCompatible(enum, object{"type": "enum", "values": []any{"a", "b", "c"}}, 0) || shapeCompatible(enum, object{"type": "enum", "values": []any{"a"}}, 0) {
+		t.Error("enum values")
+	}
+	ref := object{"type": "reference", "schema": "Product"}
+	if !shapeCompatible(ref, ref, 0) || shapeCompatible(ref, object{"type": "reference", "schema": "Other"}, 0) || shapeCompatible(ref, ref, 9) {
+		t.Error("reference schema and depth")
+	}
+}

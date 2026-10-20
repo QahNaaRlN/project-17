@@ -18,6 +18,15 @@ export function loadProducts(
   return { items: context.app.catalog.products.slice(0, params.limit ?? 64) };
 }
 
+/** Recommendations implemented for a data source request (STU-394). */
+export function loadRecommendations(
+  params: { limit: number },
+  context: LoaderContext<{ catalog: Catalog }>,
+): Array<{ title: string }> {
+  if (context.signal.aborted) throw new Error("STORE_SOURCE_CANCELED");
+  return context.app.catalog.products.slice(0, params.limit).map((p) => ({ title: p.title }));
+}
+
 /** Only the server-owned catalogue can supply products; the handle is not a URL. */
 export function loadCollectionProducts(
   params: { collection: string; limit?: number | null; locale?: string | null },

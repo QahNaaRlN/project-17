@@ -18,15 +18,21 @@ const promo = original.match(
   / {4}defineReactComponent\(\{\n {6}name: "PromoBanner",[\s\S]*?\n {4}\}\),\n/,
 );
 if (!promo) throw Error("Unexpected fixture registry");
+// STU-394: the requested data source and token are absent from the baseline.
+const recommendations = original.match(
+  / {4}defineDataSource\(\{\n {6}name: "store.recommendations",[\s\S]*?\n {4}\}\),\n/,
+);
+if (!recommendations || !original.includes(', huge: "48px"'))
+  throw Error("Unexpected fixture registry");
 const fixture = original
   .replace(block[0], "  actions: [],\n  dataSources:")
   .replace(promo[0], "")
+  .replace(recommendations[0], "")
+  .replace(', huge: "48px"', "")
+  .replace("  loadRecommendations,\n", "")
   .replace("About, Promo }", "About }")
   .replace("  defineAction,\n", "")
-  .replace(
-    "{ favoriteProduct, loadProducts, loadCollectionProducts }",
-    "{ loadProducts, loadCollectionProducts }",
-  );
+  .replace("  favoriteProduct,\n", "");
 await mkdir(process.env.STUDIO_REVIEW_OUTPUT, { recursive: true });
 await writeFile(
   resolve(process.env.STUDIO_REVIEW_OUTPUT, "registry-original.private.txt"),
