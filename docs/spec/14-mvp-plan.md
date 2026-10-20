@@ -43,7 +43,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [preview/<ref>](../studio-capability-preview.md), STU-315…334 | PR #68 слит в dev 2026-10-20; локальная [приёмка](../studio-capability-preview-acceptance.md) двумя людьми и CI merge пройдены; реальный GitHub в приёмке не использовался |
 | Выполнено | [Автоматическое fulfillment и группы requiredBy](../studio-capability-fulfillment.md), STU-335…354 | [PR #71](https://github.com/QahNaaRlN/project-17/pull/71) слит в dev 2026-10-20; локальная [приёмка шага 10](../studio-capability-fulfillment-acceptance.md) и CI итогового SHA пройдены; реальный GitHub в приёмке не использовался |
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
-| 1 | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | Спецификация на согласовании |
+| 1 | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | Спецификация одобрена 2026-10-21, решения §11 приняты; код не начат |
 | 2 | Условные политики агента | Отдельное расширение авторизации, не блокирует чтение фактов GitHub |
 
 Порядок 1–3 — выбранная последовательность планирования; утверждённые
