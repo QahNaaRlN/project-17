@@ -38,7 +38,17 @@ func read(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (st
 		return r, e
 	}
 	if !visible(a, r) {
-		return r, notFound()
+		// STU-337: an owner of an attached anchor sees the request and its own anchors.
+		if a.Kind != auth.ActorHuman || r.Status == "draft" || author(a) != nil {
+			return r, notFound()
+		}
+		owns, e := q.OwnsCapabilityAnchor(ctx, store.OwnsCapabilityAnchorParams{ProjectID: a.ProjectID, RequestID: r.ID, OwnerID: a.ID})
+		if e != nil {
+			return r, e
+		}
+		if !owns {
+			return r, notFound()
+		}
 	}
 	return r, nil
 }
@@ -75,6 +85,8 @@ func Get(ctx context.Context, q *store.Queries, a auth.Actor, id uuid.UUID) (obj
 			out["github"] = summary
 		}
 	}
+	// STU-351: short fulfillment summary for the card and the agent, without IR.
+	out["fulfillment"] = object{"state": r.FulfillmentState, "reason": r.FulfillmentReason, "mode": r.FulfillmentMode, "commit": r.FulfillmentCommit, "fulfilledAt": r.FulfilledAt}
 	packs, e := q.CapabilityPacks(ctx, store.CapabilityPacksParams{ProjectID: a.ProjectID, RequestID: id})
 	if e != nil {
 		return nil, e

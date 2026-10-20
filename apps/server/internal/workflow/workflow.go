@@ -443,6 +443,18 @@ func policyCheck(ctx context.Context, q *store.Queries, projectID, changesetID u
 		}
 		set, ok := rights[key]
 		if !ok {
+			// STU-345: cms-system has no roles; its only operation (replacing a
+			// fulfilled request's marker) was verified when it was written.
+			system, err := q.IsSystemActor(ctx, oa.ActorID)
+			if err != nil {
+				return Check{}, err
+			}
+			if system {
+				set = auth.RightSet{auth.BehaviorUse: true, auth.ContentRead: true}
+				rights[key] = set
+			}
+		}
+		if !ok && rights[key] == nil {
 			caps, err := q.ActorCapabilities(ctx, store.ActorCapabilitiesParams{ProjectID: projectID, ActorID: oa.ActorID})
 			if err != nil {
 				return Check{}, err

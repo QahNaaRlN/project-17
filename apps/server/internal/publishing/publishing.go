@@ -203,6 +203,12 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 		if _, err := q.SetActiveManifest(ctx, store.SetActiveManifestParams{ProjectID: actor.ProjectID, ID: env.ID, ActiveManifestID: check.ManifestID}); err != nil {
 			return Publication{}, err
 		}
+		// STU-338: a published schema Change Set activates its manifest.
+		if check.ManifestID != nil {
+			if err := q.EnqueueFulfillmentActivation(ctx, store.EnqueueFulfillmentActivationParams{ID: uuid.Must(uuid.NewV7()), ProjectID: actor.ProjectID, EnvironmentID: env.ID, ManifestID: *check.ManifestID}); err != nil {
+				return Publication{}, err
+			}
+		}
 		if err := q.PublicationManifest(ctx, store.PublicationManifestParams{ID: pub.ID, PreviousManifestID: env.ActiveManifestID, CurrentManifestID: check.ManifestID}); err != nil {
 			return Publication{}, err
 		}

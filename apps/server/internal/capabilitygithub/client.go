@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -533,4 +534,55 @@ func (s *session) suiteDates(ctx context.Context, root, sha string, rows []check
 		rows[i].SuiteCreated = dates[rows[i].Suite.ID.String()]
 	}
 	return rows, nil
+}
+
+// Comparison — нормализованный ответ GitHub compare (STU-339, §5 пакета
+// выполнения): Head происходит от Base, если Status ahead или identical и
+// MergeBase равен Base.
+type Comparison struct {
+	Base      string `json:"base"`
+	Head      string `json:"head"`
+	Status    string `json:"status"`
+	MergeBase string `json:"mergeBase"`
+	AheadBy   int64  `json:"aheadBy"`
+}
+
+// Descends reports whether the compared head contains the base commit.
+func (c Comparison) Descends() bool {
+	return (c.Status == "ahead" || c.Status == "identical") && c.MergeBase == c.Base
+}
+
+// Comparer is injected at the service boundary in tests, never through runtime env.
+type Comparer interface {
+	Compare(context.Context, Repository, string, string) (Comparison, error)
+}
+
+// Compare performs one fixed GET compare/{base}...{head} in the base repository.
+func (c *Client) Compare(ctx context.Context, r Repository, base, head string) (Comparison, error) {
+	out := Comparison{Base: base, Head: head}
+	if !shaPattern.MatchString(base) || !shaPattern.MatchString(head) {
+		return out, failure("invalid_response")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	s := session{client: c.client, repo: r, now: c.now}
+	var e error
+	if s.token, e = s.credential(ctx); e != nil {
+		return out, e
+	}
+	var v struct {
+		Status    string               `json:"status"`
+		AheadBy   json.Number          `json:"ahead_by"`
+		BaseSHA   struct{ SHA string } `json:"base_commit"`
+		MergeBase struct{ SHA string } `json:"merge_base_commit"`
+	}
+	if e = s.get(ctx, "/repos/"+r.Owner+"/"+r.Name+"/compare/"+base+"..."+head+"?per_page=1", &v); e != nil {
+		return out, e
+	}
+	ahead, err := v.AheadBy.Int64()
+	if err != nil || v.BaseSHA.SHA != base || !shaPattern.MatchString(v.MergeBase.SHA) || !slices.Contains([]string{"ahead", "behind", "diverged", "identical"}, v.Status) {
+		return out, failure("invalid_response")
+	}
+	out.Status, out.MergeBase, out.AheadBy = v.Status, v.MergeBase.SHA, ahead
+	return out, nil
 }

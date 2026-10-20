@@ -20,6 +20,7 @@ type Actor struct {
 	DisabledAt  *time.Time `json:"disabledAt"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	OidcIssuer  *string    `json:"oidcIssuer"`
+	System      bool       `json:"system"`
 }
 
 type AgentDefinition struct {
@@ -235,6 +236,33 @@ type CapabilityDeliveryTarget struct {
 	ChangedAt     time.Time `json:"changedAt"`
 }
 
+type CapabilityFulfillmentAudit struct {
+	ID        uuid.UUID  `json:"id"`
+	ProjectID uuid.UUID  `json:"projectId"`
+	RequestID uuid.UUID  `json:"requestId"`
+	AnchorID  *uuid.UUID `json:"anchorId"`
+	ActorID   *uuid.UUID `json:"actorId"`
+	Event     string     `json:"event"`
+	Reason    string     `json:"reason"`
+	Data      []byte     `json:"data"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type CapabilityFulfillmentJob struct {
+	ID            uuid.UUID  `json:"id"`
+	ProjectID     uuid.UUID  `json:"projectId"`
+	EnvironmentID uuid.UUID  `json:"environmentId"`
+	ManifestID    uuid.UUID  `json:"manifestId"`
+	RequestID     *uuid.UUID `json:"requestId"`
+	State         string     `json:"state"`
+	Attempts      int32      `json:"attempts"`
+	NextAt        time.Time  `json:"nextAt"`
+	LeaseUntil    *time.Time `json:"leaseUntil"`
+	LastError     string     `json:"lastError"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
 type CapabilityGithubAudit struct {
 	ID         uuid.UUID  `json:"id"`
 	ProjectID  uuid.UUID  `json:"projectId"`
@@ -322,30 +350,58 @@ type CapabilityPreviewArg struct {
 }
 
 type CapabilityRequest struct {
-	ID                  uuid.UUID  `json:"id"`
-	ProjectID           uuid.UUID  `json:"projectId"`
-	Kind                string     `json:"kind"`
-	EnvironmentID       uuid.UUID  `json:"environmentId"`
-	Environment         string     `json:"environment"`
-	SourceManifestID    uuid.UUID  `json:"sourceManifestId"`
-	Key                 string     `json:"key"`
-	Title               string     `json:"title"`
-	Description         string     `json:"description"`
-	ProposedContract    []byte     `json:"proposedContract"`
-	Acceptance          []byte     `json:"acceptance"`
-	ChangesetID         uuid.UUID  `json:"changesetId"`
-	DocumentID          uuid.UUID  `json:"documentId"`
-	NodeID              string     `json:"nodeId"`
-	Event               string     `json:"event"`
-	CreatorID           uuid.UUID  `json:"creatorId"`
-	OwnerID             uuid.UUID  `json:"ownerId"`
-	AgentSessionID      *uuid.UUID `json:"agentSessionId"`
-	Status              string     `json:"status"`
-	Revision            int64      `json:"revision"`
-	ExternalRefs        []byte     `json:"externalRefs"`
-	FulfilledManifestID *uuid.UUID `json:"fulfilledManifestId"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	ID                       uuid.UUID  `json:"id"`
+	ProjectID                uuid.UUID  `json:"projectId"`
+	Kind                     string     `json:"kind"`
+	EnvironmentID            uuid.UUID  `json:"environmentId"`
+	Environment              string     `json:"environment"`
+	SourceManifestID         uuid.UUID  `json:"sourceManifestId"`
+	Key                      string     `json:"key"`
+	Title                    string     `json:"title"`
+	Description              string     `json:"description"`
+	ProposedContract         []byte     `json:"proposedContract"`
+	Acceptance               []byte     `json:"acceptance"`
+	ChangesetID              uuid.UUID  `json:"changesetId"`
+	DocumentID               uuid.UUID  `json:"documentId"`
+	NodeID                   string     `json:"nodeId"`
+	Event                    string     `json:"event"`
+	CreatorID                uuid.UUID  `json:"creatorId"`
+	OwnerID                  uuid.UUID  `json:"ownerId"`
+	AgentSessionID           *uuid.UUID `json:"agentSessionId"`
+	Status                   string     `json:"status"`
+	Revision                 int64      `json:"revision"`
+	ExternalRefs             []byte     `json:"externalRefs"`
+	FulfilledManifestID      *uuid.UUID `json:"fulfilledManifestId"`
+	CreatedAt                time.Time  `json:"createdAt"`
+	UpdatedAt                time.Time  `json:"updatedAt"`
+	FulfillmentState         string     `json:"fulfillmentState"`
+	FulfillmentReason        string     `json:"fulfillmentReason"`
+	FulfillmentMode          *string    `json:"fulfillmentMode"`
+	FulfillmentCommit        *string    `json:"fulfillmentCommit"`
+	FulfillmentObservationID *uuid.UUID `json:"fulfillmentObservationId"`
+	FulfillmentBasis         []byte     `json:"fulfillmentBasis"`
+	FulfilledAt              *time.Time `json:"fulfilledAt"`
+}
+
+type CapabilityRequestAnchor struct {
+	ID              uuid.UUID  `json:"id"`
+	ProjectID       uuid.UUID  `json:"projectId"`
+	RequestID       uuid.UUID  `json:"requestId"`
+	ChangesetID     uuid.UUID  `json:"changesetId"`
+	DocumentID      uuid.UUID  `json:"documentId"`
+	NodeID          string     `json:"nodeId"`
+	Event           string     `json:"event"`
+	OwnerID         uuid.UUID  `json:"ownerId"`
+	State           string     `json:"state"`
+	Revision        int64      `json:"revision"`
+	FulfillmentArgs []byte     `json:"fulfillmentArgs"`
+	Attempts        int32      `json:"attempts"`
+	NextAt          time.Time  `json:"nextAt"`
+	LastError       string     `json:"lastError"`
+	ReplacedBatchID *uuid.UUID `json:"replacedBatchId"`
+	Original        bool       `json:"original"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
 type CapabilityRequestAudit struct {

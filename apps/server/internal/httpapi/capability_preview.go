@@ -63,3 +63,54 @@ func capabilityPreviewRoutes(router chi.Router, d Deps) {
 		})
 	}
 }
+
+// capabilityFulfillmentRoutes — STU-351 and the open-request lookup (STU-336).
+func capabilityFulfillmentRoutes(router chi.Router, d Deps) {
+	router.Get("/capability-requests/open", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+		params := r.URL.Query()
+		for k, v := range params {
+			if k != "environment" && k != "key" || len(v) != 1 || len(v[0]) > 200 {
+				writeError(w, r, d.Log, commandbus.Validation(map[string]string{"query": "invalid filter"}))
+				return
+			}
+		}
+		if params.Get("environment") == "" || params.Get("key") == "" {
+			writeError(w, r, d.Log, commandbus.Validation(map[string]string{"query": "environment and key required"}))
+			return
+		}
+		result, e := capabilities.OpenRequestByKey(r.Context(), store.New(d.Pool), actorFrom(r.Context()), params.Get("environment"), params.Get("key"))
+		respond(w, r, d, result, e)
+	})
+	router.Get("/capability-requests/{id}/fulfillment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+		for k, v := range r.URL.Query() {
+			if k != "environment" || len(v) != 1 {
+				writeError(w, r, d.Log, commandbus.Validation(map[string]string{"query": "invalid filter"}))
+				return
+			}
+		}
+		id, ok := uuidParam(w, r, d, "id")
+		if !ok {
+			return
+		}
+		tx, e := d.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+		if e != nil {
+			writeError(w, r, d.Log, e)
+			return
+		}
+		defer tx.Rollback(r.Context())
+		q := store.New(tx)
+		a := actorFrom(r.Context())
+		v, e := capabilities.Get(r.Context(), q, a, id)
+		if e == nil && r.URL.Query().Get("environment") != "" && v["environment"] != r.URL.Query().Get("environment") {
+			e = commandbus.NewError(404, "NOT_FOUND", "Запрос не найден", "Окружение не совпадает")
+		}
+		if e != nil {
+			writeError(w, r, d.Log, e)
+			return
+		}
+		result, e := capabilities.FulfillmentGet(r.Context(), q, a, id)
+		respond(w, r, d, result, e)
+	})
+}

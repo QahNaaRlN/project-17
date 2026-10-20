@@ -320,3 +320,15 @@ head SHA наблюдения GitHub; Delivery preview подставляет д
 блокируется. `delete-environment`, River-задача `capability_preview_expiry` (раз в час,
 14 дней без регистраций) и проверенное наблюдение закрытого/слитого PR архивируют
 окружение. [Пакет](../../docs/studio-capability-preview.md).
+
+### Автоматическое выполнение запроса
+
+Миграция 00024 добавляет системного актора `cms-system` на проект (без токенов),
+привязки запроса (группа requiredBy) и outbox оценки. Активация standard-manifest,
+проверенное наблюдение «PR слит» и команда `check-capability-fulfillment` ставят
+оценку; River-задача `capability_fulfillment` (каждые 10 с) проверяет происхождение
+версии (commit индекса = merge SHA или его потомок по GitHub compare) и заменяет
+`pending:<id>` в открытых CS владельцев через общий конвейер операций. Публикация
+по-прежнему требует проверки и согласования человеком.
+[Пакет](../../docs/studio-capability-fulfillment.md),
+[приёмка](../../docs/studio-capability-fulfillment-acceptance.md).

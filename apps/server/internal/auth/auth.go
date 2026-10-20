@@ -37,6 +37,9 @@ type Actor struct {
 	ProjectID         uuid.UUID
 	ProjectSlug       string
 	Rights            RightSet
+	// System marks the project's token-less cms-system actor (STU-345). It
+	// acts on behalf of a Change Set owner and may only replace pending markers.
+	System bool
 }
 
 // ServiceTokenPrefix — префикс сервисных токенов (08-api.md §2).

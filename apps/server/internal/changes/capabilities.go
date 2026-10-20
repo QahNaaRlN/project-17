@@ -38,6 +38,9 @@ func (s *session) validatePending(target uuid.UUID, before, after map[string]any
 	}
 	nodes, _ := after["nodes"].(map[string]any)
 	oldNodes, _ := before["nodes"].(map[string]any)
+	if s.actor.System {
+		return s.validateSystem(target, oldNodes, nodes)
+	}
 	for id, raw := range nodes {
 		node, _ := raw.(map[string]any)
 		on, _ := node["on"].(map[string]any)
@@ -61,19 +64,93 @@ func (s *session) validatePending(target uuid.UUID, before, after map[string]any
 				if err != nil {
 					return pendingError()
 				}
-				r, err := s.q.GetCapabilityRequest(s.ctx, store.GetCapabilityRequestParams{ProjectID: s.actor.ProjectID, ID: requestID})
+				// STU-335: any live anchor of an active request may hold the marker.
+				a, err := s.q.AnchorAt(s.ctx, store.AnchorAtParams{ProjectID: s.actor.ProjectID, RequestID: requestID, ChangesetID: s.cs.ID, DocumentID: target, NodeID: id, Event: event})
 				if errors.Is(err, pgx.ErrNoRows) {
 					return pendingError()
 				}
 				if err != nil {
 					return err
 				}
-				active := r.Status == "submitted" || r.Status == "accepted" || r.Status == "in_progress" || r.Status == "pr_open"
-				if !active || r.ChangesetID != s.cs.ID || r.DocumentID != target || r.NodeID != id || r.Event != event || len(calls) != 1 || len(call) != 1 {
+				active := a.RequestStatus == "submitted" || a.RequestStatus == "accepted" || a.RequestStatus == "in_progress" || a.RequestStatus == "pr_open"
+				if !active || len(calls) != 1 || len(call) != 1 {
 					return pendingError()
 				}
 			}
 		}
 	}
 	return nil
+}
+
+func systemForbidden() error {
+	return commandbus.NewError(http.StatusForbidden, "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN", "Операция системы запрещена", "cms-system только заменяет заглушку выполненного запроса")
+}
+
+// validateSystem lets cms-system change exactly one thing (STU-345): an event
+// holding pending:<id> of a fulfilled request at its anchor becomes a single
+// call of that request's key. Any other difference is refused.
+func (s *session) validateSystem(target uuid.UUID, before, after map[string]any) error {
+	if !sameJSON(withoutEvents(before), mustJSON(withoutEvents(after))) {
+		return systemForbidden()
+	}
+	for id, raw := range after {
+		on, _ := raw.(map[string]any)["on"].(map[string]any)
+		oldOn, _ := before[id].(map[string]any)["on"].(map[string]any)
+		if len(on) != len(oldOn) {
+			return systemForbidden()
+		}
+		for event, chain := range on {
+			if sameJSON(chain, mustJSON(oldOn[event])) {
+				continue
+			}
+			old := chainOf(oldOn[event])
+			name := actionOf(old[0])
+			requestID, err := uuid.Parse(strings.TrimPrefix(name, "pending:"))
+			if len(old) != 1 || !strings.HasPrefix(name, "pending:") || err != nil {
+				return systemForbidden()
+			}
+			a, err := s.q.AnchorAt(s.ctx, store.AnchorAtParams{ProjectID: s.actor.ProjectID, RequestID: requestID, ChangesetID: s.cs.ID, DocumentID: target, NodeID: id, Event: event})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return systemForbidden()
+			}
+			if err != nil {
+				return err
+			}
+			calls := chainOf(chain)
+			if a.RequestStatus != "fulfilled" || len(calls) != 1 || actionOf(calls[0]) != a.RequestKey {
+				return systemForbidden()
+			}
+		}
+	}
+	return nil
+}
+
+func chainOf(v any) []any {
+	if calls, ok := v.([]any); ok && len(calls) > 0 {
+		return calls
+	}
+	return []any{v}
+}
+
+// actionOf — the action name of one handler call, "" when it is not a call.
+func actionOf(v any) string {
+	call, _ := v.(map[string]any)
+	name, _ := call["action"].(string)
+	return name
+}
+
+// withoutEvents removes event handlers so the remaining nodes can be compared.
+func withoutEvents(nodes map[string]any) map[string]any {
+	out := make(map[string]any, len(nodes))
+	for id, raw := range nodes {
+		node, _ := raw.(map[string]any)
+		copy := make(map[string]any, len(node))
+		for k, v := range node {
+			if k != "on" {
+				copy[k] = v
+			}
+		}
+		out[id] = copy
+	}
+	return out
 }

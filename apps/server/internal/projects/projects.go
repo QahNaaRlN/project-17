@@ -157,6 +157,10 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, token
 		if err != nil {
 			return err
 		}
+		// STU-345: the project's token-less system actor for capability fulfillment.
+		if err := q.CreateSystemActor(ctx, store.CreateSystemActorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: &project.ID}); err != nil {
+			return err
+		}
 		for _, env := range []string{"staging", "production"} {
 			if _, err := q.CreateEnvironment(ctx, store.CreateEnvironmentParams{
 				ID: uuid.Must(uuid.NewV7()), ProjectID: project.ID, Name: env, Kind: "standard",

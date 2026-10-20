@@ -170,7 +170,7 @@ func (q *Queries) GetCapabilityPack(ctx context.Context, arg GetCapabilityPackPa
 }
 
 const getCapabilityRequest = `-- name: GetCapabilityRequest :one
-SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at FROM capability_requests WHERE project_id=$1 AND id=$2
+SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at FROM capability_requests WHERE project_id=$1 AND id=$2
 `
 
 type GetCapabilityRequestParams struct {
@@ -206,6 +206,13 @@ func (q *Queries) GetCapabilityRequest(ctx context.Context, arg GetCapabilityReq
 		&i.FulfilledManifestID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FulfillmentState,
+		&i.FulfillmentReason,
+		&i.FulfillmentMode,
+		&i.FulfillmentCommit,
+		&i.FulfillmentObservationID,
+		&i.FulfillmentBasis,
+		&i.FulfilledAt,
 	)
 	return i, err
 }
@@ -305,7 +312,7 @@ func (q *Queries) InsertCapabilityPack(ctx context.Context, arg InsertCapability
 const insertCapabilityRequest = `-- name: InsertCapabilityRequest :one
 INSERT INTO capability_requests(id,project_id,environment_id,environment,source_manifest_id,key,title,description,proposed_contract,acceptance,changeset_id,document_id,node_id,event,creator_id,owner_id,agent_session_id)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-ON CONFLICT DO NOTHING RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at
+ON CONFLICT DO NOTHING RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at
 `
 
 type InsertCapabilityRequestParams struct {
@@ -374,6 +381,13 @@ func (q *Queries) InsertCapabilityRequest(ctx context.Context, arg InsertCapabil
 		&i.FulfilledManifestID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FulfillmentState,
+		&i.FulfillmentReason,
+		&i.FulfillmentMode,
+		&i.FulfillmentCommit,
+		&i.FulfillmentObservationID,
+		&i.FulfillmentBasis,
+		&i.FulfilledAt,
 	)
 	return i, err
 }
@@ -421,7 +435,7 @@ func (q *Queries) LinkCodeIndexUpload(ctx context.Context, arg LinkCodeIndexUplo
 }
 
 const listCapabilityRequests = `-- name: ListCapabilityRequests :many
-SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at FROM capability_requests WHERE project_id=$1
+SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at FROM capability_requests WHERE project_id=$1
  AND (owner_id=$2 OR ($3::boolean AND status<>'draft'))
  AND ($4::text='' OR environment=$4)
  AND ($5::text='' OR status=$5)
@@ -486,6 +500,13 @@ func (q *Queries) ListCapabilityRequests(ctx context.Context, arg ListCapability
 			&i.FulfilledManifestID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FulfillmentState,
+			&i.FulfillmentReason,
+			&i.FulfillmentMode,
+			&i.FulfillmentCommit,
+			&i.FulfillmentObservationID,
+			&i.FulfillmentBasis,
+			&i.FulfilledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -498,7 +519,7 @@ func (q *Queries) ListCapabilityRequests(ctx context.Context, arg ListCapability
 }
 
 const lockCapabilityRequest = `-- name: LockCapabilityRequest :one
-SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at FROM capability_requests WHERE project_id=$1 AND id=$2 FOR UPDATE
+SELECT id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at FROM capability_requests WHERE project_id=$1 AND id=$2 FOR UPDATE
 `
 
 type LockCapabilityRequestParams struct {
@@ -534,6 +555,13 @@ func (q *Queries) LockCapabilityRequest(ctx context.Context, arg LockCapabilityR
 		&i.FulfilledManifestID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FulfillmentState,
+		&i.FulfillmentReason,
+		&i.FulfillmentMode,
+		&i.FulfillmentCommit,
+		&i.FulfillmentObservationID,
+		&i.FulfillmentBasis,
+		&i.FulfilledAt,
 	)
 	return i, err
 }
@@ -541,7 +569,7 @@ func (q *Queries) LockCapabilityRequest(ctx context.Context, arg LockCapabilityR
 const updateCapabilityRequest = `-- name: UpdateCapabilityRequest :one
 UPDATE capability_requests SET title=$3,description=$4,proposed_contract=$5,acceptance=$6,status=$7,
  external_refs=$8,fulfilled_manifest_id=$9,revision=revision+1,updated_at=now()
-WHERE project_id=$1 AND id=$2 RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at
+WHERE project_id=$1 AND id=$2 RETURNING id, project_id, kind, environment_id, environment, source_manifest_id, key, title, description, proposed_contract, acceptance, changeset_id, document_id, node_id, event, creator_id, owner_id, agent_session_id, status, revision, external_refs, fulfilled_manifest_id, created_at, updated_at, fulfillment_state, fulfillment_reason, fulfillment_mode, fulfillment_commit, fulfillment_observation_id, fulfillment_basis, fulfilled_at
 `
 
 type UpdateCapabilityRequestParams struct {
@@ -594,6 +622,13 @@ func (q *Queries) UpdateCapabilityRequest(ctx context.Context, arg UpdateCapabil
 		&i.FulfilledManifestID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FulfillmentState,
+		&i.FulfillmentReason,
+		&i.FulfillmentMode,
+		&i.FulfillmentCommit,
+		&i.FulfillmentObservationID,
+		&i.FulfillmentBasis,
+		&i.FulfilledAt,
 	)
 	return i, err
 }

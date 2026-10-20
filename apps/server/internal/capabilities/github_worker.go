@@ -241,6 +241,9 @@ func (s *GithubService) finishGithub(ctx context.Context, args GithubArgs, claim
 		if e = archiveClosedPreviews(ctx, q, l, parse(b)); e != nil {
 			return e
 		}
+		if e = mergedCheck(ctx, q, l, observation); e != nil {
+			return e
+		}
 		l.LastError = ""
 		l.State = "idle"
 		l.Attempts = 0
