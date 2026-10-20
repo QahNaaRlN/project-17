@@ -6,9 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/cmstest"
 )
 
 // STU-376: contracts of both kinds.
@@ -203,5 +205,70 @@ func TestSTU377_379PlaceholderValidation(t *testing.T) {
 	}
 	if got["/nodes/n_box/design/padding DESIGN_VALUE_INVALID"] {
 		t.Error("a live token placeholder is a valid design value")
+	}
+}
+
+// STU-388: preview/<ref> runs the real source in that preview only.
+func TestSTU388DataSourcePreview(t *testing.T) {
+	f := previewSetupWith(t, githubSetupWith(t, func(f *fixture) { f.submitted(f.dataSourceCreate) }))
+	ctx := context.Background()
+	f.createEnv()
+	f.register(f.buildWith(shaA, func(m object) {
+		m["dataSources"] = object{"store.recommendations": object{"params": object{"limit": object{"type": "number", "required": true}}, "result": object{"type": "list", "of": object{"type": "object", "fields": object{"title": object{"type": "string"}}}}}}
+	}))
+	if f.state() != PreviewReady {
+		t.Fatal("STU-388 ready", f.state())
+	}
+	use := func(doc object) object { return obj(obj(doc["dataSources"])["recommended"]) }
+	if u := use(f.project(f.environment().ID)); u["pending"] != nil || u["source"] != "store.recommendations" {
+		t.Fatal("STU-388 the real source in the preview", u)
+	}
+	if use(parse(f.body()))["pending"] == nil {
+		t.Fatal("the stored draft keeps the placeholder")
+	}
+	cs, e := ChangesetPreview(ctx, f.e.Q, f.a, f.cs, f.env)
+	if e != nil || obj(arr(cs["substitutions"])[0])["substituted"] != true {
+		t.Fatal("Change Set preview", cs, e)
+	}
+}
+
+// STU-384/390: a token joins from another node; manual resolve of both kinds.
+func TestSTU384_390TokenJoinAndManualResolve(t *testing.T) {
+	f := tokenSetup(t)
+	r := f.current()
+	f.e.Must(f.a, "apply-operations", object{"changesetId": f.cs, "expectedSeq": f.seq(f.cs), "operations": []any{object{"type": "node.insert", "target": f.doc, "payload": object{"parentId": "n_box", "index": 0, "subtree": object{"id": "n_inner", "type": "Stack"}}}}}, nil)
+	p := AttachRequest{RequestID: r.ID, ExpectedRequestRevision: f.revision(), ChangesetID: f.cs, ExpectedSeq: f.seq(f.cs), DocumentID: f.doc, ExpectedManifestHash: f.hash, Placement: &Placement{NodeID: "n_inner", Property: "gap"}}
+	f.command(f.a, "attach-capability-request", p)
+	var joined store.CapabilityRequestAnchor
+	for _, a := range f.anchors() {
+		if a.NodeID == "n_inner" {
+			joined = a
+		}
+	}
+	if joined.Event != "gap" || obj(obj(obj(f.body()["nodes"])["n_inner"])["design"])["gap"] != "pending:"+r.ID.String() {
+		t.Fatal("STU-384 the joined breakpoint", joined, f.body())
+	}
+	r = f.engineering(f.current())
+	m := parse([]byte(cmstest.DefaultManifest))
+	m["tokens"] = object{"spacing": object{"huge": "48px"}}
+	f.e.ActivateManifest("staging", raw(m))
+	hash, _ := manifest.Hash(m)
+	if _, e := f.call(f.a, "resolve-capability-request", Action{ID: r.ID, ExpectedRevision: r.Revision, ExpectedSeq: f.seq(f.cs), ExpectedManifestHash: hash}, ""); e != nil {
+		t.Fatal("STU-390 manual resolve of a token", e)
+	}
+	if obj(obj(obj(f.body()["nodes"])["n_box"])["design"])["padding"] != "huge" || anchorFor(f.anchors(), f.cs).State == "" {
+		t.Fatal("the original placeholder is replaced", f.body())
+	}
+	d := dataSourceSetup(t)
+	q := d.engineering(d.current())
+	dm := parse([]byte(cmstest.DefaultManifest))
+	dm["dataSources"] = object{"store.recommendations": object{"params": object{"limit": object{"type": "number", "required": true}}, "result": object{"type": "list", "of": object{"type": "object", "fields": object{"title": object{"type": "string"}}}}}}
+	d.e.ActivateManifest("staging", raw(dm))
+	dh, _ := manifest.Hash(dm)
+	if _, e := d.call(d.a, "resolve-capability-request", Action{ID: q.ID, ExpectedRevision: q.Revision, ExpectedSeq: d.seq(d.cs), ExpectedManifestHash: dh}, ""); e != nil {
+		t.Fatal("STU-390 manual resolve of a data source", e)
+	}
+	if obj(obj(d.body()["dataSources"])["recommended"])["pending"] != nil {
+		t.Fatal("the source marker is dropped")
 	}
 }
