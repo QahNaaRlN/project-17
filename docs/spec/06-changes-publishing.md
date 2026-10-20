@@ -87,6 +87,7 @@ Draft из архитектуры v0.1 — это рабочие версии в
 | `node.setCondition` | `nodeId`, `when \| null` | `design.compose` |
 | `node.setBehavior` | `nodeId`, `event`, `handlers \| null` | `behavior.use` |
 | `node.rename` | `nodeId`, `name` | `design.compose` |
+| `node.clearPending` / `node.setPending` | `nodeId` / `nodeId`, `pending` — снятие метки заглушки компонента выполненного запроса; `setPending` — обратная операция журнала (STU-370) | `design.compose` |
 | `node.setZone` / `node.setLocked` / `document.setPolicy` | — | `design.zones.manage` |
 | `component.extract` | `documentId`, `nodeId`, `name`, `inputs` (какие свойства поддерева стать входами) | `component.write` |
 | `component.setInputs` / `component.setSlots` | — | `component.write` |

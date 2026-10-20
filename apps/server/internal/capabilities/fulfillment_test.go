@@ -38,7 +38,10 @@ type fulfillmentFixture struct {
 // fulfillmentSetup: a submitted request linked to PR #1 whose verified facts
 // the test controls, and a fulfillment service without network.
 func fulfillmentSetup(t *testing.T) *fulfillmentFixture {
-	g := githubSetup(t)
+	return fulfillmentSetupWith(githubSetup(t))
+}
+
+func fulfillmentSetupWith(g githubFixture) *fulfillmentFixture {
 	f := &fulfillmentFixture{githubFixture: g}
 	f.facts = observed(gh.Repository{RepositoryID: "42"}, 1)
 	f.s.Fetcher = githubFetcher(func(_ context.Context, r gh.Repository, n int64) (gh.Observation, error) { return f.facts, nil })

@@ -253,7 +253,7 @@ func TestRightsAndTypes(t *testing.T) {
 	if _, ok := Right("x"); ok {
 		t.Error("неизвестный тип")
 	}
-	if got := Types(); len(got) != 18 || got[0] != ComponentExtract {
+	if got := Types(); len(got) != 20 || got[0] != ComponentExtract {
 		t.Errorf("Types: %v", got)
 	}
 }
@@ -264,5 +264,28 @@ func TestCloneIsDeep(t *testing.T) {
 	c["nodes"].(map[string]any)["n_root"].(map[string]any)["children"].([]any)[0] = "x"
 	if orig["nodes"].(map[string]any)["n_root"].(map[string]any)["children"].([]any)[0] != "n_head" {
 		t.Error("Clone не глубокая")
+	}
+}
+
+// STU-370: clearing a component placeholder marker and its journal inverse.
+func TestSTU370ClearPending(t *testing.T) {
+	doc := map[string]any{"irVersion": "1.0", "kind": "page", "root": "n_root", "nodes": map[string]any{
+		"n_root":  map[string]any{"id": "n_root", "type": "Box", "children": []any{"n_promo"}},
+		"n_promo": map[string]any{"id": "n_promo", "type": "PromoBanner", "pending": "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11"},
+	}}
+	res, err := Apply(doc, Op{Type: NodeClearPending, Payload: json.RawMessage(`{"nodeId":"n_promo"}`)}, nil)
+	if err != nil || doc["nodes"].(map[string]any)["n_promo"].(map[string]any)["pending"] != nil {
+		t.Fatal("marker cleared", err)
+	}
+	if _, err := Apply(doc, res.Inverse, nil); err != nil || doc["nodes"].(map[string]any)["n_promo"].(map[string]any)["pending"] != "0192f1c4-7a1e-7c2b-9d10-3b5f2a9e4c11" {
+		t.Fatal("inverse restores the marker", err)
+	}
+	for _, payload := range []string{`{"nodeId":"n_root"}`, `{"nodeId":"n_none"}`, `{"nodeId":"n_promo","x":1}`} {
+		if _, err := Apply(doc, Op{Type: NodeClearPending, Payload: json.RawMessage(payload)}, nil); err == nil {
+			t.Error("refused", payload)
+		}
+	}
+	if r, _ := Right(NodeClearPending); r != auth.DesignCompose {
+		t.Error("design.compose", r)
 	}
 }

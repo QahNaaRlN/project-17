@@ -141,6 +141,13 @@ function LayerButton({
       <span className="node-icon">◇</span>
       {item.label}
       {item.locked && <span aria-label={locked}> · 🔒</span>}
+      {/* STU-372: a component placeholder waits for its request. */}
+      {typeof editor.store.getState().document?.nodes[item.id]?.pending === "string" && (
+        <span className="pending-badge">
+          {" · "}
+          {editor.store.getState().locale === "ru" ? "ожидает компонент" : "awaiting component"}
+        </span>
+      )}
     </button>
   );
 }

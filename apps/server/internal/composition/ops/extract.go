@@ -603,6 +603,9 @@ func (x *extraction) protected() error {
 		if n["zone"] != nil || n["locked"] != nil {
 			return extractFail("COMPONENT_EXTRACT_PROTECTED", ir.Pointer("nodes", id, "zone"), id, "поддерево содержит зону или защищённый узел")
 		}
+		if _, placeholder := n["pending"].(string); placeholder {
+			return extractFail("CAPABILITY_PENDING_INVALID", ir.Pointer("nodes", id, "pending"), id, "поддерево содержит заглушку компонента")
+		}
 		if pendingAction(n["on"]) {
 			return extractFail("COMPONENT_EXTRACT_PROTECTED", ir.Pointer("nodes", id, "on"), id, "поддерево содержит заглушку Missing Capability")
 		}

@@ -90,3 +90,16 @@ export function About({ values: p, className, previewAttributes }: NativeProps) 
     </section>
   );
 }
+
+// A promotional banner implemented for a component request (STU-374).
+export function Promo({ values: p, children, className, previewAttributes }: NativeProps) {
+  return (
+    <section
+      className={`promo promo-${p.tone === "accent" ? "accent" : "plain"} ${className}`}
+      {...previewAttributes}
+    >
+      <h2>{String(p.title)}</h2>
+      {children}
+    </section>
+  );
+}

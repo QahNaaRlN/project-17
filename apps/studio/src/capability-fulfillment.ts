@@ -22,6 +22,7 @@ export const anchorStates = [
   "replaced",
   "awaiting_args",
   "invalid_args",
+  "invalid_props",
   "anchor_changed",
   "changeset_in_review",
   "changeset_closed",
@@ -150,6 +151,10 @@ const states: Record<string, [string, string]> = {
   replaced: ["Заменено системой", "Replaced by the system"],
   awaiting_args: ["Нужны аргументы выполнения", "Fulfillment arguments needed"],
   invalid_args: ["Аргументы не прошли проверку", "Arguments failed validation"],
+  invalid_props: [
+    "Свойства не подходят к компоненту — исправьте и повторите",
+    "Props do not fit the component — fix them and retry",
+  ],
   anchor_changed: ["Узел изменён — заглушки нет", "The node changed — no placeholder"],
   changeset_in_review: [
     "Черновик на проверке — замена после возврата в работу",

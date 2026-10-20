@@ -6,7 +6,7 @@ import {
   defineDataSource,
 } from "@cms/component-registry";
 import { createReactRegistry, defineReactComponent } from "@cms/react";
-import { Storefront, Hero, Collection, Item, Empty, About } from "./sections.js";
+import { Storefront, Hero, Collection, Item, Empty, About, Promo } from "./sections.js";
 import { productField as product, productsField as products } from "./contracts.js";
 import { favoriteProduct, loadProducts, loadCollectionProducts } from "./operations.js";
 const text = t.text().content().required().max(2000);
@@ -103,6 +103,17 @@ export const registry = createRegistry({
       component: About,
       props: { title: text, text },
       validate: (p) => typeof p.title === "string" && typeof p.text === "string" && strings(p),
+    }),
+    defineReactComponent({
+      name: "PromoBanner",
+      origin: "native",
+      container: true,
+      component: Promo,
+      props: {
+        title: t.string().required().max(200),
+        tone: t.enum(["plain", "accent"]).default("plain"),
+      },
+      validate: (p) => typeof p.title === "string" && strings({ title: p.title }),
     }),
   ],
 });

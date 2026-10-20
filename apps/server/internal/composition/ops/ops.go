@@ -23,15 +23,19 @@ import (
 
 // Типы операций над узлами.
 const (
-	NodeInsert         = "node.insert"
-	NodeRemove         = "node.remove"
-	NodeMove           = "node.move"
-	NodeSetProps       = "node.setProps"
-	NodeSetDesign      = "node.setDesign"
-	NodeSetBinding     = "node.setBinding"
-	NodeSetCondition   = "node.setCondition"
-	NodeSetBehavior    = "node.setBehavior"
-	NodeRename         = "node.rename"
+	NodeInsert       = "node.insert"
+	NodeRemove       = "node.remove"
+	NodeMove         = "node.move"
+	NodeSetProps     = "node.setProps"
+	NodeSetDesign    = "node.setDesign"
+	NodeSetBinding   = "node.setBinding"
+	NodeSetCondition = "node.setCondition"
+	NodeSetBehavior  = "node.setBehavior"
+	NodeRename       = "node.rename"
+	// NodeClearPending снимает метку заглушки компонента (STU-370); обратная
+	// NodeSetPending восстанавливает её из журнала.
+	NodeClearPending   = "node.clearPending"
+	NodeSetPending     = "node.setPending"
 	LocalContentSet    = "localContent.set"
 	LocalContentRemove = "localContent.remove"
 )
@@ -83,6 +87,8 @@ var registry = map[string]spec{
 	NodeSetCondition:       {auth.DesignCompose, fieldSetter("when")},
 	NodeSetBehavior:        {auth.BehaviorUse, applySetBehavior},
 	NodeRename:             {auth.DesignCompose, fieldSetter("name")},
+	NodeClearPending:       {auth.DesignCompose, applyClearPending},
+	NodeSetPending:         {auth.DesignCompose, fieldSetter("pending")},
 	LocalContentSet:        {auth.ContentWrite, localContentSet},
 	LocalContentRemove:     {auth.ContentWrite, localContentRemove},
 	ComponentExtract:       {auth.ComponentWrite, applyExtractPage},
@@ -536,6 +542,8 @@ func opTypeForField(field string) string {
 		return NodeSetDesign
 	case "when":
 		return NodeSetCondition
+	case "pending":
+		return NodeSetPending
 	}
 	return NodeRename
 }
@@ -643,5 +651,30 @@ func setEntry(doc map[string]any, nodeID, field, key string, value json.RawMessa
 		Before:  map[string]any{key: before},
 		After:   map[string]any{key: m[key]},
 		Inverse: Op{Type: opType, Payload: mustRaw(inverse(before))},
+	}, nil
+}
+
+// applyClearPending снимает метку pending: дальше узел проверяется по
+// настоящему определению manifest (STU-370).
+func applyClearPending(doc map[string]any, raw json.RawMessage, _ ir.IDGenerator) (Result, error) {
+	var p struct {
+		NodeID string `json:"nodeId"`
+	}
+	if err := decode(raw, &p); err != nil {
+		return Result{}, err
+	}
+	n, err := node(doc, p.NodeID)
+	if err != nil {
+		return Result{}, err
+	}
+	prev, ok := n["pending"].(string)
+	if !ok {
+		return Result{}, fail("PAYLOAD_INVALID", "узел %s не является заглушкой компонента", p.NodeID)
+	}
+	delete(n, "pending")
+	return Result{
+		Before:  map[string]any{"pending": prev},
+		After:   map[string]any{"pending": nil},
+		Inverse: Op{Type: NodeSetPending, Payload: mustRaw(map[string]any{"nodeId": p.NodeID, "pending": prev})},
 	}, nil
 }

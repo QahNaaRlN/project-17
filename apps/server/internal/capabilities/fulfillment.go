@@ -13,6 +13,8 @@ import (
 	gh "github.com/qahnaarln/project-17/apps/server/internal/capabilitygithub"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -30,10 +32,14 @@ type AttachRequest struct {
 	ChangesetID             uuid.UUID `json:"changesetId"`
 	ExpectedSeq             int32     `json:"expectedSeq"`
 	DocumentID              uuid.UUID `json:"documentId"`
-	NodeID                  string    `json:"nodeId"`
-	Event                   string    `json:"event"`
+	NodeID                  string    `json:"nodeId,omitempty"`
+	Event                   string    `json:"event,omitempty"`
 	ExpectedManifestHash    string    `json:"expectedManifestHash"`
 	ConfirmReplaceExisting  bool      `json:"confirmReplaceExisting,omitempty"`
+	// Placement and InitialProps insert another instance of a component
+	// placeholder instead of an event anchor (STU-363).
+	Placement    *Placement      `json:"placement,omitempty"`
+	InitialProps json.RawMessage `json:"initialProps,omitempty"`
 }
 
 // AnchorAction — payload of the owner's anchor commands (STU-337/344/346).
@@ -60,7 +66,9 @@ func fulfillmentError(code string) error {
 
 func registerFulfillment(bus *commandbus.Bus) {
 	commandbus.Register(bus, commandbus.Command[AttachRequest, object]{Name: "attach-capability-request", Authorize: func(a auth.Actor, _ AttachRequest) error { return attachRights(a) }, Validate: func(p AttachRequest) error {
-		if p.RequestID == uuid.Nil || p.ExpectedRequestRevision < 1 || p.ChangesetID == uuid.Nil || p.DocumentID == uuid.Nil || p.ExpectedSeq < 0 || !codeHash(p.ExpectedManifestHash) || !validAnchor(p.NodeID, p.Event) {
+		node := p.Placement == nil && p.InitialProps == nil && validAnchor(p.NodeID, p.Event)
+		instance := p.NodeID == "" && p.Event == "" && !p.ConfirmReplaceExisting && validPlacement(p.Placement) && len(p.InitialProps) <= 64<<10 && (p.InitialProps == nil || obj(jsonValue(p.InitialProps)) != nil)
+		if p.RequestID == uuid.Nil || p.ExpectedRequestRevision < 1 || p.ChangesetID == uuid.Nil || p.DocumentID == uuid.Nil || p.ExpectedSeq < 0 || !codeHash(p.ExpectedManifestHash) || !node && !instance {
 			return fail("CAPABILITY_REQUEST_INVALID")
 		}
 		return nil
@@ -140,6 +148,9 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 	if r.Revision != p.ExpectedRequestRevision {
 		return nil, fail("CAPABILITY_REVISION_CONFLICT")
 	}
+	if (r.Kind == KindComponent) != (p.Placement != nil) {
+		return nil, fail("CAPABILITY_REQUEST_INVALID")
+	}
 	if existing, e := q.AnchorAt(ctx, store.AnchorAtParams{ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: p.NodeID, Event: p.Event}); e == nil {
 		return object{"anchor": anchorView(store.CapabilityRequestAnchor{ID: existing.ID, State: existing.State, Revision: existing.Revision, ChangesetID: existing.ChangesetID, DocumentID: existing.DocumentID, NodeID: existing.NodeID, Event: existing.Event, UpdatedAt: existing.UpdatedAt}, true, existing.State)}, nil
 	} else if !errors.Is(e, pgx.ErrNoRows) {
@@ -154,17 +165,27 @@ func attach(ctx context.Context, tx pgx.Tx, a auth.Actor, p AttachRequest) (obje
 	}
 	target := r
 	target.ChangesetID, target.DocumentID, target.NodeID, target.Event, target.OwnerID = p.ChangesetID, p.DocumentID, p.NodeID, p.Event, a.ID
+	if r.Kind == KindComponent {
+		// A new instance is placed like a draft placeholder (STU-363).
+		target.Status, target.NodeID, target.Placement, target.InitialProps = "draft", ir.GenerateNodeID(nil), raw(p.Placement), raw(object{})
+		if p.InitialProps != nil {
+			target.InitialProps = p.InitialProps
+		}
+	}
 	s, e := loadContext(ctx, q, a, target, p.ExpectedSeq, p.ExpectedManifestHash, true)
 	if e != nil {
 		return nil, e
 	}
-	if len(handlerChain(obj(obj(obj(s.doc["nodes"])[p.NodeID])["on"])[p.Event])) > 0 && !p.ConfirmReplaceExisting {
+	if r.Kind == KindComponent && !validInitialProps(target, obj(jsonValue(target.InitialProps)), s.app) {
+		return nil, fail("CAPABILITY_PROPS_INVALID")
+	}
+	if r.Kind == KindAction && len(handlerChain(obj(obj(obj(s.doc["nodes"])[p.NodeID])["on"])[p.Event])) > 0 && !p.ConfirmReplaceExisting {
 		return nil, fail("CAPABILITY_REPLACE_CONFIRM_REQUIRED")
 	}
-	anchor, e := q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: p.NodeID, Event: p.Event, OwnerID: a.ID})
+	anchor, e := q.InsertCapabilityAnchor(ctx, store.InsertCapabilityAnchorParams{ID: uuid.Must(uuid.NewV7()), ProjectID: a.ProjectID, RequestID: r.ID, ChangesetID: p.ChangesetID, DocumentID: p.DocumentID, NodeID: target.NodeID, Event: target.Event, OwnerID: a.ID})
 	var change changes.ApplyResult
 	if e == nil {
-		op := behavior(target, pending(r))
+		op := marker(target)
 		change, e = changes.ApplyInTx(ctx, tx, a, p.ChangesetID, s.cs.Seq, []changes.OperationInput{{Type: op.Type, Target: &p.DocumentID, Payload: op.Payload}})
 	}
 	if e == nil {
@@ -219,6 +240,9 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 		target := r
 		target.NodeID, target.Event = anchor.NodeID, anchor.Event
 		op := behavior(target, nil)
+		if r.Kind == KindComponent {
+			op = ops.Op{Type: ops.NodeRemove, Payload: raw(object{"nodeId": anchor.NodeID})}
+		}
 		var change changes.ApplyResult
 		if _, e = changes.Lock(ctx, q, a.ProjectID, anchor.ChangesetID); e == nil {
 			change, e = changes.ApplyInTx(ctx, tx, a, anchor.ChangesetID, p.ExpectedSeq, []changes.OperationInput{{Type: op.Type, Target: &anchor.DocumentID, Payload: op.Payload}})
@@ -228,7 +252,7 @@ func anchorAction(ctx context.Context, tx pgx.Tx, a auth.Actor, p AnchorAction, 
 		}
 		next, out["change"] = "detached", change
 	case "set-capability-fulfillment-args":
-		if !a.Rights.Has(auth.BehaviorUse) || anchor.State == "replaced" || terminal(r.Status) && r.Status != "fulfilled" {
+		if r.Kind == KindComponent || !a.Rights.Has(auth.BehaviorUse) || anchor.State == "replaced" || terminal(r.Status) && r.Status != "fulfilled" {
 			return nil, fail("CAPABILITY_STATE_INVALID")
 		}
 		calls := arr(jsonValue(p.Handlers))
@@ -367,13 +391,15 @@ func OpenRequestByKey(ctx context.Context, q *store.Queries, a auth.Actor, envir
 	return object{"id": r.ID, "key": r.Key, "title": r.Title, "status": r.Status, "revision": r.Revision, "environment": r.Environment, "proposedContract": jsonValue(r.ProposedContract)}, nil
 }
 
-// systemActor builds cms-system acting for a Change Set owner (STU-345).
+// systemActor builds cms-system acting for a Change Set owner (STU-345). The
+// rights only admit node.setBehavior and node.clearPending, further narrowed
+// by the operation pipeline (STU-370).
 func systemActor(ctx context.Context, q *store.Queries, project uuid.UUID, owner uuid.UUID) (auth.Actor, error) {
 	row, e := q.GetSystemActor(ctx, &project)
 	if e != nil {
 		return auth.Actor{}, e
 	}
-	return auth.Actor{ID: row.ID, Kind: auth.ActorService, DisplayName: row.DisplayName, ProjectID: project, OnBehalfOf: &owner, System: true, Rights: auth.RightSet{auth.BehaviorUse: true, auth.DesignRead: true}}, nil
+	return auth.Actor{ID: row.ID, Kind: auth.ActorService, DisplayName: row.DisplayName, ProjectID: project, OnBehalfOf: &owner, System: true, Rights: auth.RightSet{auth.BehaviorUse: true, auth.DesignRead: true, auth.DesignCompose: true}}, nil
 }
 
 // mergedCheck queues a re-evaluation when a verified observation reports the

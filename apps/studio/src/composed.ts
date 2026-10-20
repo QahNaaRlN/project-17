@@ -22,9 +22,24 @@ export function componentTitle(node: Node | undefined): string | undefined {
   const title = componentOf(node)?.meta?.title;
   return typeof title === "string" ? title : undefined;
 }
-/** Contract of a node: a Composed instance exposes its component's inputs and slots. */
+// Proposed contracts of component placeholders in the open draft (STU-372).
+const placeholders = new Map<string, Component>();
+export function registerPlaceholders(contracts: Record<string, Component>) {
+  placeholders.clear();
+  for (const [id, c] of Object.entries(contracts)) placeholders.set(id, c);
+}
+/** Request ids of component placeholders in stable node order. */
+export function placeholderRefs(doc: IrDocument): string[] {
+  const ids = Object.keys(doc.nodes)
+    .sort()
+    .flatMap((id) => (typeof doc.nodes[id]!.pending === "string" ? [doc.nodes[id]!.pending!] : []));
+  return [...new Set(ids)].slice(0, 64);
+}
+/** Contract of a node: a Composed instance exposes its component's inputs and slots;
+ * a placeholder its request's proposed contract, without events. */
 export function nodeContract(node: Node | undefined, manifest: Manifest): Component | undefined {
   if (!node) return undefined;
+  if (typeof node.pending === "string") return placeholders.get(node.pending);
   const doc = componentOf(node);
   if (doc)
     return {

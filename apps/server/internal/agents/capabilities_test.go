@@ -71,6 +71,16 @@ func TestMissingCapabilityToolsAreDraftOnlyScopedAndQuotaBound(t *testing.T) {
 			t.Fatal("wrong anchor allowed")
 		}
 	}
+	// STU-371: malformed draft calls are refused before any command.
+	for _, broken := range []map[string]any{
+		{"changesetId": cs.ID, "environment": "staging", "expectedSeq": 1, "reason": "x", "payload": p["payload"]},
+		{"changesetId": cs.ID, "documentId": doc, "environment": "staging", "expectedSeq": 1, "reason": "x", "payload": []any{}},
+		{"changesetId": cs.ID, "documentId": doc, "environment": "staging", "expectedSeq": 1, "reason": "x", "payload": map[string]any{"environment": "production"}},
+	} {
+		if _, err = s.Call(ctx, a, "report_missing_capability", mustJSON(broken), "broken", &bound); err == nil {
+			t.Fatal("malformed draft accepted", broken)
+		}
+	}
 	if _, err = s.Call(ctx, a, "report_missing_capability", mustJSON(p), "quota", &bound); cmstest.Code(err) != "AGENT_QUOTA_EXCEEDED" {
 		t.Fatal(err)
 	}

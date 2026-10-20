@@ -14,7 +14,13 @@ import {
 } from "./types.js";
 import { applyOperations } from "./operations.js";
 import { scopeProblems } from "./data-sources.js";
-import { componentRefs, registerComponents } from "./composed.js";
+import type { Component } from "@cms/manifest";
+import {
+  componentRefs,
+  placeholderRefs,
+  registerComponents,
+  registerPlaceholders,
+} from "./composed.js";
 import { location, type Place } from "./structure.js";
 import type { ContentOperation } from "./types.js";
 /** A PR preview environment shown read-only (STU-329/330). */
@@ -29,6 +35,8 @@ export interface EditorState {
   viewTarget: PreviewTarget | null;
   /** Components referenced by Composed instances of the open document (STU-414). */
   components: Record<string, IrDocument>;
+  /** Proposed contracts of component placeholders by request id (STU-372). */
+  placeholders: Record<string, Component>;
   /** Uncertain component.extract awaiting a retry with the same body and key (STU-413). */
   extractRetry: boolean;
   /** Page to return to while a component document is open in Structure (STU-415). */
@@ -69,6 +77,7 @@ export function createEditor(
   const store = createStore<EditorState>(() => ({
     viewTarget: null,
     components: {},
+    placeholders: {},
     extractRetry: false,
     pageReturn: null,
     bindingRetry: false,
@@ -231,6 +240,37 @@ export function createEditor(
       .catch(() => {
         /* Unresolved components keep instances read-only; CMS reports diagnostics. */
       });
+  });
+  // STU-372: placeholders show the props of their request's proposed contract.
+  let placeholdersRead = "";
+  store.subscribe((state) => {
+    const doc = state.document;
+    if (!doc || !api.capability) return;
+    const refs = placeholderRefs(doc);
+    const key = refs.join(",");
+    if (placeholdersRead === key) return;
+    placeholdersRead = key;
+    if (!refs.length) {
+      registerPlaceholders({});
+      if (Object.keys(state.placeholders).length) store.setState({ placeholders: {} });
+      return;
+    }
+    void Promise.all(
+      refs.map((id) =>
+        api.capability!(id).then(
+          (r) => [id, r] as const,
+          () => [id, null] as const,
+        ),
+      ),
+    ).then((rows) => {
+      if (placeholdersRead !== key) return;
+      const contracts: Record<string, Component> = {};
+      for (const [id, r] of rows)
+        if (r?.kind === "component")
+          contracts[id] = { ...(r.proposedContract as unknown as Component), events: {} };
+      registerPlaceholders(contracts);
+      store.setState({ placeholders: contracts });
+    });
   });
   type ExtractOutcome =
     | { ok: true }

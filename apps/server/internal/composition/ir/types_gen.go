@@ -169,6 +169,9 @@ type Node struct {
 	// On corresponds to the JSON schema field "on".
 	On NodeOn `json:"on,omitempty,omitzero" yaml:"on,omitempty" mapstructure:"on,omitempty"`
 
+	// Pending corresponds to the JSON schema field "pending".
+	Pending *Uuid `json:"pending,omitempty,omitzero" yaml:"pending,omitempty" mapstructure:"pending,omitempty"`
+
 	// Props corresponds to the JSON schema field "props".
 	Props NodeProps `json:"props,omitempty,omitzero" yaml:"props,omitempty" mapstructure:"props,omitempty"`
 

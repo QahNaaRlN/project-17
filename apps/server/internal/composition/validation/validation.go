@@ -222,6 +222,11 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		if r := ir.ValidateDocument(doc); !r.Valid {
 			return r, nil
 		}
+		app, placeholders, err := c.pendingApp(ctx, doc)
+		if err != nil {
+			return ir.Result{}, err
+		}
+		extra = append(extra, placeholders...)
 		nodes := object(doc["nodes"])
 		keys := sortedKeys(nodes)
 		for _, id := range keys {
@@ -259,9 +264,9 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 				extra = append(extra, ir.Diagnostic{Code: diag.Code, Severity: diag.Severity, Pointer: key, NodeID: id, Message: diag.Message, Params: map[string]any{"componentId": child.ObjectID, "versionId": child.VersionID, "diagnostic": diag}})
 			}
 		}
-		r := manifestdoc.Validate(doc, c.app, func(ref map[string]any) (map[string]any, bool) { m, ok := resolved[fmt.Sprint(ref)]; return m, ok })
+		r := manifestdoc.Validate(doc, app, func(ref map[string]any) (map[string]any, bool) { m, ok := resolved[fmt.Sprint(ref)]; return m, ok })
 		var pageError error
-		bindings := bindingdoc.Validate(doc, c.app, bindingdoc.Options{Path: d.Path,
+		bindings := bindingdoc.Validate(doc, app, bindingdoc.Options{Path: d.Path,
 			ResolveComponent: func(ref map[string]any) (map[string]any, bool) { m, ok := resolved[fmt.Sprint(ref)]; return m, ok },
 			ResolvePage: func(raw string) (*string, bool) {
 				id, err := uuid.Parse(raw)
@@ -284,7 +289,7 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 		if pageError != nil {
 			return ir.Result{}, pageError
 		}
-		policy := policydoc.Validate(doc, c.app, policydoc.Options{Project: c.project, ResolveComponent: func(ref map[string]any) (policydoc.Component, bool) {
+		policy := policydoc.Validate(doc, app, policydoc.Options{Project: c.project, ResolveComponent: func(ref map[string]any) (policydoc.Component, bool) {
 			v, ok := components[fmt.Sprint(ref)]
 			return v, ok
 		}})
@@ -341,8 +346,12 @@ func (c *Context) Validate(ctx context.Context, d Document) (ir.Result, error) {
 	if err != nil || !ir.ValidateDocument(doc).Valid || c.app == nil {
 		return r, nil
 	}
+	app, _, err := c.pendingApp(ctx, doc)
+	if err != nil {
+		return ir.Result{}, err
+	}
 	var resolveErr error
-	a := a11ydoc.Validate(doc, c.app, func(ref map[string]any) (map[string]any, bool) {
+	a := a11ydoc.Validate(doc, app, func(ref map[string]any) (map[string]any, bool) {
 		child, ok, err := c.resolve(ctx, ref)
 		if err != nil {
 			resolveErr = err

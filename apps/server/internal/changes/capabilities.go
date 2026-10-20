@@ -41,6 +41,9 @@ func (s *session) validatePending(target uuid.UUID, before, after map[string]any
 	if s.actor.System {
 		return s.validateSystem(target, oldNodes, nodes)
 	}
+	if err := s.validatePlaceholders(target, oldNodes, nodes); err != nil {
+		return err
+	}
 	for id, raw := range nodes {
 		node, _ := raw.(map[string]any)
 		on, _ := node["on"].(map[string]any)
@@ -82,6 +85,49 @@ func (s *session) validatePending(target uuid.UUID, before, after map[string]any
 	return nil
 }
 
+// validatePlaceholders: a component placeholder (STU-357) appears only at a
+// live node anchor of an active request of that key; its marker is removed
+// only once the request is fulfilled (STU-370). Removing the node is ordinary
+// editing (STU-364).
+func (s *session) validatePlaceholders(target uuid.UUID, before, after map[string]any) error {
+	for id, raw := range after {
+		node, _ := raw.(map[string]any)
+		marker, _ := node["pending"].(string)
+		old, _ := before[id].(map[string]any)
+		previous, _ := old["pending"].(string)
+		if marker == previous {
+			continue
+		}
+		check, active := marker, true
+		if marker == "" {
+			check, active = previous, false
+		}
+		a, err := s.anchorAt(target, check, id, "")
+		if err != nil {
+			return err
+		}
+		live := a.RequestStatus == "submitted" || a.RequestStatus == "accepted" || a.RequestStatus == "in_progress" || a.RequestStatus == "pr_open"
+		if a.RequestKey != node["type"] || active != live || !active && a.RequestStatus != "fulfilled" {
+			return pendingError()
+		}
+	}
+	return nil
+}
+
+// anchorAt finds the live anchor of the marker at this place; a missing one
+// is a refused marker.
+func (s *session) anchorAt(target uuid.UUID, marker, node, event string) (store.AnchorAtRow, error) {
+	requestID, err := uuid.Parse(marker)
+	if err != nil {
+		return store.AnchorAtRow{}, pendingError()
+	}
+	a, err := s.q.AnchorAt(s.ctx, store.AnchorAtParams{ProjectID: s.actor.ProjectID, RequestID: requestID, ChangesetID: s.cs.ID, DocumentID: target, NodeID: node, Event: event})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return a, pendingError()
+	}
+	return a, err
+}
+
 func systemForbidden() error {
 	return commandbus.NewError(http.StatusForbidden, "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN", "Операция системы запрещена", "cms-system только заменяет заглушку выполненного запроса")
 }
@@ -94,6 +140,21 @@ func (s *session) validateSystem(target uuid.UUID, before, after map[string]any)
 		return systemForbidden()
 	}
 	for id, raw := range after {
+		node, _ := raw.(map[string]any)
+		old, _ := before[id].(map[string]any)
+		if marker, previous := node["pending"], old["pending"]; marker != previous {
+			request, _ := previous.(string)
+			a, err := s.anchorAt(target, request, id, "")
+			if marker != nil || err != nil && errors.As(err, new(*commandbus.Error)) {
+				return systemForbidden()
+			}
+			if err != nil {
+				return err
+			}
+			if a.RequestStatus != "fulfilled" || a.RequestKey != node["type"] {
+				return systemForbidden()
+			}
+		}
 		on, _ := raw.(map[string]any)["on"].(map[string]any)
 		oldOn, _ := before[id].(map[string]any)["on"].(map[string]any)
 		if len(on) != len(oldOn) {
@@ -146,7 +207,7 @@ func withoutEvents(nodes map[string]any) map[string]any {
 		node, _ := raw.(map[string]any)
 		copy := make(map[string]any, len(node))
 		for k, v := range node {
-			if k != "on" {
+			if k != "on" && k != "pending" {
 				copy[k] = v
 			}
 		}

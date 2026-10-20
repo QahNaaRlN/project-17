@@ -206,6 +206,9 @@ func Validate(doc map[string]any, app any, o Options) Result {
 		if p.mode < Code && pending(n["on"]) {
 			c.error("POLICY_PENDING_REQUIRES_CODE", ir.Pointer("nodes", id, "on"), id, nil)
 		}
+		if _, placeholder := n["pending"].(string); placeholder && p.mode < Code {
+			c.error("POLICY_PENDING_REQUIRES_CODE", ir.Pointer("nodes", id, "pending"), id, nil)
+		}
 		if c.app != nil {
 			c.design(n, typ, parent, p, id)
 		}

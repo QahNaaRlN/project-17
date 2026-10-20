@@ -1,6 +1,7 @@
 # Studio: запросы недостающих компонентов
 
-Статус: **одобрена пользователем 2026-10-20; решения §11 приняты; код не начат**.
+Статус: **одобрена пользователем 2026-10-20; решения §11 приняты; реализована в
+`feature/capability-component`** ([реализация и проверка](studio-capability-component-acceptance.md)).
 Дата: 2026-10-20. Требования: STU-355…374.
 Основа: `origin/dev` на `4a76e82` (после [PR #71](https://github.com/QahNaaRlN/project-17/pull/71)).
 Продолжает [Missing Capability](studio-missing-capability.md),

@@ -26,9 +26,16 @@ type githubFixture struct {
 }
 
 func githubSetup(t *testing.T) githubFixture {
+	return githubSetupWith(t, func(f *fixture) {
+		f.create()
+		must(f.e, f.a, "submit-capability-request", Action{ID: f.request.ID, ExpectedRevision: 1, ExpectedSeq: 1, ExpectedManifestHash: f.hash})
+	})
+}
+
+// githubSetupWith links the request that submit creates and submits.
+func githubSetupWith(t *testing.T, submit func(*fixture)) githubFixture {
 	f := setup(t)
-	f.create()
-	must(f.e, f.a, "submit-capability-request", Action{ID: f.request.ID, ExpectedRevision: 1, ExpectedSeq: 1, ExpectedManifestHash: f.hash})
+	submit(&f)
 	admin := f.e.Human("github-admin", auth.ProjectAdmin)
 	catalog, e := gh.Parse(raw(object{"repositories": []any{object{"configId": "repo", "projectId": f.a.ProjectID, "environment": "staging", "repositoryId": "42", "owner": "owner", "name": "repo", "baseBranch": "dev", "credentialId": "key", "token": "private-token", "requiredChecks": []any{object{"source": "check_run", "name": "Check", "target": "head", "appId": "7"}}}}}))
 	if e != nil {

@@ -1,4 +1,4 @@
-// Build a temporary application fixture without store.favorite, then restore the
+// Build a temporary application fixture without store.favorite and PromoBanner, then restore the
 // original source immediately. The resulting dist/.cms files form the initial
 // deployment for studio-live-capabilities.mjs; no fixture source is committed.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -13,8 +13,15 @@ const original = await readFile(registry, "utf8");
 const block = original.match(/ {2}actions: \[[\s\S]*?\n {2}\],\n {2}dataSources:/);
 if (!block || !block[0].includes('name: "store.favorite"'))
   throw Error("Unexpected fixture registry");
+// STU-374: the requested component is absent from the baseline too.
+const promo = original.match(
+  / {4}defineReactComponent\(\{\n {6}name: "PromoBanner",[\s\S]*?\n {4}\}\),\n/,
+);
+if (!promo) throw Error("Unexpected fixture registry");
 const fixture = original
   .replace(block[0], "  actions: [],\n  dataSources:")
+  .replace(promo[0], "")
+  .replace("About, Promo }", "About }")
   .replace("  defineAction,\n", "")
   .replace(
     "{ favoriteProduct, loadProducts, loadCollectionProducts }",

@@ -14,6 +14,8 @@ export interface PlanNode {
   className: string;
   children: PlanNode[];
   events?: PlannedEvents;
+  /** Заглушка компонента Missing Capability (STU-366): id запроса; код приложения не вызывается. */
+  pending?: string;
 }
 export interface PlanDiagnostic {
   code: string;
@@ -229,6 +231,21 @@ export function preparePage(document: IrDocument, options: PlanOptions = {}): Re
           { slots, references: [...frame.references, ref], ancestors: [] },
           depth + 1,
         );
+      }
+      if (typeof node.pending === "string") {
+        diagnostics.push({ code: "CMS_COMPONENT_PENDING_CAPABILITY", nodeId: id });
+        if (node.slots && Object.keys(node.slots).length) return reject("CMS_SLOT_UNSUPPORTED", id);
+        return [
+          {
+            id,
+            key: `${prefix}${id}`,
+            type: node.type,
+            props: {},
+            className: "",
+            children: children(node.children ?? []),
+            pending: node.pending,
+          },
+        ];
       }
       const native =
         options.natives && Object.hasOwn(options.natives, node.type)

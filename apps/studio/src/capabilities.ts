@@ -11,12 +11,20 @@ export const capabilityCommands = [
 export type CapabilityCommand = (typeof capabilityCommands)[number];
 export interface CapabilityRequest {
   id: string;
-  kind: "action";
+  kind: "action" | "component";
   environment: string;
   key: string;
   title: string;
   description: string;
-  proposedContract: { args: Fields };
+  proposedContract: {
+    args?: Fields;
+    props?: Fields;
+    container?: boolean;
+    slots?: Record<string, { max?: number }>;
+  };
+  /** Component requests: where the placeholder was inserted (STU-359). */
+  placement?: { parentId: string; slot?: string; index: number };
+  initialProps?: Record<string, unknown>;
   acceptance: string[];
   status: string;
   revision: number;
@@ -59,7 +67,7 @@ export function capability(value: CapabilityRequest, uncertain = false): Capabil
   if (
     !value ||
     !uuid.test(value.id) ||
-    value.kind !== "action" ||
+    !["action", "component"].includes(value.kind) ||
     typeof value.title !== "string" ||
     typeof value.description !== "string" ||
     typeof value.key !== "string" ||
@@ -79,7 +87,7 @@ export function capability(value: CapabilityRequest, uncertain = false): Capabil
       "rejected",
       "cancelled",
     ].includes(value.status) ||
-    !value.proposedContract?.args ||
+    !(value.kind === "component" ? value.proposedContract?.props : value.proposedContract?.args) ||
     !Array.isArray(value.acceptance) ||
     value.acceptance.some((x) => typeof x !== "string") ||
     !Array.isArray(value.externalRefs) ||
