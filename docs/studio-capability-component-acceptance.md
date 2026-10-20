@@ -82,7 +82,7 @@ CMS/PostgreSQL 16/River, подписанный локальный OIDC с Alice
   preview/<ref>, узкое правило `cms-system`, проверки IR и CODE-зоны, агентский
   черновик; conformance-фикстуры IR и golden-диагностики.
 - CI-эквивалент в Linux-контейнере: `go test -race` с PostgreSQL и порогом покрытия
-  (`assets`/`imagedelivery` в контейнере без S3/imgproxy не запускаются; в CI запускаются).
+  (`assets`/`imagedelivery` в контейнере без S3/imgproxy не запускаются; в CI запускаются)); покрытие Go 95.10% при пороге 95% (цель STU-373 ≥ 95.3% по CI не достигнута — оставшиеся пропуски в основном ветки ошибок хранилища).
 - TS: рендер заглушки в runtime/React, мастер компонента, панель «Выполнение»
   компонента, ESLint, typecheck, Prettier.
 
