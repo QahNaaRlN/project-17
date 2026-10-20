@@ -103,6 +103,8 @@ func TestSTU390SystemRuleForDataAndTokens(t *testing.T) {
 	other := object{"key": "recommended", "use": object{"source": "store.recommendations", "params": object{"limit": object{"lit": 9}}}}
 	expectCode(t, try(d, "document.setDataSource", other), "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN")
 	expectCode(t, try(d, "document.setDataSource", object{"key": "recommended", "use": nil}), "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN")
+	expectCode(t, try(d, "document.setDataSource", object{"key": "extra", "use": object{"source": "store.recommendations", "params": object{"limit": object{"lit": 4}}}}), "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN")
+	expectCode(t, try(d, "node.setDesign", object{"nodeId": "n_box", "set": object{"padding": "sm"}}), "CAPABILITY_SYSTEM_OPERATION_FORBIDDEN")
 	if e := try(d, "document.setDataSource", drop); e != nil {
 		t.Fatal("STU-390 the exact marker drop", e)
 	}
