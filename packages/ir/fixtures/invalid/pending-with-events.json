@@ -14,9 +14,7 @@
       "n_root": {
         "id": "n_root",
         "type": "Box",
-        "children": [
-          "n_promo"
-        ],
+        "children": ["n_promo"],
         "zone": {
           "id": "lab",
           "mode": "CODE"

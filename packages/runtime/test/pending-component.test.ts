@@ -37,7 +37,10 @@ it("STU-366: a component placeholder plans no application code and keeps its chi
   expect(promo).toMatchObject({ id: "n_promo", type: "PromoBanner", pending: request, props: {} });
   expect(promo?.children.map((c) => c.type)).toEqual(["Button"]);
   expect(called).toBe(false);
-  expect(plan.diagnostics).toContainEqual({ code: "CMS_COMPONENT_PENDING_CAPABILITY", nodeId: "n_promo" });
+  expect(plan.diagnostics).toContainEqual({
+    code: "CMS_COMPONENT_PENDING_CAPABILITY",
+    nodeId: "n_promo",
+  });
 });
 
 it("STU-366: slots of a placeholder are not supported, like native slots", () => {

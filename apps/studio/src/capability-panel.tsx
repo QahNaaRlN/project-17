@@ -35,7 +35,11 @@ export const newArg = (): Arg => ({
   min: "",
   max: "",
 });
-export const codeMode = (doc: IrDocument, id: string, policy: Session["review"]["capabilityPolicy"]) => {
+export const codeMode = (
+  doc: IrDocument,
+  id: string,
+  policy: Session["review"]["capabilityPolicy"],
+) => {
   if (!policy) return false;
   const levels = [doc.policy ?? {}];
   const nodes = [];
@@ -177,7 +181,9 @@ export function DraftFields({
               {prop ? text("Свойство", "Property") : text("Аргумент", "Argument")} {i + 1}
             </legend>
             <label>
-              {prop ? text("Имя свойства", "Property name") : text("Имя аргумента", "Argument name")}
+              {prop
+                ? text("Имя свойства", "Property name")
+                : text("Имя аргумента", "Argument name")}
               <input
                 required
                 pattern="[a-z][a-zA-Z0-9]*"
@@ -186,7 +192,9 @@ export function DraftFields({
               />
             </label>
             <label>
-              {prop ? text("Тип свойства", "Property type") : text("Тип аргумента", "Argument type")}
+              {prop
+                ? text("Тип свойства", "Property type")
+                : text("Тип аргумента", "Argument type")}
               <select
                 value={arg.type}
                 onChange={(e) => change({ type: e.target.value as Arg["type"] })}
@@ -268,7 +276,9 @@ export function DraftFields({
         disabled={args.length >= 32}
         onClick={() => setArgs([...args, newArg()])}
       >
-        {prop ? text("Добавить свойство", "Add property") : text("Добавить аргумент", "Add argument")}
+        {prop
+          ? text("Добавить свойство", "Add property")
+          : text("Добавить аргумент", "Add argument")}
       </button>
     </fieldset>
   );
@@ -960,10 +970,7 @@ export function CapabilityCard({
         matches &&
         component &&
         session.manifest.components?.[request.key] && (
-          <button
-            disabled={locked}
-            onClick={() => void act("resolve-capability-request")}
-          >
+          <button disabled={locked} onClick={() => void act("resolve-capability-request")}>
             {text("Применить доступный компонент", "Apply available component")}
           </button>
         )}

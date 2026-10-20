@@ -6,9 +6,7 @@
     "n_root": {
       "id": "n_root",
       "type": "Box",
-      "children": [
-        "n_promo"
-      ],
+      "children": ["n_promo"],
       "zone": {
         "id": "lab",
         "mode": "CODE"
@@ -24,9 +22,7 @@
         }
       },
       "slots": {
-        "actions": [
-          "n_btn"
-        ]
+        "actions": ["n_btn"]
       }
     },
     "n_btn": {

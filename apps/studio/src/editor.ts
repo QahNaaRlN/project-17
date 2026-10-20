@@ -15,7 +15,12 @@ import {
 import { applyOperations } from "./operations.js";
 import { scopeProblems } from "./data-sources.js";
 import type { Component } from "@cms/manifest";
-import { componentRefs, placeholderRefs, registerComponents, registerPlaceholders } from "./composed.js";
+import {
+  componentRefs,
+  placeholderRefs,
+  registerComponents,
+  registerPlaceholders,
+} from "./composed.js";
 import { location, type Place } from "./structure.js";
 import type { ContentOperation } from "./types.js";
 /** A PR preview environment shown read-only (STU-329/330). */

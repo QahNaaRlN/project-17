@@ -158,8 +158,10 @@ it("STU-372: a placeholder shows its badge, request and proposed props", async (
   expect(document.body.textContent).toContain("в n_root");
   await vi.waitFor(() =>
     expect(
-      nodeContract(editor.store.getState().document!.nodes.n_promo, editor.store.getState().session!.manifest)
-        ?.props,
+      nodeContract(
+        editor.store.getState().document!.nodes.n_promo,
+        editor.store.getState().session!.manifest,
+      )?.props,
     ).toHaveProperty("title"),
   );
 });

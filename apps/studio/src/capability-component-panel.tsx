@@ -72,10 +72,13 @@ export function ComponentRequestComposer({
     !!parent?.container &&
     !!session.review.capabilityPolicy &&
     codeMode(doc, node.id, session.review.capabilityPolicy) &&
-    (!rights || ["capability.request", "design.read", "design.compose"].every((r) => rights.includes(r)));
+    (!rights ||
+      ["capability.request", "design.read", "design.compose"].every((r) => rights.includes(r)));
   const blocked =
     state.status !== "ready" ||
-    Object.entries(state.dirtyFields).some(([k, v]) => v && k !== "property-capability-component") ||
+    Object.entries(state.dirtyFields).some(
+      ([k, v]) => v && k !== "property-capability-component",
+    ) ||
     session.changeset.state !== "open";
   const busy = command.pending || command.uncertain;
   const close = () => {
@@ -235,7 +238,17 @@ export function ComponentRequestComposer({
                 {text("Похожие компоненты:", "Similar components:")} {similar.join(", ") || "—"}
               </p>
               <DraftFields
-                {...{ title, description, acceptance, args, setTitle, setDescription, setAcceptance, setArgs, ru }}
+                {...{
+                  title,
+                  description,
+                  acceptance,
+                  args,
+                  setTitle,
+                  setDescription,
+                  setAcceptance,
+                  setArgs,
+                  ru,
+                }}
                 schemas={Object.keys(session.manifest.schemas ?? {})}
                 disabled={busy}
                 noun="property"
@@ -311,7 +324,11 @@ export function ComponentRequestComposer({
                 {text("Сохранить черновик запроса", "Save request draft")}
               </button>
               {command.uncertain && (
-                <button type="button" disabled={command.pending} onClick={() => void command.send()}>
+                <button
+                  type="button"
+                  disabled={command.pending}
+                  onClick={() => void command.send()}
+                >
                   {text("Повторить тот же запрос", "Retry exact request")}
                 </button>
               )}
