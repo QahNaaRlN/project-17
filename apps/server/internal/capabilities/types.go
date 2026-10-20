@@ -102,14 +102,19 @@ func validDraft(d Draft) error {
 		return e
 	}
 	contract := parse(d.ProposedContract)
-	if validActionContract(contract) != nil && validComponentContract(contract) != nil {
+	if validActionContract(contract) != nil && validComponentContract(contract) != nil && validDataSourceContract(contract) != nil && validTokenContract(contract) != nil {
 		return fail("CAPABILITY_CONTRACT_INVALID")
 	}
 	return nil
 }
 func validContract(kind string, raw json.RawMessage) error {
-	if kind == KindComponent {
+	switch kind {
+	case KindComponent:
 		return validComponentContract(parse(raw))
+	case KindDataSource:
+		return validDataSourceContract(parse(raw))
+	case KindToken:
+		return validTokenContract(parse(raw))
 	}
 	return validActionContract(parse(raw))
 }

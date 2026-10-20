@@ -13,6 +13,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/jobs"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -297,6 +298,7 @@ type pendingReplacement struct {
 	anchor  store.CapabilityRequestAnchor
 	call    object
 	refused string // anchor state when the group refuses this replacement
+	request store.CapabilityRequest
 }
 
 func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid.UUID) (map[uuid.UUID]string, error) {
@@ -340,6 +342,7 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 		return nil, tx.Commit(ctx)
 	}
 	var replacements []pendingReplacement
+	working := map[uuid.UUID]object{}
 	var operations []changes.OperationInput
 	for _, a := range anchors {
 		r, e := q.GetCapabilityRequest(ctx, store.GetCapabilityRequestParams{ProjectID: project, ID: a.RequestID})
@@ -383,11 +386,21 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 		target := r
 		target.NodeID, target.Event = a.NodeID, a.Event
 		op, refused := behavior(target, []any{call}), "invalid_args"
-		if r.Kind == KindComponent {
+		switch r.Kind {
+		case KindComponent:
 			op, refused = clearMarker(a.NodeID), "invalid_props" // STU-368/370
+		case KindDataSource, KindToken:
+			// Later replacements in the same document see the earlier ones (STU-390).
+			if working[a.DocumentID] == nil {
+				working[a.DocumentID] = parse(doc.Body)
+			}
+			op, refused = dataTokenClear(target, working[a.DocumentID]), "invalid_props"
+			if _, e := ops.Apply(working[a.DocumentID], op, nil); e != nil {
+				return nil, e
+			}
 		}
 		operations = append(operations, changes.OperationInput{Type: op.Type, Target: &a.DocumentID, Payload: op.Payload})
-		replacements = append(replacements, pendingReplacement{anchor: a, call: call, refused: refused})
+		replacements = append(replacements, pendingReplacement{anchor: a, call: call, refused: refused, request: target})
 	}
 	if len(operations) == 0 {
 		return nil, tx.Commit(ctx)
@@ -412,7 +425,7 @@ func (s *FulfillmentService) replaceOnce(ctx context.Context, project, csID uuid
 		for _, list := range diagnostics {
 			for _, d := range list {
 				for _, p := range replacements {
-					if d.NodeID == p.anchor.NodeID && (p.refused == "invalid_props" && d.Severity == ir.SeverityError || strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
+					if p.refused == "invalid_props" && placeErrors(p.request, p.anchor.NodeID, p.anchor.Event, map[string]map[string][]ir.Diagnostic{"": {"": {d}}}) || d.NodeID == p.anchor.NodeID && p.refused == "invalid_args" && (strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
 						bad[p.anchor.ID] = p.refused
 					}
 				}

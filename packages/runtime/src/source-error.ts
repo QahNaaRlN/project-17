@@ -2,7 +2,7 @@ import type { BindingScope } from "@cms/core";
 const failures = new WeakMap<object, string>();
 const safeCode = (code: unknown) =>
   typeof code === "string" &&
-  /^CMS_SOURCE_(UNKNOWN|TIMEOUT|ABORTED|TIMEOUT_INVALID|CURSOR_INVALID|PARAMS_INVALID|RESULT_INVALID|KEY_INVALID|FAILED)$/.test(
+  /^CMS_SOURCE_(PENDING|UNKNOWN|TIMEOUT|ABORTED|TIMEOUT_INVALID|CURSOR_INVALID|PARAMS_INVALID|RESULT_INVALID|KEY_INVALID|FAILED)$/.test(
     code,
   )
     ? code

@@ -89,7 +89,7 @@ func loadContext(ctx context.Context, q *store.Queries, a auth.Actor, r store.Ca
 	if version.Deleted {
 		return s, fail("CAPABILITY_ANCHOR_CHANGED")
 	}
-	if r.Kind == KindComponent {
+	if r.Kind != KindAction {
 		if s.doc["kind"] != "page" {
 			return s, fail("CAPABILITY_ANCHOR_CHANGED")
 		}
@@ -97,7 +97,10 @@ func loadContext(ctx context.Context, q *store.Queries, a auth.Actor, r store.Ca
 		if e != nil {
 			return s, e
 		}
-		return s, componentContext(s, r, parse(settings))
+		if r.Kind == KindComponent {
+			return s, componentContext(s, r, parse(settings))
+		}
+		return s, dataTokenContext(s, r, parse(settings))
 	}
 	node := obj(obj(s.doc["nodes"])[r.NodeID])
 	if s.doc["kind"] != "page" || node == nil {
@@ -148,12 +151,15 @@ func exactPending(r store.CapabilityRequest, doc object) bool {
 	if r.Kind == KindComponent {
 		return exactPlaceholder(r, doc)
 	}
+	if r.Kind == KindDataSource || r.Kind == KindToken {
+		return dataTokenPending(r, doc)
+	}
 	a := handlerChain(obj(obj(obj(doc["nodes"])[r.NodeID])["on"])[r.Event])
 	return len(a) == 1 && len(obj(a[0])) == 1 && obj(a[0])["action"] == "pending:"+r.ID.String()
 }
 func projectPending(r store.CapabilityRequest, s snapshot) (snapshot, error) {
 	s.doc = ops.Clone(s.doc)
-	_, e := ops.Apply(s.doc, marker(r), nil)
+	_, e := ops.Apply(s.doc, marker(r, s.doc), nil)
 	if e != nil {
 		return s, e
 	}
@@ -271,6 +277,9 @@ func buildPack(ctx context.Context, q *store.Queries, r store.CapabilityRequest,
 	start := r.NodeID
 	if r.Kind == KindComponent && nodes[start] == nil {
 		start = placementOf(r).ParentID // a draft placeholder is not inserted yet
+	}
+	if r.Kind == KindDataSource {
+		start, _ = s.doc["root"].(string) // a data source belongs to the page
 	}
 	for id := start; id != "" && !seen[id]; id = parents[id] {
 		seen[id] = true

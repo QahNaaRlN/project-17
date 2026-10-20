@@ -14,6 +14,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/bindingdoc"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/ops"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -147,8 +148,13 @@ func matchPreview(ctx context.Context, q *store.Queries, r store.CapabilityReque
 
 // contractCompatible repeats the resolve rule (STU-268) against another manifest.
 func contractCompatible(r store.CapabilityRequest, action object) bool {
-	if r.Kind == KindComponent {
+	switch r.Kind {
+	case KindComponent:
 		return componentCompatible(r, action)
+	case KindDataSource:
+		return dataSourceCompatible(r, action)
+	case KindToken:
+		return action != nil
 	}
 	proposed := obj(parse(r.ProposedContract)["args"])
 	args := obj(action["args"])
@@ -187,6 +193,14 @@ func substitute(doc object, r store.CapabilityRequest, call object) bool {
 		delete(obj(obj(doc["nodes"])[r.NodeID]), "pending")
 		return true
 	}
+	if r.Kind == KindDataSource || r.Kind == KindToken {
+		// STU-388: the real source or token, in this response only.
+		if !dataTokenPending(r, doc) {
+			return false
+		}
+		_, e := ops.Apply(doc, dataTokenClear(r, doc), nil)
+		return e == nil
+	}
 	on := obj(obj(obj(doc["nodes"])[r.NodeID])["on"])
 	if on == nil || !exactPending(r, doc) {
 		return false
@@ -215,7 +229,7 @@ func previewCall(ctx context.Context, q *store.Queries, r store.CapabilityReques
 		return false, e
 	}
 	for _, d := range problems[r.DocumentID.String()] {
-		if d.NodeID == r.NodeID && (r.Kind == KindComponent && d.Severity == ir.SeverityError || strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
+		if r.Kind != KindAction && placeErrors(r, r.NodeID, r.Event, map[string]map[string][]ir.Diagnostic{"": {"": {d}}}) || r.Kind == KindAction && d.NodeID == r.NodeID && (strings.Contains(d.Pointer, "/on/") || strings.HasPrefix(string(d.Code), "ACTION_")) {
 			return false, nil
 		}
 	}
@@ -402,10 +416,14 @@ func ProjectPreview(ctx context.Context, q *store.Queries, project, environment 
 	if e != nil {
 		return nil, e
 	}
-	if env.SourcePullNumber == nil || env.ArchivedAt != nil {
-		return body, nil
-	}
 	doc := parse(body)
+	if env.SourcePullNumber == nil || env.ArchivedAt != nil {
+		changed, e := proposedTokens(ctx, q, project, doc)
+		if e != nil || !changed {
+			return body, e
+		}
+		return raw(doc), nil
+	}
 	changed := false
 	now := time.Now()
 	for _, id := range pendingRequests(doc) {
@@ -441,7 +459,12 @@ func ProjectPreview(ctx context.Context, q *store.Queries, project, environment 
 			changed = true
 		}
 	}
-	if !changed {
+	// Requests without a ready preview keep their proposed token values (STU-387).
+	tokens, e := proposedTokens(ctx, q, project, doc)
+	if e != nil {
+		return nil, e
+	}
+	if !changed && !tokens {
 		return body, nil
 	}
 	return raw(doc), nil
@@ -453,7 +476,23 @@ func pendingRequests(doc object) []uuid.UUID {
 	seen := map[uuid.UUID]bool{}
 	out := []uuid.UUID{}
 	nodes := obj(doc["nodes"])
+	add := func(marker string) {
+		if id, err := uuid.Parse(marker); err == nil && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for _, key := range keys(obj(doc["dataSources"])) {
+		if marker, ok := obj(obj(doc["dataSources"])[key])["pending"].(string); ok {
+			add(marker)
+		}
+	}
 	for _, nodeID := range keys(nodes) {
+		for _, leaf := range sortedLeaves(obj(obj(nodes[nodeID])["design"])) {
+			if marker, ok := strings.CutPrefix(leaf, "pending:"); ok {
+				add(marker)
+			}
+		}
 		if marker, ok := obj(nodes[nodeID])["pending"].(string); ok {
 			if id, err := uuid.Parse(marker); err == nil && !seen[id] {
 				seen[id] = true

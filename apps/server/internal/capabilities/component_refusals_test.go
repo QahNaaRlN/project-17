@@ -222,7 +222,7 @@ func TestSTU356_368ComponentRules(t *testing.T) {
 	}
 	r.Placement = raw(Placement{ParentID: "n_card", Slot: "free", Index: 1})
 	r.NodeID = "n_promo"
-	if payload := parse(marker(r).Payload); payload["slot"] != "free" {
+	if payload := parse(marker(r, nil).Payload); payload["slot"] != "free" {
 		t.Error("marker slot", payload)
 	}
 	if a := anchorContext(r, snapshot{}, nil, nil, false); obj(a["placement"])["slot"] != "free" {

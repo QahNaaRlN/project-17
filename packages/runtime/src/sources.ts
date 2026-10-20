@@ -62,6 +62,8 @@ export async function loadSource(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancel: (() => void) | undefined;
   try {
+    // STU-387: a data source placeholder is never loaded.
+    if (use.pending !== undefined) throw new Error("CMS_SOURCE_PENDING");
     const source = sources.find((item) => item.name === use.source);
     if (!source) throw new Error("CMS_SOURCE_UNKNOWN");
     const timeout = options.timeoutMs ?? 3000;
@@ -106,6 +108,7 @@ export async function loadSource(
     }
   } catch (error) {
     const codes = [
+      "CMS_SOURCE_PENDING",
       "CMS_SOURCE_UNKNOWN",
       "CMS_SOURCE_TIMEOUT",
       "CMS_SOURCE_ABORTED",
