@@ -96,6 +96,7 @@ type Operation struct {
 	Seq          int32              `json:"seq"`
 	ActorID      uuid.UUID          `json:"actorId"`
 	Source       string             `json:"source"`
+	OnBehalfOf   *uuid.UUID         `json:"onBehalfOf,omitempty"` // делегат операции агента (AGT-022)
 	Target       uuid.UUID          `json:"-"`
 	SchemaTarget *schemaflow.Target `json:"-"`
 	Type         string             `json:"type"`
@@ -122,7 +123,7 @@ func ListOperations(ctx context.Context, q *store.Queries, projectID, changesetI
 	}
 	out := make([]Operation, len(rows))
 	for i, r := range rows {
-		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, Status: r.Status,
+		out[i] = Operation{ID: r.ID, Seq: r.Seq, ActorID: r.ActorID, Source: r.Source, OnBehalfOf: r.OnBehalfOf, Status: r.Status,
 			Type: r.Type, Payload: r.Payload, Before: r.Before, After: r.After, Reason: r.Reason,
 			ClientOpID: r.ClientOpID, UndoOf: r.UndoOf, RedoOf: r.RedoOf, BatchID: r.BatchID, CreatedAt: r.CreatedAt}
 		if r.TargetObjectID != nil {

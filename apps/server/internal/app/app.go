@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/agents"
@@ -232,7 +233,12 @@ func bootstrap(ctx context.Context, cfg config.Config, args []string, stdout io.
 	slug := fs.String("slug", "", "идентификатор проекта (латиница, цифры, '-')")
 	name := fs.String("name", "", "название проекта")
 	ttl := fs.Duration("token-ttl", 90*24*time.Hour, "срок действия сервисного токена")
+	maxMode := fs.String("max-mode", "", "предельный режим зон проекта: STRICT, SYSTEM, FREE или CODE (по умолчанию SYSTEM)")
 	if err := fs.Parse(args); err != nil {
+		return ErrUsage
+	}
+	if !slices.Contains([]string{"", "STRICT", "SYSTEM", "FREE", "CODE"}, *maxMode) {
+		fs.Usage()
 		return ErrUsage
 	}
 	if *slug == "" || *name == "" {
@@ -247,6 +253,12 @@ func bootstrap(ctx context.Context, cfg config.Config, args []string, stdout io.
 	res, err := projects.Bootstrap(ctx, pool, *slug, *name, *ttl)
 	if err != nil {
 		return err
+	}
+	if *maxMode != "" {
+		// The zone ceiling is project configuration; zones themselves stay a command (design.zones.manage).
+		if _, err = pool.Exec(ctx, `UPDATE projects SET settings = settings || jsonb_build_object('maxMode', $2::text) WHERE id = $1`, res.ProjectID, *maxMode); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(stdout, "Проект %s создан (id %s).\nСервисный токен (показывается один раз, действует до %s):\n%s\n",
 		*slug, res.ProjectID, res.ExpiresAt.Format(time.RFC3339), res.Token)

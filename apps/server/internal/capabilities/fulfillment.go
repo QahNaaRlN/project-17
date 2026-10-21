@@ -422,7 +422,10 @@ func systemActor(ctx context.Context, q *store.Queries, project uuid.UUID, owner
 	if e != nil {
 		return auth.Actor{}, e
 	}
-	return auth.Actor{ID: row.ID, Kind: auth.ActorService, DisplayName: row.DisplayName, ProjectID: project, OnBehalfOf: &owner, System: true, Rights: auth.RightSet{auth.BehaviorUse: true, auth.DesignRead: true, auth.DesignCompose: true}}, nil
+	return auth.Actor{ID: row.ID, Kind: auth.ActorService, DisplayName: row.DisplayName, ProjectID: project, OnBehalfOf: &owner, System: true,
+		// content.read: replacing a handler on a page with primary content re-validates
+		// its bindings, as the stage 5 rights of cms-system already allow (STU-345).
+		Rights: auth.RightSet{auth.BehaviorUse: true, auth.DesignRead: true, auth.DesignCompose: true, auth.ContentRead: true}}, nil
 }
 
 // mergedCheck queues a re-evaluation when a verified observation reports the

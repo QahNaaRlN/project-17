@@ -109,3 +109,31 @@ it("hashes deterministic atoms including breakpoints", () => {
   expect(atom("padding:3px").className).not.toBe(first.className);
   expect(atom("padding:2px", 640).css).toContain("@media(min-width:640px)");
 });
+it("STU-448: compiles Grid tracks of the design system and refuses others", () => {
+  expect(designDeclarations("columns", 3, {})).toBe(
+    "grid-template-columns:repeat(3,minmax(0,1fr))",
+  );
+  expect(designDeclarations("columns", ["3fr", "2fr"], {})).toBe(
+    "grid-template-columns:minmax(0,3fr) minmax(0,2fr)",
+  );
+  expect(designDeclarations("rows", ["auto", "1fr"], {})).toBe(
+    "grid-template-rows:auto minmax(0,1fr)",
+  );
+  for (const value of [
+    0,
+    13,
+    1.5,
+    [],
+    ["13fr"],
+    ["0fr"],
+    ["10px"],
+    [1],
+    { raw: "10px" },
+    Array(13).fill("1fr"),
+  ])
+    expect(() => designDeclarations("columns", value, {})).toThrow("CMS_DESIGN_INVALID");
+  expect(responsive({ base: ["1fr"], md: ["3fr", "2fr"] }, { breakpoints: { md: 768 } })).toEqual([
+    [["1fr"], undefined],
+    [["3fr", "2fr"], 768],
+  ]);
+});

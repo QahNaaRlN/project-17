@@ -363,6 +363,11 @@ func TestSTU345SystemActorIsNarrow(t *testing.T) {
 	if e != nil || !system.System {
 		t.Fatal(system, e)
 	}
+	// STU-453: a page with primary content is re-validated on replacement; the
+	// system reads content but never writes or publishes it.
+	if !system.Rights.Has(auth.ContentRead) || system.Rights.Has(auth.ContentWrite) || system.Rights.Has(auth.ContentPublish) {
+		t.Fatal("system rights", system.Rights)
+	}
 	for _, op := range []changes.OperationInput{
 		{Type: "node.setProps", Target: &f.doc, Payload: raw(object{"nodeId": "n_root", "set": object{"label": "x"}})},
 		{Type: "node.setBehavior", Target: &f.doc, Payload: raw(object{"nodeId": "n_root", "event": "click", "handlers": []any{object{"action": "store.favorite"}}})},
