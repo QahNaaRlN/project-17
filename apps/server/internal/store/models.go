@@ -30,6 +30,16 @@ type AgentDefinition struct {
 	Description string    `json:"description"`
 }
 
+type AgentPolicyVersion struct {
+	ProjectID uuid.UUID  `json:"projectId"`
+	Version   int32      `json:"version"`
+	Body      []byte     `json:"body"`
+	Hash      string     `json:"hash"`
+	AuthorID  *uuid.UUID `json:"authorId"`
+	Reason    string     `json:"reason"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
 type AgentRun struct {
 	ID          uuid.UUID `json:"id"`
 	ProjectID   uuid.UUID `json:"projectId"`
@@ -439,6 +449,7 @@ type Changeset struct {
 	SubmittedAt    *time.Time `json:"submittedAt"`
 	MergedAt       *time.Time `json:"mergedAt"`
 	RedoBarrierSeq int32      `json:"redoBarrierSeq"`
+	PolicyApproval []string   `json:"policyApproval"`
 }
 
 type ChangesetManifestCandidate struct {

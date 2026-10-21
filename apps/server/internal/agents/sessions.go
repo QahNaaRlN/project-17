@@ -14,7 +14,6 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
-	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -107,26 +106,8 @@ func (s *Service) Register(bus *commandbus.Bus) {
 			_, err = tx.Exec(ctx, `UPDATE agent_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE id=$1`, session.ID)
 			return map[string]any{"id": session.ID, "revoked": true}, err
 		}})
-	commandbus.Register(bus, commandbus.Command[auth.AgentPolicy, auth.AgentPolicy]{Name: "set-agent-policy", Right: auth.ProjectAdmin,
-		Validate: func(p auth.AgentPolicy) error {
-			if len(p.Allow) > len(auth.AllRights) || len(p.Deny) > len(auth.AllRights) {
-				return commandbus.Validation(map[string]string{"allow": "known rights only"})
-			}
-			for _, r := range append(append([]string{}, p.Allow...), p.Deny...) {
-				if !auth.EffectiveRights([]string{r}, []string{auth.ScopeAll}).Has(auth.Right(r)) {
-					return commandbus.Validation(map[string]string{"allow": "unknown right"})
-				}
-			}
-			return nil
-		},
-		Handle: func(ctx context.Context, tx pgx.Tx, a auth.Actor, p auth.AgentPolicy) (auth.AgentPolicy, error) {
-			if err := validation.LockProjectEnvironments(ctx, store.New(tx), a.ProjectID); err != nil {
-				return auth.AgentPolicy{}, err
-			}
-			raw, _ := json.Marshal(p)
-			_, err := tx.Exec(ctx, `UPDATE projects SET settings=jsonb_set(settings,'{agentPolicy}',$2) WHERE id=$1`, a.ProjectID, raw)
-			return p, err
-		}})
+	commandbus.Register(bus, commandbus.Command[policyPayload, PolicyVersion]{Name: "set-agent-policy", Right: auth.ProjectAdmin,
+		Validate: validatePolicyPayload, Handle: s.setPolicy})
 	commandbus.Register(bus, commandbus.Command[Settings, Settings]{Name: "set-agent-config", Right: auth.ProjectAdmin,
 		Validate: func(p Settings) error {
 			if !validModel(p.Model) || p.MonthlyTokens < 1 || p.MonthlyTokens > 100000000 || p.UserMonthlyTokens < 1 || p.UserMonthlyTokens > p.MonthlyTokens {
@@ -153,18 +134,18 @@ func (s *Service) startSession(ctx context.Context, tx pgx.Tx, a auth.Actor, p s
 	}
 	q := store.New(tx)
 	var id uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT d.actor_id FROM agent_definitions d JOIN actors a ON a.id=d.actor_id WHERE d.actor_id=$1 AND d.project_id=$2 AND a.disabled_at IS NULL FOR SHARE OF a`, p.AgentID, a.ProjectID).Scan(&id); err != nil {
+	var name string
+	if err := tx.QueryRow(ctx, `SELECT d.actor_id, a.display_name FROM agent_definitions d JOIN actors a ON a.id=d.actor_id WHERE d.actor_id=$1 AND d.project_id=$2 AND a.disabled_at IS NULL FOR SHARE OF a`, p.AgentID, a.ProjectID).Scan(&id, &name); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Session{}, denied()
 		}
 		return Session{}, err
 	}
 	// Never restore rights narrowed by the delegator's bearer token.
-	settings, err := q.AgentProjectSettings(ctx, a.ProjectID)
+	policy, err := auth.PolicyCeiling(ctx, q, a.ProjectID, name)
 	if err != nil {
 		return Session{}, err
 	}
-	policy := auth.PolicyRights(settings)
 	caps := []string{}
 	for _, right := range p.Rights {
 		if !policy.Has(auth.Right(right)) || !a.Rights.Has(auth.Right(right)) {

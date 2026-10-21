@@ -18,13 +18,13 @@ func TestAgentStorageFailuresNeverReportSuccess(t *testing.T) { // STU-125/AGT-0
 	cases := []struct{ name, table, op string }{
 		{"config", "projects", ""}, {"detail", "agent_runs", ""}, {"steps", "agent_steps", ""}, {"list", "agent_runs", ""}, {"list-detail", "agent_steps", ""}, {"recover-read", "agent_runs", ""}, {"recover-write", "agent_steps", "INSERT"},
 		{"register-actor", "actors", "INSERT"}, {"register-definition", "agent_definitions", "INSERT"},
-		{"session-definition", "agent_definitions", ""}, {"session-settings", "projects", ""}, {"session-insert", "agent_sessions", "INSERT"}, {"session-scope", "agent_session_changesets", "INSERT"},
+		{"session-definition", "agent_definitions", ""}, {"session-settings", "agent_policy_versions", ""}, {"session-insert", "agent_sessions", "INSERT"}, {"session-scope", "agent_session_changesets", "INSERT"},
 		{"run-config", "projects", ""}, {"run-definition", "agent_definitions", ""}, {"run-insert", "agent_runs", "INSERT"},
 		{"cancel-read", "agent_runs", ""}, {"cancel-lock", "agent_sessions", ""}, {"cancel-revoke", "agent_sessions", "UPDATE"},
 		{"update-read", "agent_runs", ""}, {"update-lock", "agent_sessions", ""}, {"update-state", "agent_runs", "UPDATE"}, {"update-revoke", "agent_sessions", "UPDATE"}, {"update-step", "agent_runs", "UPDATE"},
 		{"reserve-insert", "agent_usage", "INSERT"}, {"reserve-read", "agent_usage", ""},
 		{"execute-load", "agent_runs", ""}, {"execute-start", "agent_steps", "INSERT"},
-		{"auth-principal", "actors", ""}, {"auth-rights", "role_bindings", ""}, {"auth-settings", "projects", ""}, {"auth-scope", "agent_session_changesets", ""},
+		{"auth-principal", "actors", ""}, {"auth-rights", "role_bindings", ""}, {"auth-settings", "agent_policy_versions", ""}, {"auth-scope", "agent_session_changesets", ""},
 		{"tool-session", "agent_sessions", ""},
 	}
 	for _, test := range cases {
@@ -255,7 +255,8 @@ func TestAgentGuardAndLivePolicyEdges(t *testing.T) {
 			t.Fatal(name, err)
 		}
 	}
-	if len(auth.PolicyRights([]byte(`bad`))) != 0 {
+	e.Exec(`INSERT INTO agent_policy_versions(project_id,version,body,hash) SELECT $1, max(version)+1, '{"bad":true}', 'x' FROM agent_policy_versions WHERE project_id=$1`, a.ProjectID)
+	if _, err := auth.PolicyCeiling(ctx, e.Q, a.ProjectID, "agent"); err == nil {
 		t.Fatal("invalid policy failed open")
 	}
 	// Authentication never returns a raw database error for a missing or expired token.

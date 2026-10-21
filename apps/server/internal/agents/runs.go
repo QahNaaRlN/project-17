@@ -127,12 +127,12 @@ func (s *Service) registerRuns(bus *commandbus.Bus) {
 			if err != nil {
 				return nil, err
 			}
-			raw, err := q.AgentProjectSettings(ctx, a.ProjectID)
+			policy, err := auth.PolicyCeiling(ctx, q, a.ProjectID, "Studio Agent")
 			if err != nil {
 				return nil, err
 			}
 			rights := []string{}
-			for _, r := range auth.PolicyRights(raw).Sorted() {
+			for _, r := range policy.Sorted() {
 				if a.Rights.Has(r) {
 					rights = append(rights, string(r))
 				}

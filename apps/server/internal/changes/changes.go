@@ -801,3 +801,10 @@ func nullableJSON(v any) []byte {
 	}
 	return mustJSON(v)
 }
+
+// OperationTypes — every operation type the command bus accepts (STU-421).
+func OperationTypes() []string {
+	out := append(ops.Types(), EntityCreate, EntitySetFields, EntityDelete, EntityRestore, AssetCreate, AssetUpdateMeta, AssetReplaceFile, schemaflow.Apply, ComponentCertify, DocumentCreate, DocumentSetRoute)
+	slices.Sort(out)
+	return slices.Compact(out)
+}

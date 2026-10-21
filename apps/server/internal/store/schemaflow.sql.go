@@ -12,7 +12,7 @@ import (
 )
 
 const claimSchemaChangeset = `-- name: ClaimSchemaChangeset :one
-UPDATE changesets SET owner_id=$2, updated_at=now() WHERE id=$1 RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq
+UPDATE changesets SET owner_id=$2, updated_at=now() WHERE id=$1 RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval
 `
 
 type ClaimSchemaChangesetParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) ClaimSchemaChangeset(ctx context.Context, arg ClaimSchemaChang
 		&i.SubmittedAt,
 		&i.MergedAt,
 		&i.RedoBarrierSeq,
+		&i.PolicyApproval,
 	)
 	return i, err
 }
