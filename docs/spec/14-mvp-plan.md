@@ -45,6 +45,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
 | Выполнено | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | [PR #75](https://github.com/QahNaaRlN/project-17/pull/75) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-data-token-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.1%); реальный GitHub не использовался |
 | 1 | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | Реализовано в ветке `feature/agent-policy`; локальная [приёмка](../studio-agent-policy-acceptance.md) пройдена; ожидает PR в dev |
+| 2 | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | Спецификация на одобрении; код не начат |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
