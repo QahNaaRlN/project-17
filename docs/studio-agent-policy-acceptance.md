@@ -1,6 +1,7 @@
 # Условные политики агента: реализация и проверка
 
-Дата: 2026-10-21. Ветка: `feature/agent-policy` от `dev` `7fb2ac6`.
+Дата: 2026-10-21. Ветка: `feature/agent-policy` от `dev` `7fb2ac6`; слита в dev
+2026-10-21 в [PR #78](https://github.com/QahNaaRlN/project-17/pull/78), merge `a6a9dc0`; [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройден.
 [Спецификация STU-420…439](studio-agent-policy.md) одобрена пользователем
 2026-10-21 вместе с решениями §11.
 

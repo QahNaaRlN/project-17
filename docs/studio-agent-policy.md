@@ -1,6 +1,6 @@
 # Studio: условные политики агента
 
-Статус: **одобрена пользователем 2026-10-21; решения §11 приняты; реализована, см. [отчёт](studio-agent-policy-acceptance.md)**.
+Статус: **одобрена пользователем 2026-10-21; решения §11 приняты; реализована и слита в dev 2026-10-21 в [PR #78](https://github.com/QahNaaRlN/project-17/pull/78), merge `a6a9dc0`; см. [отчёт](studio-agent-policy-acceptance.md)**.
 Дата: 2026-10-21. Требования: STU-420…439 (STU-400…419 заняты пакетом
 [component.extract](studio-component-extract.md)).
 Основа: `origin/dev` на `ad1e7c6` (после [PR #75](https://github.com/QahNaaRlN/project-17/pull/75))
