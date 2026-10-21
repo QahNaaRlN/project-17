@@ -51,7 +51,7 @@
 Скрипт [studio-live-agent-policy.mjs](../scripts/studio-live-agent-policy.mjs) на
 изолированном стенде [studio-review-stand.mjs](../scripts/studio-review-stand.mjs):
 настоящие CMS/PostgreSQL 16/River, подписанный локальный OIDC с Alice и Bob,
-Studio/BFF, MCP-эндпоинт CMS. Результат: **PASS** (SHA `SOURCE_SHA`).
+Studio/BFF, MCP-эндпоинт CMS. Результат: **PASS** (SHA `6c5271e`; последующие коммиты меняют только тесты и документы).
 
 | Шаг | Результат |
 |---|---|
@@ -72,7 +72,7 @@ Studio/BFF, MCP-эндпоинт CMS. Результат: **PASS** (SHA `SOURCE_
   схем, создания и смены маршрута, этап 5, публикация, перепроверка при новой
   версии, встроенный Agent, инъекции сбоев таблицы версий.
 - CI-эквивалент в Linux-контейнере: `go test -race` с PostgreSQL — зелёный, кроме
-  `assets`/`imagedelivery` (нет S3/imgproxy в контейнере); покрытие Go COVERAGE% в
+  `assets`/`imagedelivery` (нет S3/imgproxy в контейнере); покрытие Go 95.08% в
   контейнере (в CI обычно на 0.1 выше; порог 95%).
 - TS: модель и API политики, панель (формы, сохранение, точный повтор, конфликт,
   проверка политики, история), BFF-маршруты, причина в шаге агента, карточка
