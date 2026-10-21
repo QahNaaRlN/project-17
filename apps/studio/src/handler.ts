@@ -155,6 +155,8 @@ export function createStudioHandler(
           publicationRoute ||
           diffRoute ||
           path === "/api/v1/agent-config" ||
+          path === "/api/v1/agent-policy" ||
+          path === "/api/v1/agent-policy/versions" ||
           path === "/api/v1/agent-runs" ||
           path === "/api/v1/events" ||
           path === "/api/v1/content-catalog" ||
@@ -175,6 +177,8 @@ export function createStudioHandler(
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
           "/api/v1/commands/start-agent-run",
+          "/api/v1/commands/set-agent-policy",
+          "/api/v1/agent-policy/explain",
           "/api/v1/commands/cancel-agent-run",
           "/api/v1/commands/presence-heartbeat",
           "/api/v1/commands/presence-leave",
@@ -730,7 +734,10 @@ export function createStudioHandler(
             )
           )
             return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
-          body = JSON.stringify(envelope);
+          // The dry run is a Query: the server reads {policy?, situation} directly.
+          body = JSON.stringify(
+            path === "/api/v1/agent-policy/explain" ? envelope.payload : envelope,
+          );
           headers["Content-Type"] = "application/json";
           headers["Idempotency-Key"] = String(req.headers["idempotency-key"]);
         }

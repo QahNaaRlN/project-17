@@ -32,7 +32,7 @@ var checkoutPolicy = agentpolicy.Document{Version: 1,
 func TestSTU431PolicyVersionsAndExplain(t *testing.T) {
 	e, s, h, _, _ := setupAgent(t)
 	ctx := context.Background()
-	if cur, err := s.Policy(ctx, e.Admin); err != nil || cur.Version != 0 || len(cur.Policy.Rules) != 0 {
+	if cur, err := s.Policy(ctx, e.Admin); err != nil || cur.Version != 0 || len(cur.Policy.Rules) != 0 || len(cur.Known.Environments) != 2 || len(cur.Known.Rights) == 0 || cur.Known.Agents == nil {
 		t.Fatal("a new project has the empty policy", cur, err)
 	}
 	if _, err := s.Policy(ctx, h); cmstest.Code(err) != "FORBIDDEN" {
@@ -108,7 +108,14 @@ func TestSTU431PolicyVersionsAndExplain(t *testing.T) {
 		t.Fatal("current version is invalid")
 	}
 	e.Exec(`DELETE FROM agent_policy_versions WHERE version=99`)
+	e.Break("agent_definitions", "")
+	if _, err := s.Policy(ctx, e.Admin); err == nil || cmstest.Code(err) != "" {
+		t.Fatal("agent names", err)
+	}
 	e.Break("schema_versions", "")
+	if _, err := s.Policy(ctx, e.Admin); err == nil || cmstest.Code(err) != "" {
+		t.Fatal("known values of the state", err)
+	}
 	if _, err := s.Explain(ctx, e.Admin, ExplainRequest{Policy: json.RawMessage(`{"version":1}`)}); err == nil || cmstest.Code(err) != "" {
 		t.Fatal("known values", err)
 	}

@@ -253,8 +253,9 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 	if err != nil {
 		var ce *Error
 		if actor.Kind == auth.ActorAgent && errors.As(err, &ce) && (ce.Status == 403 || ce.Status == 429) {
-			_, _ = b.pool.Exec(context.WithoutCancel(ctx), `INSERT INTO security_events(id,project_id,actor_id,type,data) VALUES($1,$2,$3,'access.denied',$4)`, uuid.New(), actor.ProjectID, actor.ID,
-				[]byte(fmt.Sprintf(`{"code":%q,"command":%q}`, ce.Code, req.Name)))
+			// STU-426: the refusal's right, rule and condition, never page data.
+			data, _ := json.Marshal(map[string]any{"code": ce.Code, "command": req.Name, "params": ce.Params})
+			_, _ = b.pool.Exec(context.WithoutCancel(ctx), `INSERT INTO security_events(id,project_id,actor_id,type,data) VALUES($1,$2,$3,'access.denied',$4)`, uuid.New(), actor.ProjectID, actor.ID, data)
 		}
 		return Response{}, err
 	}

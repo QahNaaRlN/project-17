@@ -132,6 +132,23 @@ export function policyViolations(
       })
     : [];
 }
+/** Agent operations the current policy refuses at review (STU-430). */
+export function agentPolicyViolations(
+  details: unknown,
+): { operation: string; right: string; ruleId: string; condition: string }[] {
+  const entries = object(object(details).agentPolicy).violations;
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : "");
+  return Array.isArray(entries)
+    ? entries.flatMap((entry) => {
+        const v = object(entry);
+        const operation = text(v.operation, 80),
+          right = text(v.right, 80);
+        return operation && right
+          ? [{ operation, right, ruleId: text(v.ruleId, 64), condition: text(v.condition, 500) }]
+          : [];
+      })
+    : [];
+}
 export function safeDiagnostics(value: unknown): ReviewDiagnostic[] {
   return Array.isArray(value)
     ? value.flatMap((entry) => {

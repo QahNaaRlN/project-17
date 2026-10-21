@@ -26,10 +26,19 @@ const run: AgentRun = {
   model: "test/model",
   prompt: "<script>Task</script>",
   state: "running",
-  stepSeq: 2,
+  stepSeq: 3,
   steps: [
     { seq: 1, kind: "tool", data: { name: "get_changeset" } },
     { seq: 2, kind: "message", data: { text: "<script>Reply</script>" } },
+    {
+      seq: 3,
+      kind: "result",
+      data: {
+        name: "apply_operations",
+        isError: true,
+        denial: { ruleId: "no-checkout", condition: "pathPrefix=/checkout", operationIndex: 0 },
+      },
+    },
   ],
   tokens: 100,
   reserved: 12000,
@@ -55,6 +64,8 @@ it("STU-124/125: API carries only task metadata, parses safe state and preserves
     null,
     { items: [{ ...run, documentId: changesetId }] },
     { items: [{ ...run, steps: [{ seq: 1, kind: "message", data: { text: 4 } }] }] },
+    { items: [{ ...run, steps: [{ seq: 1, kind: "result", data: { denial: { ruleId: {} } } }] }] },
+    { items: [{ ...run, steps: [{ seq: 1, kind: "result", data: { denial: null } }] }] },
   ])
     await expect(
       createApi(async () => Response.json(invalid)).agentRuns!(fixture()),
@@ -130,6 +141,10 @@ it("STU-120/123/125: explicit start, dirty-form boundary, lost response retry, c
     });
     expect(host.querySelector("script")).toBeNull();
     expect(host.textContent).toContain("часть расхода неизвестна");
+    // STU-434: the step names the rule and the condition of the refusal.
+    expect(host.textContent).toContain(
+      "Запрещено политикой: правило no-checkout, pathPrefix=/checkout",
+    );
     await act(async () => button("Отменить задачу").click());
     await wait(() => expect(host.textContent).toContain("Отменено"));
     await act(async () => {

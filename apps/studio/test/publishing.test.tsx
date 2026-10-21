@@ -113,9 +113,23 @@ it("STU-071: checks retain environment/object scope and select only a node of th
     blocking: true,
     details: {
       violations: [{ actorId: changesetId, operation: "node.setDesign", right: "design.compose" }],
+      agentPolicy: {
+        violations: [
+          {
+            operation: "node.setProps",
+            right: "design.compose",
+            ruleId: "no-checkout",
+            condition: "pathPrefix=/checkout",
+          },
+        ],
+      },
     },
   });
+  session.review.changeset.policyApproval = ["prod-review"];
   await reread();
+  // STU-427/430: the refusal of the current agent policy and its approval mark.
+  expect(document.body.textContent).toContain("node.setProps · design.compose · no-checkout");
+  expect(document.body.textContent).toContain("по политике агентов: prod-review");
   expect(document.body.textContent).toContain("устаревшие проверки");
   expect(document.body.textContent).toContain("designer");
   expect(document.body.textContent).toContain("Восстановите права");

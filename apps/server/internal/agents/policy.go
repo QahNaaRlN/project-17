@@ -18,6 +18,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // policyPayload — set-agent-policy: a v1 document with expectedVersion, or
@@ -38,6 +39,22 @@ type PolicyVersion struct {
 	AuthorName string               `json:"authorName"`
 	Reason     string               `json:"reason"`
 	CreatedAt  time.Time            `json:"createdAt"`
+}
+
+// PolicyState — GET /agent-policy: the current version and the values the
+// Studio forms offer (STU-435).
+type PolicyState struct {
+	PolicyVersion
+	Known PolicyKnown `json:"known"`
+}
+
+// PolicyKnown — rights of the ceiling and project values of conditions.
+type PolicyKnown struct {
+	Rights         []string `json:"rights"`
+	Environments   []string `json:"environments"`
+	OperationTypes []string `json:"operationTypes"`
+	Schemas        []string `json:"schemas"`
+	Agents         []string `json:"agents"`
 }
 
 // ExplainSituation — the dry-run situation of STU-433.
@@ -158,16 +175,30 @@ func (s *Service) setPolicy(ctx context.Context, tx pgx.Tx, a auth.Actor, p poli
 	if err != nil {
 		return PolicyVersion{}, err
 	}
+	if err = workflow.RecheckAgentPolicy(ctx, q, a.ProjectID); err != nil {
+		return PolicyVersion{}, err
+	}
 	return PolicyVersion{Version: row.Version, Hash: row.Hash, Policy: d, AuthorID: row.AuthorID, Reason: row.Reason, CreatedAt: row.CreatedAt}, nil
 }
 
 // Policy — GET /agent-policy: the current version (STU-431).
-func (s *Service) Policy(ctx context.Context, a auth.Actor) (PolicyVersion, error) {
+func (s *Service) Policy(ctx context.Context, a auth.Actor) (PolicyState, error) {
 	versions, err := s.PolicyVersions(ctx, a)
-	if err != nil || len(versions) == 0 {
-		return PolicyVersion{Policy: agentpolicy.Legacy(nil, nil)}, err
+	if err != nil {
+		return PolicyState{}, err
 	}
-	return versions[0], nil
+	out := PolicyState{PolicyVersion: PolicyVersion{Policy: agentpolicy.Legacy(nil, nil)}}
+	if len(versions) > 0 {
+		out.PolicyVersion = versions[0]
+	}
+	q := store.New(s.Pool)
+	k, err := known(ctx, q, a.ProjectID, auth.CeilingNames())
+	if err != nil {
+		return PolicyState{}, err
+	}
+	agents, err := q.PolicyAgentNames(ctx, a.ProjectID)
+	out.Known = PolicyKnown{Rights: k.Rights, Environments: append([]string{}, k.Environments...), OperationTypes: k.OperationTypes, Schemas: append([]string{}, k.Schemas...), Agents: append([]string{}, agents...)}
+	return out, err
 }
 
 // PolicyVersions — GET /agent-policy/versions, newest first (STU-431).

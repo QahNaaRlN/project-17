@@ -13,58 +13,17 @@ import (
 )
 
 const addPolicyApproval = `-- name: AddPolicyApproval :exec
-UPDATE changesets SET policy_approval = ARRAY(SELECT DISTINCT unnest(policy_approval || $2::text[]) ORDER BY 1) WHERE id = $1
+UPDATE changesets SET policy_approval = ARRAY(SELECT DISTINCT unnest(policy_approval || $1::text[]) ORDER BY 1) WHERE id = $2
 `
 
 type AddPolicyApprovalParams struct {
-	ID      uuid.UUID `json:"id"`
-	Column2 []string  `json:"column2"`
+	Rules []string  `json:"rules"`
+	ID    uuid.UUID `json:"id"`
 }
 
 func (q *Queries) AddPolicyApproval(ctx context.Context, arg AddPolicyApprovalParams) error {
-	_, err := q.db.Exec(ctx, addPolicyApproval, arg.ID, arg.Column2)
+	_, err := q.db.Exec(ctx, addPolicyApproval, arg.Rules, arg.ID)
 	return err
-}
-
-const agentOperations = `-- name: AgentOperations :many
-SELECT o.id, o.actor_id, o.agent_session_id, o.type, o.target_object_id, o.payload FROM operations o
-WHERE o.changeset_id = $1 AND o.status = 'applied' AND o.source = 'agent' ORDER BY o.seq
-`
-
-type AgentOperationsRow struct {
-	ID             uuid.UUID  `json:"id"`
-	ActorID        uuid.UUID  `json:"actorId"`
-	AgentSessionID *uuid.UUID `json:"agentSessionId"`
-	Type           string     `json:"type"`
-	TargetObjectID *uuid.UUID `json:"targetObjectId"`
-	Payload        []byte     `json:"payload"`
-}
-
-func (q *Queries) AgentOperations(ctx context.Context, changesetID uuid.UUID) ([]AgentOperationsRow, error) {
-	rows, err := q.db.Query(ctx, agentOperations, changesetID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AgentOperationsRow
-	for rows.Next() {
-		var i AgentOperationsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ActorID,
-			&i.AgentSessionID,
-			&i.Type,
-			&i.TargetObjectID,
-			&i.Payload,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const agentPolicyVersions = `-- name: AgentPolicyVersions :many
@@ -100,6 +59,52 @@ func (q *Queries) AgentPolicyVersions(ctx context.Context, projectID uuid.UUID) 
 			&i.AuthorName,
 			&i.Reason,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const changesetPolicyOperations = `-- name: ChangesetPolicyOperations :many
+SELECT o.id, o.actor_id, COALESCE(a.display_name, '')::text AS actor_name, o.source, o.type, o.target_object_id, COALESCE(o.target_schema_name, ob.schema_name, '')::text AS schema_name, o.payload
+FROM operations o JOIN actors a ON a.id = o.actor_id LEFT JOIN objects ob ON ob.id = o.target_object_id
+WHERE o.changeset_id = $1 AND o.status = 'applied' ORDER BY o.seq
+`
+
+type ChangesetPolicyOperationsRow struct {
+	ID             uuid.UUID  `json:"id"`
+	ActorID        uuid.UUID  `json:"actorId"`
+	ActorName      string     `json:"actorName"`
+	Source         string     `json:"source"`
+	Type           string     `json:"type"`
+	TargetObjectID *uuid.UUID `json:"targetObjectId"`
+	SchemaName     string     `json:"schemaName"`
+	Payload        []byte     `json:"payload"`
+}
+
+func (q *Queries) ChangesetPolicyOperations(ctx context.Context, changesetID uuid.UUID) ([]ChangesetPolicyOperationsRow, error) {
+	rows, err := q.db.Query(ctx, changesetPolicyOperations, changesetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChangesetPolicyOperationsRow
+	for rows.Next() {
+		var i ChangesetPolicyOperationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActorID,
+			&i.ActorName,
+			&i.Source,
+			&i.Type,
+			&i.TargetObjectID,
+			&i.SchemaName,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -167,6 +172,31 @@ func (q *Queries) InsertAgentPolicyVersion(ctx context.Context, arg InsertAgentP
 	return i, err
 }
 
+const policyAgentNames = `-- name: PolicyAgentNames :many
+SELECT a.display_name FROM agent_definitions d JOIN actors a ON a.id = d.actor_id
+WHERE d.project_id = $1 AND a.disabled_at IS NULL ORDER BY a.display_name LIMIT 200
+`
+
+func (q *Queries) PolicyAgentNames(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, policyAgentNames, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var display_name string
+		if err := rows.Scan(&display_name); err != nil {
+			return nil, err
+		}
+		items = append(items, display_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const policySchemaNames = `-- name: PolicySchemaNames :many
 SELECT DISTINCT schema_name FROM schema_versions WHERE project_id = $1 ORDER BY schema_name
 `
@@ -184,6 +214,33 @@ func (q *Queries) PolicySchemaNames(ctx context.Context, projectID uuid.UUID) ([
 			return nil, err
 		}
 		items = append(items, schema_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reviewedAgentChangesets = `-- name: ReviewedAgentChangesets :many
+SELECT c.id FROM changesets c
+WHERE c.project_id = $1 AND c.state IN ('in_review', 'approved')
+  AND EXISTS (SELECT 1 FROM operations o WHERE o.changeset_id = c.id AND o.source = 'agent' AND o.status = 'applied')
+ORDER BY c.id
+`
+
+func (q *Queries) ReviewedAgentChangesets(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, reviewedAgentChangesets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

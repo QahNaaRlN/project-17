@@ -15,6 +15,13 @@ func TestCapabilityNodeModeRespectsAncestorsSlotsAndCeilings(t *testing.T) {
 			t.Fatal(tc, mode, found)
 		}
 	}
+	// STU-423: the nearest node declaring a zone names it.
+	if mode, zone, _ := NodeZone(doc, "n_slot", project); mode != Code || zone != "n_slot" {
+		t.Fatal("zone", mode, zone)
+	}
+	if _, zone, _ := NodeZone(doc, "n_root", project); zone != "" {
+		t.Fatal("document level", zone)
+	}
 	if _, found := NodeMode(doc, "n_slot", map[string]any{"maxMode": "FREE"}); found {
 		t.Fatal("ceiling bypass")
 	}

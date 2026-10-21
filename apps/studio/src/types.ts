@@ -16,6 +16,8 @@ export interface Changeset {
   state: string;
   kind: string;
   targets: string[];
+  /** requireApproval rules that matched agent operations (STU-427). */
+  policyApproval?: string[];
 }
 export interface DocumentRecord {
   id: string;
@@ -187,6 +189,18 @@ export interface Api {
     payload: Record<string, unknown>,
     key: string,
   ): Promise<void>;
+  agentPolicy?(signal?: AbortSignal): Promise<import("./agent-policy.js").PolicyState>;
+  agentPolicyVersions?(signal?: AbortSignal): Promise<import("./agent-policy.js").PolicyVersion[]>;
+  explainAgentPolicy?(
+    body: {
+      policy?: import("./agent-policy.js").PolicyDocument;
+      situation: import("./agent-policy.js").Situation;
+    },
+    signal?: AbortSignal,
+  ): Promise<import("./agent-policy.js").Explanation>;
+  agentPolicyCommand?(
+    attempt: import("./agent-policy.js").PolicyAttempt,
+  ): Promise<import("./agent-policy.js").PolicyVersion>;
   events?(session: Session, after: string | undefined, signal: AbortSignal): Promise<Response>;
   presence?(session: Session, leaseId: string, leave: boolean, signal: AbortSignal): Promise<void>;
   contentCatalog(
@@ -282,7 +296,20 @@ export interface AgentRun {
   steps: {
     seq: number;
     kind: string;
-    data: { name?: string; text?: string; isError?: boolean; code?: string; requestId?: string };
+    data: {
+      name?: string;
+      text?: string;
+      isError?: boolean;
+      code?: string;
+      requestId?: string;
+      denial?: {
+        right?: string;
+        ruleId?: string;
+        condition?: string;
+        reason?: string;
+        operationIndex?: number;
+      };
+    };
   }[];
   tokens: number;
   reserved: number;

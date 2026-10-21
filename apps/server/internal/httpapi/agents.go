@@ -181,7 +181,11 @@ func mcpHandler(d Deps) http.HandlerFunc {
 				value = map[string]any{"code": "TOOL_FAILED"}
 				var problem *commandbus.Error
 				if errors.As(err, &problem) {
-					value = map[string]any{"code": problem.Code, "diagnostics": problem.Params}
+					out := map[string]any{"code": problem.Code, "diagnostics": problem.Params}
+					if problem.Code == "POLICY_DENIED" {
+						out["detail"] = problem.Detail
+					}
+					value = out
 				}
 			}
 			data, _ := json.Marshal(value)

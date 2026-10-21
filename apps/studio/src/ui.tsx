@@ -27,6 +27,7 @@ import { CapabilityComposer, CapabilityQueue } from "./capability-panel.js";
 import { ComponentRequestComposer } from "./capability-component-panel.js";
 import { DataTokenRequestComposer } from "./capability-data-token-panel.js";
 import { DeliveryTargetPanel } from "./capability-delivery-panel.js";
+import { AgentPolicyPanel } from "./agent-policy-panel.js";
 const AgentPanel = lazy(() =>
   import("./agent-panel.js").then((module) => ({ default: module.AgentPanel })),
 );
@@ -369,6 +370,7 @@ export function Studio({
     | "capabilities"
     | "delivery-target"
     | "github-config"
+    | "agent-policy"
   >(
     saved.has("publication")
       ? "publications"
@@ -648,8 +650,19 @@ export function Studio({
                 {state.locale === "ru" ? "Получатель запросов" : "Request recipient"}
               </Button>
             )}
+          {api.agentPolicy && api.agentPolicyCommand && rights?.includes("project.admin") && (
+            <Button
+              variant="ghost"
+              aria-current={screen === "agent-policy" ? "page" : undefined}
+              disabled={navigationLocked}
+              onClick={() => setScreen("agent-policy")}
+            >
+              {state.locale === "ru" ? "Политика агентов" : "Agent policy"}
+            </Button>
+          )}
         </nav>
         <section className="studio-content" id="studio-content" tabIndex={-1}>
+          {screen === "agent-policy" && <AgentPolicyPanel {...{ api, editor }} />}
           {screen === "capabilities" && <CapabilityQueue {...{ api, editor }} />}
           {screen === "delivery-target" && <DeliveryTargetPanel {...{ api, editor }} />}
           {screen === "github-config" && <GithubConfigPanel {...{ api, editor }} />}

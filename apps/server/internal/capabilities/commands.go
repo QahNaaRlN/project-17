@@ -140,6 +140,9 @@ func create(ctx context.Context, tx pgx.Tx, a auth.Actor, p Create) (Result, err
 	if e != nil {
 		return Result{}, e
 	}
+	if e = changes.CheckAgentRight(ctx, q, a, cs, auth.CapabilityRequest, s.path, s.doc, r.NodeID); e != nil {
+		return Result{}, e
+	}
 	if r.Kind == KindToken {
 		r.Event, _ = designPath(obj(obj(s.doc["nodes"])[r.NodeID]), placementOf(r))
 	}
