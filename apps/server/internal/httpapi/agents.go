@@ -38,6 +38,23 @@ func agentRoutes(r chi.Router, d Deps) {
 		value, err := d.Agents.List(r.Context(), actorFrom(r.Context()), agents.Scope{DocumentID: doc, ChangesetID: cs, Environment: r.URL.Query().Get("environment")})
 		respond(w, r, d, map[string]any{"items": value}, err)
 	})
+	r.Get("/agent-policy", func(w http.ResponseWriter, r *http.Request) {
+		value, err := d.Agents.Policy(r.Context(), actorFrom(r.Context()))
+		respond(w, r, d, value, err)
+	})
+	r.Get("/agent-policy/versions", func(w http.ResponseWriter, r *http.Request) {
+		value, err := d.Agents.PolicyVersions(r.Context(), actorFrom(r.Context()))
+		respond(w, r, d, map[string]any{"items": value}, err)
+	})
+	r.Post("/agent-policy/explain", func(w http.ResponseWriter, r *http.Request) {
+		var req agents.ExplainRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxCommandBody)).Decode(&req); err != nil {
+			writeError(w, r, d.Log, commandbus.NewError(http.StatusBadRequest, "PAYLOAD_INVALID", "Некорректный запрос", `Ожидается {"policy"?: {...}, "situation": {...}}`))
+			return
+		}
+		value, err := d.Agents.Explain(r.Context(), actorFrom(r.Context()), req)
+		respond(w, r, d, value, err)
+	})
 	r.Get("/agent-runs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, ok := uuidParam(w, r, d, "id")
 		if !ok {
@@ -164,7 +181,11 @@ func mcpHandler(d Deps) http.HandlerFunc {
 				value = map[string]any{"code": "TOOL_FAILED"}
 				var problem *commandbus.Error
 				if errors.As(err, &problem) {
-					value = map[string]any{"code": problem.Code, "diagnostics": problem.Params}
+					out := map[string]any{"code": problem.Code, "diagnostics": problem.Params}
+					if problem.Code == "POLICY_DENIED" {
+						out["detail"] = problem.Detail
+					}
+					value = out
 				}
 			}
 			data, _ := json.Marshal(value)

@@ -5,6 +5,7 @@ import {
   type GithubView,
   type GithubObservation,
 } from "./capability-github.js";
+import { explanation, policyState, policyVersion } from "./agent-policy.js";
 import { previewList, type PreviewList } from "./capability-preview.js";
 import {
   fulfillmentView,
@@ -691,12 +692,51 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
                 !step.data ||
                 (step.data.text !== undefined && typeof step.data.text !== "string") ||
                 (step.data.name !== undefined && typeof step.data.name !== "string") ||
-                (step.data.requestId !== undefined && !uuid.test(step.data.requestId)),
+                (step.data.requestId !== undefined && !uuid.test(step.data.requestId)) ||
+                (step.data.denial !== undefined &&
+                  (typeof step.data.denial !== "object" ||
+                    !step.data.denial ||
+                    Object.values(step.data.denial).some(
+                      (v) => typeof v !== "string" && typeof v !== "number",
+                    ))),
             ),
         )
       )
         throw new StudioError("RESPONSE_INVALID");
       return value.items;
+    },
+    async agentPolicy(signal) {
+      return policyState(await request<unknown>("/api/v1/agent-policy", signal));
+    },
+    async agentPolicyVersions(signal) {
+      const value = await request<{ items: unknown[] }>("/api/v1/agent-policy/versions", signal);
+      if (!Array.isArray(value?.items) || value.items.length > 100)
+        throw new StudioError("RESPONSE_INVALID");
+      return value.items.map((v) => policyVersion(v));
+    },
+    async explainAgentPolicy(body, signal) {
+      return explanation(
+        await request<unknown>(
+          "/api/v1/agent-policy/explain",
+          signal,
+          { payload: body },
+          crypto.randomUUID(),
+        ),
+      );
+    },
+    async agentPolicyCommand(attempt) {
+      if (attempt.actor) {
+        const account = await api.account();
+        if (!account.authenticated || account.user?.id !== attempt.actor)
+          throw new StudioError("SESSION_CHANGED", true);
+      }
+      const value = await request<{ result: unknown }>(
+        "/api/v1/commands/set-agent-policy",
+        undefined,
+        { payload: attempt.payload, reason: attempt.reason },
+        attempt.key,
+      );
+      return policyVersion(value?.result, true);
     },
     async agentCommand(name, payload, key) {
       await request(

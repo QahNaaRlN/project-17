@@ -91,7 +91,7 @@ func (q *Queries) ChangesetManifestDiagnostics(ctx context.Context, arg Changese
 
 const createManifestCandidate = `-- name: CreateManifestCandidate :one
 INSERT INTO changesets (id, project_id, kind, title, owner_id, state, targets)
-VALUES ($1, $2, 'schema', $3, $4, 'open', $5) RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq
+VALUES ($1, $2, 'schema', $3, $4, 'open', $5) RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval
 `
 
 type CreateManifestCandidateParams struct {
@@ -129,6 +129,7 @@ func (q *Queries) CreateManifestCandidate(ctx context.Context, arg CreateManifes
 		&i.SubmittedAt,
 		&i.MergedAt,
 		&i.RedoBarrierSeq,
+		&i.PolicyApproval,
 	)
 	return i, err
 }
@@ -412,7 +413,7 @@ func (q *Queries) LockManifestEnvironment(ctx context.Context, arg LockManifestE
 }
 
 const manifestChangesets = `-- name: ManifestChangesets :many
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets WHERE project_id = $1 AND state NOT IN ('merged', 'abandoned')
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval FROM changesets WHERE project_id = $1 AND state NOT IN ('merged', 'abandoned')
 AND (cardinality(targets) = 0 OR $2::text = ANY(targets)) ORDER BY id FOR UPDATE
 `
 
@@ -448,6 +449,7 @@ func (q *Queries) ManifestChangesets(ctx context.Context, arg ManifestChangesets
 			&i.SubmittedAt,
 			&i.MergedAt,
 			&i.RedoBarrierSeq,
+			&i.PolicyApproval,
 		); err != nil {
 			return nil, err
 		}

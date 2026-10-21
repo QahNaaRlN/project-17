@@ -6,6 +6,7 @@ import type { Editor } from "./editor.js";
 import { Dialog } from "./components.js";
 import { CapabilityCard } from "./capability-panel.js";
 import type { CapabilityRequest } from "./capabilities.js";
+import { denialText } from "./agent-policy.js";
 
 const stepNames: Record<string, [string, string]> = {
   started: ["Задача запущена", "Task started"],
@@ -238,6 +239,7 @@ export function AgentPanel({ api, editor }: { api: Api; editor: Editor }) {
                   stepNames[step.data.name ?? step.kind]?.[ru ? 0 : 1] ??
                   (ru ? "Действие агента" : "Agent action")}
                 {step.data.isError ? " · " + (ru ? "ошибка" : "error") : ""}
+                {step.data.denial ? " · " + denialText(step.data.denial, ru) : ""}
                 {step.data.requestId && api.capability && (
                   <button
                     disabled={busy || dirty}

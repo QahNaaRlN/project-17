@@ -54,8 +54,10 @@ type Changeset struct {
 	Targets      []string  `json:"targets"`
 	Seq          int32     `json:"seq"`
 	HasConflicts bool      `json:"hasConflicts"` // после rebase остались неразрешённые конфликты (§4.2)
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	// PolicyApproval — правила requireApproval, сработавшие на операциях агента (STU-427).
+	PolicyApproval []string  `json:"policyApproval,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // ToChangeset — представление Change Set для ответов API.
@@ -63,7 +65,7 @@ func ToChangeset(c store.Changeset) Changeset { return toChangeset(c) }
 
 func toChangeset(c store.Changeset) Changeset {
 	return Changeset{ID: c.ID, Kind: c.Kind, Title: c.Title, Description: c.Description, OwnerID: c.OwnerID,
-		State: c.State, Targets: c.Targets, Seq: c.Seq, HasConflicts: c.HasConflicts, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		State: c.State, Targets: c.Targets, Seq: c.Seq, HasConflicts: c.HasConflicts, PolicyApproval: c.PolicyApproval, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 // Register регистрирует команды модуля.
@@ -505,6 +507,12 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 		return ApplyResult{}, err
 	}
 	s := &session{ctx: ctx, q: q, actor: actor, cs: cs, docs: map[uuid.UUID]*workingDoc{}}
+	var policy *agentPolicy
+	if actor.Kind == auth.ActorAgent {
+		if policy, err = loadAgentPolicy(ctx, q, actor.ProjectID); err != nil {
+			return ApplyResult{}, err
+		}
+	}
 	applied := make([]AppliedOperation, 0, len(p.Operations))
 	if p.Group {
 		id := uuid.Must(uuid.NewV7())
@@ -512,6 +520,11 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 	}
 
 	for i, in := range p.Operations {
+		if policy != nil {
+			if err := s.checkAgentPolicy(policy, i, in); err != nil {
+				return ApplyResult{}, err
+			}
+		}
 		var rec recordInput
 		var err error
 		if in.Type == schemaflow.Apply {
@@ -545,6 +558,9 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 			return ApplyResult{}, operationError(i, err)
 		}
 		applied = append(applied, op)
+	}
+	if err := s.recordPolicyApproval(policy); err != nil {
+		return ApplyResult{}, err
 	}
 	return s.finish(applied)
 }
@@ -800,4 +816,11 @@ func nullableJSON(v any) []byte {
 		return nil
 	}
 	return mustJSON(v)
+}
+
+// OperationTypes — every operation type the command bus accepts (STU-421).
+func OperationTypes() []string {
+	out := append(ops.Types(), EntityCreate, EntitySetFields, EntityDelete, EntityRestore, AssetCreate, AssetUpdateMeta, AssetReplaceFile, schemaflow.Apply, ComponentCertify, DocumentCreate, DocumentSetRoute)
+	slices.Sort(out)
+	return slices.Compact(out)
 }

@@ -127,12 +127,12 @@ func (s *Service) registerRuns(bus *commandbus.Bus) {
 			if err != nil {
 				return nil, err
 			}
-			raw, err := q.AgentProjectSettings(ctx, a.ProjectID)
+			policy, err := auth.PolicyCeiling(ctx, q, a.ProjectID, "Studio Agent")
 			if err != nil {
 				return nil, err
 			}
 			rights := []string{}
-			for _, r := range auth.PolicyRights(raw).Sorted() {
+			for _, r := range policy.Sorted() {
 				if a.Rights.Has(r) {
 					rights = append(rights, string(r))
 				}
@@ -385,6 +385,7 @@ func (s *Service) Execute(ctx context.Context, id uuid.UUID) error {
 			return finish("failed", "AGENT_STEP_FAILED")
 		}
 		value, toolErr := s.Call(ctx, a, call.Function.Name, []byte(call.Function.Arguments), fmt.Sprintf("agent:%s:%d", r.ID, turn), &bound)
+		var denial map[string]any
 		if toolErr != nil {
 			code := "TOOL_FAILED"
 			var ce *commandbus.Error
@@ -392,12 +393,20 @@ func (s *Service) Execute(ctx context.Context, id uuid.UUID) error {
 				code = ce.Code
 			}
 			value = map[string]any{"isError": true, "code": code}
+			// STU-434: the model and the step see the rule and condition, never other rules.
+			if code == "POLICY_DENIED" && ce.Params != nil {
+				denial = ce.Params
+				value = map[string]any{"isError": true, "code": code, "detail": ce.Detail}
+			}
 		}
 		result, _ := json.Marshal(value)
 		if len(result) > 24000 {
 			return finish("failed", "AGENT_CONTEXT_LIMIT")
 		}
 		data := map[string]any{"name": call.Function.Name, "isError": toolErr != nil}
+		if denial != nil {
+			data["denial"] = denial
+		}
 		createdDraft := call.Function.Name == "report_missing_capability" && toolErr == nil
 		if createdDraft {
 			var draft struct {

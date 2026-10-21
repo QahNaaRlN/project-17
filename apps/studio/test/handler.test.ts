@@ -530,6 +530,25 @@ it("STU-040/041/042: адаптер ограничивает каталог/ку
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });
+it("STU-431/433/435: agent policy proxy forwards Query, dry run body and the versioned command", async () => {
+  const { origin, post, fetcher } = await setup();
+  expect((await fetch(origin + "/api/studio/api/v1/agent-policy")).status).toBe(200);
+  expect((await fetch(origin + "/api/studio/api/v1/agent-policy/versions")).status).toBe(200);
+  expect((await fetch(origin + "/api/studio/api/v1/agent-policy?x=1")).status).toBe(400);
+  const situation = { agent: "copy", right: "design.compose", path: "/checkout" };
+  expect(
+    (await post("/api/studio/api/v1/agent-policy/explain", { payload: { situation } })).status,
+  ).toBe(200);
+  const explain = fetcher.mock.calls.find(([url]) => String(url).endsWith("/agent-policy/explain"));
+  expect(JSON.parse(String(explain![1]!.body))).toEqual({ situation });
+  const command = { payload: { policy: { version: 1 }, expectedVersion: 2 }, reason: "freeze" };
+  expect((await post("/api/studio/api/v1/commands/set-agent-policy", command)).status).toBe(200);
+  const saved = fetcher.mock.calls.find(([url]) => String(url).endsWith("/set-agent-policy"));
+  expect(JSON.parse(String(saved![1]!.body))).toEqual(command);
+  expect((await post("/api/studio/api/v1/agent-policy/versions", { payload: {} })).status).toBe(
+    404,
+  );
+});
 async function setup(oidc = false) {
   const directory = await mkdtemp(join(tmpdir(), "studio-test-"));
   await writeFile(join(directory, "index.html"), "<h1>Studio</h1>");

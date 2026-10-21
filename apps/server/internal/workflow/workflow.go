@@ -296,15 +296,6 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	if err != nil {
 		return evaluation{}, err
 	}
-	checks = append(checks, policy)
-	for _, c := range checks {
-		if err := q.InsertCheck(ctx, store.InsertCheckParams{
-			ID: uuid.Must(uuid.NewV7()), ChangesetID: changesetID, ContentHash: hash, Stage: c.Stage,
-			Status: c.Status, Blocking: c.Blocking, Details: c.Details,
-		}); err != nil {
-			return evaluation{}, err
-		}
-	}
 	types := make([]string, len(opActors))
 	for i, a := range opActors {
 		types[i] = a.Type
@@ -322,15 +313,41 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	if len(binding) > 0 || requirements.Strict {
 		risk = RiskHigh
 	}
+	// STU-428…430: the current agent policy raises risk and approvals and
+	// refuses agent operations it no longer allows.
+	agent, err := reviewAgentPolicy(ctx, q, cs, targets, versions, risk)
+	if err != nil {
+		return evaluation{}, err
+	}
+	risk = agent.risk
+	if len(agent.violations) > 0 || agent.riskRule != "" || len(agent.rules) > 0 {
+		var details map[string]any
+		_ = json.Unmarshal(policy.Details, &details)
+		details["agentPolicy"] = map[string]any{"violations": agent.violations, "riskRule": agent.riskRule, "approvalRules": agent.rules}
+		policy.Details = mustJSON(details)
+		if len(agent.violations) > 0 {
+			policy.Status = "failed"
+		}
+	}
+	checks = append(checks, policy)
+	for _, c := range checks {
+		if err := q.InsertCheck(ctx, store.InsertCheckParams{
+			ID: uuid.Must(uuid.NewV7()), ChangesetID: changesetID, ContentHash: hash, Stage: c.Stage,
+			Status: c.Status, Blocking: c.Blocking, Details: c.Details,
+		}); err != nil {
+			return evaluation{}, err
+		}
+	}
 	approvalPolicy, err := LoadApprovalPolicy(ctx, q, projectID)
 	if err != nil {
 		return evaluation{}, err
 	}
-	required := zoneRequired(approvalPolicy.Required(risk), requirements.Roles)
+	roles := union(requirements.Roles, agent.roles)
+	required := max(zoneRequired(approvalPolicy.Required(risk), roles), agent.count)
 	if agentAuthored {
 		required = max(required, 1)
 	}
-	return evaluation{checks: checks, hash: hash, risk: risk, required: required, targets: targets, roles: requirements.Roles}, nil
+	return evaluation{checks: checks, hash: hash, risk: risk, required: required, targets: targets, roles: roles}, nil
 }
 
 func environmentCheck(ctx context.Context, q *store.Queries, projectID, cs uuid.UUID, targets []string, versions []store.ChangesetWorkingVersionsRow) (Check, []byte, error) {
@@ -555,12 +572,13 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 			"Согласующий не должен быть автором операций Change Set (PUB-002)")
 	}
 	var roles []string
+	evaluated := 0
 	if decision == "approve" {
 		ev, err := evaluate(ctx, q, actor.ProjectID, cs.ID)
 		if err != nil {
 			return Review{}, err
 		}
-		roles = ev.roles
+		roles, evaluated = ev.roles, ev.required
 		if failed(ev.checks) {
 			return Review{}, commandbus.NewError(http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Проверки не пройдены", "Контракт окружения изменился").WithParams(map[string]any{"checks": ev.checks})
 		}
@@ -591,6 +609,7 @@ func review(ctx context.Context, tx pgx.Tx, actor auth.Actor, p reviewPayload, d
 	if err != nil {
 		return Review{}, err
 	}
+	required = max(required, evaluated)
 	status, err := coverage(ctx, q, actor.ProjectID, cs.ID, cs.ContentHash, roles)
 	if err != nil {
 		return Review{}, err

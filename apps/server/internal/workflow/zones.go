@@ -99,7 +99,19 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 	if err != nil {
 		return err
 	}
-	if len(requirements.Roles) == 0 && !requirements.Strict && agentMinimum == 0 {
+	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+	if err != nil {
+		return err
+	}
+	// STU-430: publication evaluates the current agent policy version.
+	agent, err := reviewAgentPolicy(ctx, q, cs, targets, versions, deref(cs.Risk))
+	if err != nil {
+		return err
+	}
+	if len(agent.violations) > 0 {
+		return commandbus.NewError(403, "POLICY_DENIED", "Политика агентов изменилась", "Текущая политика запрещает операции агента; верните CS в работу").WithParams(map[string]any{"violations": agent.violations})
+	}
+	if len(requirements.Roles) == 0 && !requirements.Strict && agentMinimum == 0 && agent.count == 0 && len(agent.roles) == 0 {
 		return nil
 	}
 	if agentMinimum > 0 {
@@ -115,14 +127,11 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 			return commandbus.NewError(403, "POLICY_DENIED", "Права авторов изменились", "Повторно подайте CS с действующими правами")
 		}
 	}
-	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
-	if err != nil {
-		return err
-	}
 	if string(bindZoneHash(contentHash(versions), requirements)) != string(cs.ContentHash) {
 		return commandbus.NewError(http.StatusConflict, "CHANGESET_CONTENT_CHANGED", "Требования согласования изменились", "Повторно подайте Change Set с действующими требованиями зон").WithParams(map[string]any{"requiredRoles": requirements.Roles, "strict": requirements.Strict})
 	}
-	status, err := coverage(ctx, q, cs.ProjectID, cs.ID, cs.ContentHash, requirements.Roles)
+	roles := union(requirements.Roles, agent.roles)
+	status, err := coverage(ctx, q, cs.ProjectID, cs.ID, cs.ContentHash, roles)
 	if err != nil {
 		return err
 	}
@@ -130,14 +139,24 @@ func RequireZoneApprovals(ctx context.Context, q *store.Queries, cs store.Change
 	if err != nil {
 		return err
 	}
-	risk := deref(cs.Risk)
+	risk := agent.risk
 	if requirements.Strict {
 		risk = RiskHigh
 	}
-	required := zoneRequired(policy.Required(risk), requirements.Roles)
-	required = max(required, agentMinimum)
+	required := zoneRequired(policy.Required(risk), roles)
+	required = max(required, agentMinimum, agent.count)
 	if len(status.missing) > 0 || status.count < required {
-		return commandbus.NewError(http.StatusConflict, "APPROVAL_ROLES_MISSING", "Требуется согласование защищённых зон", "Проверьте действующие роли согласующих").WithParams(map[string]any{"requiredRoles": requirements.Roles, "missingRequiredRoles": status.missing, "approvals": status.count, "requiredApprovals": required})
+		return commandbus.NewError(http.StatusConflict, "APPROVAL_ROLES_MISSING", "Требуется согласование защищённых зон", "Проверьте действующие роли согласующих").WithParams(map[string]any{"requiredRoles": roles, "missingRequiredRoles": status.missing, "approvals": status.count, "requiredApprovals": required})
 	}
 	return nil
+}
+
+func union(a, b []string) []string {
+	out := slices.Clone(a)
+	for _, v := range b {
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
 }

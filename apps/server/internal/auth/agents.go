@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qahnaarln/project-17/apps/server/internal/agentpolicy"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -25,25 +26,23 @@ type AgentPolicy struct {
 	Deny  []string `json:"deny"`
 }
 
-func PolicyRights(settings []byte) RightSet {
-	var p struct {
-		Policy *AgentPolicy `json:"agentPolicy"`
+// CeilingNames — the agent rights ceiling as names.
+func CeilingNames() []string {
+	all := make([]string, len(AgentRights))
+	for i, right := range AgentRights {
+		all[i] = string(right)
 	}
-	if json.Unmarshal(settings, &p) != nil {
-		return RightSet{}
+	return all
+}
+
+// PolicyCeiling — the unconditional part of the current policy for the agent
+// (STU-436); conditions are checked per operation.
+func PolicyCeiling(ctx context.Context, q *store.Queries, project uuid.UUID, agent string) (RightSet, error) {
+	d, _, err := agentpolicy.Load(ctx, q, project)
+	if err != nil {
+		return nil, err
 	}
-	all := []string{}
-	for _, right := range AgentRights {
-		all = append(all, string(right))
-	}
-	if p.Policy == nil {
-		return EffectiveRights(all, []string{ScopeAll})
-	}
-	result := EffectiveRights(p.Policy.Allow, all)
-	for _, right := range p.Policy.Deny {
-		delete(result, Right(right))
-	}
-	return result
+	return EffectiveRights(agentpolicy.Ceiling(d, agent, CeilingNames()), []string{ScopeAll}), nil
 }
 func intersect(a, b RightSet) RightSet {
 	result := RightSet{}
@@ -77,11 +76,11 @@ func SessionActor(ctx context.Context, q *store.Queries, s store.AgentSession, h
 	if !historical && !live.Has(AgentDelegate) {
 		return Actor{}, ErrUnauthenticated
 	}
-	settings, err := q.AgentProjectSettings(ctx, s.ProjectID)
+	policy, err := PolicyCeiling(ctx, q, s.ProjectID, principal.DisplayName)
 	if err != nil {
 		return Actor{}, err
 	}
-	rights := intersect(intersect(EffectiveRights(s.Capabilities, []string{ScopeAll}), live), PolicyRights(settings))
+	rights := intersect(intersect(EffectiveRights(s.Capabilities, []string{ScopeAll}), live), policy)
 	allowed, err := q.AgentChangesets(ctx, s.ID)
 	if err != nil {
 		return Actor{}, err

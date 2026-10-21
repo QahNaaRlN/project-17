@@ -36,7 +36,7 @@ func (q *Queries) AddChangesetObject(ctx context.Context, arg AddChangesetObject
 const createChangeset = `-- name: CreateChangeset :one
 INSERT INTO changesets (id, project_id, kind, title, description, owner_id, state)
 VALUES ($1, $2, 'standard', $3, $4, $5, 'open')
-RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq
+RETURNING id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval
 `
 
 type CreateChangesetParams struct {
@@ -74,6 +74,7 @@ func (q *Queries) CreateChangeset(ctx context.Context, arg CreateChangesetParams
 		&i.SubmittedAt,
 		&i.MergedAt,
 		&i.RedoBarrierSeq,
+		&i.PolicyApproval,
 	)
 	return i, err
 }
@@ -162,7 +163,7 @@ func (q *Queries) CreateWorkingVersion(ctx context.Context, arg CreateWorkingVer
 }
 
 const getChangeset = `-- name: GetChangeset :one
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets WHERE id = $1 AND project_id = $2
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval FROM changesets WHERE id = $1 AND project_id = $2
 `
 
 type GetChangesetParams struct {
@@ -191,6 +192,7 @@ func (q *Queries) GetChangeset(ctx context.Context, arg GetChangesetParams) (Cha
 		&i.SubmittedAt,
 		&i.MergedAt,
 		&i.RedoBarrierSeq,
+		&i.PolicyApproval,
 	)
 	return i, err
 }
@@ -520,7 +522,7 @@ func (q *Queries) ListChangesetObjects(ctx context.Context, changesetID uuid.UUI
 }
 
 const listChangesets = `-- name: ListChangesets :many
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval FROM changesets
 WHERE project_id = $1 AND ($2::text IS NULL OR state = $2)
 ORDER BY created_at DESC, id DESC
 LIMIT 100
@@ -558,6 +560,7 @@ func (q *Queries) ListChangesets(ctx context.Context, arg ListChangesetsParams) 
 			&i.SubmittedAt,
 			&i.MergedAt,
 			&i.RedoBarrierSeq,
+			&i.PolicyApproval,
 		); err != nil {
 			return nil, err
 		}
@@ -622,7 +625,7 @@ func (q *Queries) ListOperations(ctx context.Context, arg ListOperationsParams) 
 }
 
 const lockChangeset = `-- name: LockChangeset :one
-SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq FROM changesets WHERE id = $1 AND project_id = $2 FOR UPDATE
+SELECT id, project_id, kind, title, description, owner_id, state, risk, targets, seq, content_hash, has_conflicts, created_at, updated_at, submitted_at, merged_at, redo_barrier_seq, policy_approval FROM changesets WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
 
 type LockChangesetParams struct {
@@ -651,6 +654,7 @@ func (q *Queries) LockChangeset(ctx context.Context, arg LockChangesetParams) (C
 		&i.SubmittedAt,
 		&i.MergedAt,
 		&i.RedoBarrierSeq,
+		&i.PolicyApproval,
 	)
 	return i, err
 }

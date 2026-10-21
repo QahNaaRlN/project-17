@@ -3,7 +3,12 @@ import type { Api } from "./types.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { Editor } from "./editor.js";
-import { diagnosticNode, reviewDiagnostics, policyViolations } from "./review.js";
+import {
+  agentPolicyViolations,
+  diagnosticNode,
+  reviewDiagnostics,
+  policyViolations,
+} from "./review.js";
 import type { WorkflowAction } from "./types.js";
 const copy = {
   ru: {
@@ -487,6 +492,34 @@ export function PublishingPanel({
               ))}
           </ul>
         </div>
+      )}
+      {review.checks.some((c) => agentPolicyViolations(c.details).length > 0) && (
+        <div role="alert">
+          <p>
+            {state.locale === "ru"
+              ? "Текущая политика агентов запрещает правки агента. Верните черновик в работу."
+              : "The current agent policy refuses the agent's edits. Return the draft to work."}
+          </p>
+          <ul>
+            {review.checks
+              .flatMap((c) => agentPolicyViolations(c.details))
+              .map((v, i) => (
+                <li key={i}>
+                  {v.operation} · {v.right}
+                  {v.ruleId ? " · " + v.ruleId : ""}
+                  {v.condition ? " · " + v.condition : ""}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+      {(review.changeset.policyApproval?.length ?? 0) > 0 && (
+        <p>
+          {state.locale === "ru"
+            ? "Требуется согласование человеком по политике агентов: "
+            : "Human approval required by the agent policy: "}
+          {review.changeset.policyApproval!.join(", ")}
+        </p>
       )}
       {diagnostics.length > 0 && (
         <div aria-label={t.diagnostics}>

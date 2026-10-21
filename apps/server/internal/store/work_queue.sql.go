@@ -13,7 +13,7 @@ import (
 )
 
 const workQueue = `-- name: WorkQueue :many
-SELECT c.id, c.project_id, c.kind, c.title, c.description, c.owner_id, c.state, c.risk, c.targets, c.seq, c.content_hash, c.has_conflicts, c.created_at, c.updated_at, c.submitted_at, c.merged_at, c.redo_barrier_seq, a.display_name AS owner_name,
+SELECT c.id, c.project_id, c.kind, c.title, c.description, c.owner_id, c.state, c.risk, c.targets, c.seq, c.content_hash, c.has_conflicts, c.created_at, c.updated_at, c.submitted_at, c.merged_at, c.redo_barrier_seq, c.policy_approval, a.display_name AS owner_name,
   counts.page_count, counts.component_count, counts.entity_count, counts.asset_count, counts.deleted_count
 FROM changesets c
 JOIN actors a ON a.id=c.owner_id
@@ -91,6 +91,7 @@ type WorkQueueRow struct {
 	SubmittedAt    *time.Time `json:"submittedAt"`
 	MergedAt       *time.Time `json:"mergedAt"`
 	RedoBarrierSeq int32      `json:"redoBarrierSeq"`
+	PolicyApproval []string   `json:"policyApproval"`
 	OwnerName      string     `json:"ownerName"`
 	PageCount      int32      `json:"pageCount"`
 	ComponentCount int32      `json:"componentCount"`
@@ -142,6 +143,7 @@ func (q *Queries) WorkQueue(ctx context.Context, arg WorkQueueParams) ([]WorkQue
 			&i.SubmittedAt,
 			&i.MergedAt,
 			&i.RedoBarrierSeq,
+			&i.PolicyApproval,
 			&i.OwnerName,
 			&i.PageCount,
 			&i.ComponentCount,
