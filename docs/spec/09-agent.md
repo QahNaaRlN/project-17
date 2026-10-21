@@ -192,6 +192,9 @@ STU-335…354, слит в dev 2026-10-20 в [PR #71](https://github.com/QahNaaR
 Пакет [запросов недостающих компонентов](../studio-capability-component.md),
 STU-355…374, слит в dev 2026-10-21 в [PR #73](https://github.com/QahNaaRlN/project-17/pull/73), merge `4262d93`: вид
 `component` с заглушкой-узлом и тем же автоматическим выполнением.
+Пакет [запросов источников данных и токенов](../studio-capability-data-token.md),
+STU-375…394, слит в dev 2026-10-21 в [PR #75](https://github.com/QahNaaRlN/project-17/pull/75), merge `ad1e7c6`: все четыре
+вида формализации запроса реализованы.
 Доставка с отдельным
 согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
 автоматические шаги жизненного цикла ниже по-прежнему целевые.

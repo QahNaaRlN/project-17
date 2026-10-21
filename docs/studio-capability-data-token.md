@@ -1,7 +1,7 @@
 # Studio: запросы недостающих источников данных и токенов
 
-Статус: **одобрена пользователем 2026-10-21; решения §11 приняты; реализована в
-`feature/capability-data-token`** ([реализация и проверка](studio-capability-data-token-acceptance.md)).
+Статус: **одобрена пользователем 2026-10-21; решения §11 приняты; реализована и
+слита в dev 2026-10-21 в [PR #75](https://github.com/QahNaaRlN/project-17/pull/75), merge `ad1e7c6`** ([реализация и проверка](studio-capability-data-token-acceptance.md)).
 Дата: 2026-10-21. Требования: STU-375…394.
 Основа: `origin/dev` на `4262d93` (после [PR #73](https://github.com/QahNaaRlN/project-17/pull/73)).
 Продолжает [Missing Capability](studio-missing-capability.md),
