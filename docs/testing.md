@@ -20,7 +20,7 @@
 | На случайных данных (property-based) | Свойства, верные для любых входов | fast-check (TS); rapid, `go test -fuzz` (Go) | рядом с модульными | каждый PR |
 | Интеграционные | Сервер с настоящими PostgreSQL, Redis, MinIO | testcontainers | `apps/server/...` | каждый PR (после появления сервера) |
 | Контрактные | OpenAPI ↔ обработчики; MCP-инструменты ↔ команды | генерация клиентов, схемы | `apps/server`, `packages/mcp` | каждый PR (после появления API) |
-| Сквозные (E2E) | Сценарий MVP ([14-mvp-plan.md §2](spec/14-mvp-plan.md#2-сквозной-сценарий-приёмки)) | Playwright | `e2e/` | каждый PR в `dev`, `main` |
+| Сквозные (E2E) | Сценарий MVP ([14-mvp-plan.md §2](spec/14-mvp-plan.md#2-сквозной-сценарий-приёмки)) против настоящего стенда; пакетные сценарии Studio/витрины против фикстуры CMS | Playwright | `examples/react-store/e2e/scenario/`; `examples/react-store/e2e/` | каждый PR в `dev`, `main` |
 | Нагрузочные | NFR-001…007 | k6 | `perf/` | перед релизом |
 | Мутационные | Качество самих тестов | Stryker (TS); Gremlins (Go) | пакеты | раз в неделю, перед релизом, вручную |
 
@@ -63,6 +63,12 @@
 
 - Только через публичные интерфейсы: Studio, Delivery API, MCP.
 - Ожидание — по событию или состоянию (`expect(...).toBeVisible()`), не `sleep`.
+- Сценарий §2 ([e2e-scenario.md](e2e-scenario.md)) идёт против стенда
+  [`scripts/e2e-stand.mjs`](../scripts/e2e-stand.mjs): CMS с тегом сборки `e2e`,
+  PostgreSQL, Studio, витрины staging и production, локальный OIDC (Alice, Bob,
+  Erin), приёмник CDN purge и сервер фактов GitHub. Повторов проверок нет
+  (`retries: 0`); незавершённые части — только через реестр
+  `e2e/scenario/pending.ts`. Измерения времени — в `e2e-metrics.json`.
 
 ## 4. Метрики и пороги
 
@@ -110,6 +116,8 @@ pnpm --filter @cms/ir exec vitest           # режим наблюдения
 pnpm --filter @cms/ir test:mutation         # мутационное тестирование (несколько минут)
 pnpm --filter @cms/server test              # Go: тесты с -race и порогом покрытия
 pnpm --filter @cms/server test:mutation     # Go: Gremlins (около минуты)
+# Сценарий §2: CMS_DATABASE_URL — пустая база loopback PostgreSQL
+CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 ```
 
 ## 6. CI
@@ -122,6 +130,7 @@ pnpm --filter @cms/server test:mutation     # Go: Gremlins (около мину�
 | Workflow | Триггер | Что делает |
 |---|---|---|
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
+| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL как `services`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; до пяти зелёных прогонов подряд — не обязательная проверка |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 
 ## 7. Чек-лист ревьюера

@@ -44,7 +44,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
 | Выполнено | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | [PR #75](https://github.com/QahNaaRlN/project-17/pull/75) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-data-token-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.1%); реальный GitHub не использовался |
 | Выполнено | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | [PR #78](https://github.com/QahNaaRlN/project-17/pull/78) слит в dev 2026-10-21; локальная [приёмка](../studio-agent-policy-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39570897945) и [CI merge](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройдены; Go coverage 95.08% |
-| 1 | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | Спецификация одобрена 2026-10-21, решения §11 приняты; код не начат |
+| 1 | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | Реализовано в ветке `feature/e2e-scenario`: job `E2E scenario (§2)`, локальный [прогон](../e2e-scenario-acceptance.md) всех 10 шагов; job станет обязательным после пяти зелёных прогонов подряд |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
