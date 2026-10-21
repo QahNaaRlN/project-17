@@ -19,9 +19,8 @@
 
 ### Текущее состояние и приоритет — 2026-10-21
 
-Интеграционная база: `dev`, merge `ad1e7c6` после PR #75;
-[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39513160044)
-запущен при слиянии; CI итогового SHA PR пройден (Go coverage 95.1%). Выпуск из `main` ещё не отражает реализованный объём `dev`.
+Интеграционная база: `dev`, merge `a6a9dc0` после PR #78;
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройден. Выпуск из `main` ещё не отражает реализованный объём `dev`.
 Наличие отдельных пакетов не означает завершение M0…M6: итоговые критерии
 MVP и сквозная автоматическая приёмка ниже остаются обязательными.
 
@@ -32,7 +31,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M2. Объекты, CS, публикация | Готов (PR #6…#15, #29…#31) | Кэш ответов на origin и лимиты Delivery API перенесены в M6 |
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, `promote` в Studio, IR-044, NFR-приёмка |
-| M5. Агент | Частично (PR #48, #60…#62, #68, #71, #73, #75) | Условные политики агента |
+| M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
 | M6. Укрепление | Не начат | Этапы pipeline 8–11, нагрузочные тесты NFR-001…007, безопасность, E2E сценария §2, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
@@ -44,8 +43,8 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Автоматическое fulfillment и группы requiredBy](../studio-capability-fulfillment.md), STU-335…354 | [PR #71](https://github.com/QahNaaRlN/project-17/pull/71) слит в dev 2026-10-20; локальная [приёмка шага 10](../studio-capability-fulfillment-acceptance.md) и CI итогового SHA пройдены; реальный GitHub в приёмке не использовался |
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
 | Выполнено | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | [PR #75](https://github.com/QahNaaRlN/project-17/pull/75) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-data-token-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.1%); реальный GitHub не использовался |
-| 1 | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | Реализовано в ветке `feature/agent-policy`; локальная [приёмка](../studio-agent-policy-acceptance.md) пройдена; ожидает PR в dev |
-| 2 | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | Спецификация одобрена 2026-10-21, решения §11 приняты; код не начат |
+| Выполнено | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | [PR #78](https://github.com/QahNaaRlN/project-17/pull/78) слит в dev 2026-10-21; локальная [приёмка](../studio-agent-policy-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39570897945) и [CI merge](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройдены; Go coverage 95.08% |
+| 1 | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | Спецификация одобрена 2026-10-21, решения §11 приняты; код не начат |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
@@ -257,7 +256,18 @@ STU-375…394: **реализован и слит в dev 2026-10-21 в [PR #75](
 дизайн-свойстве, предлагаемое значение в preview); блокировка публикации,
 присоединение, совместимость по форме, автоматическая замена `cms-system`,
 мастера Studio. [Локальная приёмка](../studio-capability-data-token-acceptance.md)
-пройдена; CI итогового SHA — Go coverage 95.1%. Из M5 остаются условные политики агента.
+пройдена; CI итогового SHA — Go coverage 95.1%.
+
+Пакет M5 — [условные политики агента](../studio-agent-policy.md),
+STU-420…439: **реализован и слит в dev 2026-10-21 в [PR #78](https://github.com/QahNaaRlN/project-17/pull/78)**, merge `a6a9dc0ba0e0d5787df8ab91163a1a029f97b9cc`.
+Документ политики v1 с правилами `allow`/`deny`/`requireApproval` и условиями
+(окружение, путь, зона, тип операции, схема, риск, источник), неизменяемые версии
+`set-agent-policy` с `expectedVersion`, dry-run `POST /agent-policy/explain`,
+проверка каждой операции агента до записи (`403 POLICY_DENIED` с правилом),
+повторная проверка на этапе 5 и при публикации, раздел «Политика агентов» в Studio.
+[Локальная приёмка](../studio-agent-policy-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39570897945)
+и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройдены; Go coverage 95.08% — запас над порогом минимален.
+Очередь пакетов M5 этим исчерпана.
 
 Пакет M4 — [сохранить поддерево как компонент](../studio-component-extract.md),
 STU-400…419: **реализован и слит в dev 2026-10-20 в [PR #67](https://github.com/QahNaaRlN/project-17/pull/67)**, merge `951a5deff58ae92996e0e2367689d126b14de715`.
