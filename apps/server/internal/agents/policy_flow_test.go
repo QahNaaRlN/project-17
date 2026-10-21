@@ -218,3 +218,31 @@ func TestSTU434BuiltInAgentSeesTheRefusal(t *testing.T) {
 		t.Fatal("refusal in the step and for the model", denial, told)
 	}
 }
+
+// STU-438: publication never reports success when a table it reads fails.
+func TestSTU430PublicationFailures(t *testing.T) {
+	for _, table := range []string{"changeset_objects", "operations", "approvals", "role_bindings", "agent_policy_versions"} {
+		t.Run(table, func(t *testing.T) {
+			e, _, h, cs, _ := setupAgent(t)
+			policyFixture(e, 1, `{"version":1,"rules":[],"risk":[],"approvals":[{"id":"editors","when":{"source":["agent"]},"require":{"count":1,"roles":["editor"]}}]}`)
+			a := agentActor(t, e, delegation(t, e, h, registered(t, e), cs, 10))
+			doc, _ := e.Q.ListChangesetObjects(ctx, cs)
+			op := setProps("n_root")
+			op["target"] = doc[0].ObjectID
+			if _, err := dispatch(e, a, "apply-operations", map[string]any{"changesetId": cs, "expectedSeq": 1, "operations": []any{op}}, "y", "edit"); err != nil {
+				t.Fatal(err)
+			}
+			e.Must(h, "submit-changeset", map[string]any{"changesetId": cs, "expectedSeq": 2}, nil)
+			e.Must(e.Human("Reviewer", auth.ContentPublish, auth.DesignRead, auth.ContentRead), "approve-changeset", map[string]any{"changesetId": cs, "expectedSeq": 2}, nil)
+			changeset, err := e.Q.GetChangeset(ctx, store.GetChangesetParams{ID: cs, ProjectID: h.ProjectID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := workflow.RequireZoneApprovals(ctx, e.Q, changeset, "staging"); cmstest.Code(err) != "APPROVAL_ROLES_MISSING" {
+				t.Fatal("the editor role is required", err)
+			}
+			e.Break(table, "")
+			cmstest.ExpectDBError(t, workflow.RequireZoneApprovals(ctx, e.Q, changeset, "staging"))
+		})
+	}
+}
