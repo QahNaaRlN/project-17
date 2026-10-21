@@ -300,6 +300,7 @@ export function AgentPolicyPanel({ api, editor }: { api: Api; editor: Editor }) 
                   <label>
                     {text("Агент", "Agent")}
                     <select
+                      aria-label={name + " · " + text("Агент", "Agent")}
                       value={rule.subject.agent}
                       onChange={(e) => update((d) => (d.rules[i]!.subject.agent = e.target.value))}
                     >
@@ -366,6 +367,7 @@ export function AgentPolicyPanel({ api, editor }: { api: Api; editor: Editor }) 
                   <label>
                     {text("Не ниже", "At least")}
                     <select
+                      aria-label={name + " · " + text("Не ниже", "At least")}
                       value={rule.min}
                       onChange={(e) => update((d) => (d.risk[i]!.min = e.target.value))}
                     >
@@ -501,6 +503,7 @@ export function AgentPolicyPanel({ api, editor }: { api: Api; editor: Editor }) 
             <label>
               {text("Агент", "Agent")}
               <select
+                aria-label={text("Агент", "Agent")}
                 value={situation.agent}
                 onChange={(e) => setSituation({ ...situation, agent: e.target.value })}
               >
@@ -514,6 +517,7 @@ export function AgentPolicyPanel({ api, editor }: { api: Api; editor: Editor }) 
               {text("Право", "Right")}
               <select
                 required
+                aria-label={text("Право", "Right")}
                 value={situation.right}
                 onChange={(e) => setSituation({ ...situation, right: e.target.value })}
               >
@@ -535,6 +539,7 @@ export function AgentPolicyPanel({ api, editor }: { api: Api; editor: Editor }) 
               <label key={key}>
                 {conditionNames[key][ru ? 0 : 1]}
                 <select
+                  aria-label={conditionNames[key][ru ? 0 : 1]}
                   value={situation[key]}
                   onChange={(e) => setSituation({ ...situation, [key]: e.target.value })}
                 >
