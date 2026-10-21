@@ -1,0 +1,39 @@
+diff --git a/examples/react-store/src/operations.ts b/examples/react-store/src/operations.ts
+index 782d1ae..cb526ee 100644
+--- a/examples/react-store/src/operations.ts
++++ b/examples/react-store/src/operations.ts
+@@ -9,6 +9,10 @@ export function favoriteProduct(
+ ): void {
+   context.app.favorite(args.id, args.title);
+ }
++/** §2 step 10: the action a developer adds for a "quick view" request. */
++export function quickView(args: { id: string }, context: ActionContext<FavoriteServices>): void {
++  context.app.favorite(args.id, "quick view");
++}
+ /** Server-owned catalogue service; the browser never invokes this loader. */
+ export function loadProducts(
+   params: { limit?: number | null },
+diff --git a/examples/react-store/src/registry.ts b/examples/react-store/src/registry.ts
+index 59374ca..9023f16 100644
+--- a/examples/react-store/src/registry.ts
++++ b/examples/react-store/src/registry.ts
+@@ -10,6 +10,7 @@ import { Storefront, Hero, Collection, Item, Card, Empty, About, Promo } from ".
+ import { productField as product, productsField as products } from "./contracts.js";
+ import {
+   favoriteProduct,
++  quickView,
+   loadProducts,
+   loadCollectionProducts,
+   loadRecommendations,
+@@ -53,6 +54,11 @@ export const registry = createRegistry({
+       args: { id: t.string().required().max(64), title: t.string().required().max(200) },
+       handler: favoriteProduct,
+     }),
++    defineAction({
++      name: "store.quickView",
++      args: { id: t.string().required().max(64) },
++      handler: quickView,
++    }),
+   ],
+   dataSources: [
+     defineDataSource({

@@ -16,7 +16,8 @@ export function createDevOIDC({ port = 18095, studioPort = 18094 } = {}) {
     alg: "RS256",
   };
   const codes = new Map();
-  const names = { alice: "Alice", bob: "Bob" };
+  // Erin is the content editor of the §2 scenario (STU-443).
+  const names = { alice: "Alice", bob: "Bob", erin: "Erin" };
   const json = (res, value, status = 200) => {
     res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify(value));

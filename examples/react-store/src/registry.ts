@@ -6,7 +6,7 @@ import {
   defineDataSource,
 } from "@cms/component-registry";
 import { createReactRegistry, defineReactComponent } from "@cms/react";
-import { Storefront, Hero, Collection, Item, Empty, About, Promo } from "./sections.js";
+import { Storefront, Hero, Collection, Item, Card, Empty, About, Promo } from "./sections.js";
 import { productField as product, productsField as products } from "./contracts.js";
 import {
   favoriteProduct,
@@ -36,6 +36,17 @@ export const storeTokens = {
 export const registry = createRegistry({
   breakpoints: { sm: 640, md: 768, lg: 1024 },
   tokens: storeTokens,
+  // The §2 scenario binds a page to a Collection entity (STU-447).
+  schemas: {
+    Collection: {
+      version: 1,
+      title: "Collection",
+      fields: {
+        title: { type: "text", localized: true, required: true },
+        handle: { type: "string", required: true, maxLength: 64 },
+      },
+    },
+  },
   actions: [
     defineAction({
       name: "store.favorite",
@@ -101,6 +112,16 @@ export const registry = createRegistry({
       component: Item,
       props: { product: product.required() },
       events: { favorite: {} },
+    }),
+    defineReactComponent({
+      name: "ProductCard",
+      origin: "native",
+      container: false,
+      component: Card,
+      props: {
+        product: product.required(),
+        variant: t.enum(["default", "compact"]).default("default"),
+      },
     }),
     defineReactComponent({
       name: "StoreEmpty",
