@@ -177,6 +177,7 @@ X-CMS-Project: store
 | `GET /api/v1/publication-history/{id}/promote-preview?toEnvironment=` | Предпросмотр переноса: объекты «сейчас в цели → версия публикации», блокеры, диагностики, зависимости и snapshot; [STU-462](../studio-promote.md) |
 | `GET /api/v1/publication-history/{id}/promote-preview/diff?toEnvironment=&objectId=&snapshot=&limit=&cursor=` | Детали предпросмотра переноса из того же снимка; [STU-463](../studio-promote.md) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
+| `GET /api/v1/security-events?type=&after=&limit=` | Журнал SEC-005 проекта для `project.admin`, новые первыми, ≤ 100 записей и `nextCursor`; [STU-509](../security-hardening.md) |
 | `GET /api/v1/events` (SSE) | Инвалидация состояния проекта и presence для документа/CS/окружения; [контракт](../studio-realtime.md) |
 
 Ответ `register-manifest` различает активированный manifest и сохранённого кандидата: `manifestHash`, `activation` (`active` или `pending`), для кандидата — `changesetId` (MF-025). Регистрация кандидата не меняет ответы запросов активного manifest и схем.
