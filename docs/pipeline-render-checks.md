@@ -1,6 +1,6 @@
 # Pipeline: этапы 8–9 — сборка preview и axe
 
-Статус: **одобрена пользователем 2026-10-26; решения §11 приняты; код не начат**.
+Статус: **одобрена пользователем 2026-10-26; решения §11 приняты; реализована в ветке `feature/pipeline-render-checks`, см. [отчёт](pipeline-render-checks-acceptance.md)**.
 Дата: 2026-10-26. Требования: STU-480…499 (STU-460…479 заняты пакетом
 [переноса в production](studio-promote.md)).
 Основа: `origin/dev` на `b242601` (после [PR #85](https://github.com/QahNaaRlN/project-17/pull/85)).

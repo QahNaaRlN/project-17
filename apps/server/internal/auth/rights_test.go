@@ -35,8 +35,8 @@ func TestAllRightsAreUnique(t *testing.T) {
 		}
 		seen[r] = true
 	}
-	if len(AllRights) != 22 {
-		t.Errorf("прав %d; перечень в 09-agent.md §2.1 содержит 22", len(AllRights))
+	if len(AllRights) != 23 {
+		t.Errorf("прав %d; перечень в 09-agent.md §2.1 содержит 23", len(AllRights))
 	}
 }
 

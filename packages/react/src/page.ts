@@ -26,6 +26,28 @@ export interface NativeProps<V = Record<string, unknown>> {
   previewAttributes?: { "data-cms-node": string; "data-cms-instance"?: string };
 }
 export type NativeRegistry = Record<string, ComponentType<NativeProps>>;
+// Draft placeholders and unconfigured image delivery do not break a page render.
+const renderWarnings = new Set([
+  "CMS_COMPONENT_PENDING_CAPABILITY",
+  "CMS_ACTION_PENDING_CAPABILITY",
+  "CMS_SOURCE_PENDING",
+  "CMS_IMAGE_UNAVAILABLE",
+]);
+/**
+ * STU-489: render diagnostics of a preview page as escaped JSON for the stage 8 check
+ * runner; codes and node IDs only, never object bodies.
+ */
+export function renderDiagnostics(plan: RenderPlan): string {
+  const list = plan.diagnostics.map((d) => ({
+    code: d.code,
+    nodeId: d.nodeId,
+    severity: d.severity ?? (renderWarnings.has(d.code) ? "warning" : "error"),
+  }));
+  return JSON.stringify(list).replace(
+    /[<>&\u2028\u2029]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
+}
 export interface CmsPageProps {
   richText?: RichTextResources;
   plan: RenderPlan;
@@ -143,11 +165,10 @@ export function CmsPage({
         const image = plan.images?.[node.key];
         return image
           ? createElement("img", { ...common, ...image })
-          : createElement("span", {
-              ...common,
-              role: "img",
-              "aria-label": String(props.alt ?? ""),
-            });
+          : props.decorative === true || !props.alt
+            ? // A decorative or unnamed placeholder is hidden from assistive technology.
+              createElement("span", { ...common, "aria-hidden": "true" })
+            : createElement("span", { ...common, role: "img", "aria-label": String(props.alt) });
       }
       case "Heading":
         return createElement(`h${props.level ?? 2}`, common, String(props.text ?? ""));
@@ -231,5 +252,12 @@ export function CmsPage({
     null,
     plan.css ? createElement("style", null, plan.css) : null,
     plan.roots.map(render),
+    preview
+      ? createElement("script", {
+          type: "application/json",
+          id: "cms-render-diagnostics",
+          dangerouslySetInnerHTML: { __html: renderDiagnostics(plan) },
+        })
+      : null,
   );
 }

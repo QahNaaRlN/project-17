@@ -110,3 +110,42 @@ it("leaves native SSR exceptions to the application error response", () => {
     renderToString(createElement(CmsPage, { plan: plan("Widget"), registry: { Widget } })),
   ).toThrow("private-native-detail");
 });
+it("STU-489: preview pages expose escaped render diagnostics; normal pages do not", () => {
+  const page: RenderPlan = {
+    ...plan("Box"),
+    diagnostics: [
+      { code: "CMS_COMPONENT_MISSING", nodeId: "</script><b>" },
+      { code: "CMS_IMAGE_UNAVAILABLE", nodeId: "n_img" },
+      { code: "IR_X", nodeId: "n_x", severity: "warning" },
+      { code: "CMS_SOURCE_PENDING", nodeId: "a\u2028&b" },
+    ],
+  };
+  const html = renderToString(createElement(CmsPage, { plan: { ...page, preview: true } }));
+  const match = /<script type="application\/json" id="cms-render-diagnostics">(.*?)<\/script>/.exec(
+    html,
+  );
+  expect(match).not.toBeNull();
+  expect(match![1]).not.toMatch(/[<>&\u2028]/);
+  expect(JSON.parse(match![1]!)).toEqual([
+    { code: "CMS_COMPONENT_MISSING", nodeId: "</script><b>", severity: "error" },
+    { code: "CMS_IMAGE_UNAVAILABLE", nodeId: "n_img", severity: "warning" },
+    { code: "IR_X", nodeId: "n_x", severity: "warning" },
+    { code: "CMS_SOURCE_PENDING", nodeId: "a\u2028&b", severity: "warning" },
+  ]);
+  expect(renderToString(createElement(CmsPage, { plan: page }))).not.toContain(
+    "cms-render-diagnostics",
+  );
+});
+it("STU-491: an image placeholder without a name is hidden; a named one is an image", () => {
+  const hidden = renderToString(
+    createElement(CmsPage, { plan: plan("Image", { decorative: true }) }),
+  );
+  expect(hidden).toContain('aria-hidden="true"');
+  expect(hidden).not.toContain('role="img"');
+  expect(renderToString(createElement(CmsPage, { plan: plan("Image", {}) }))).not.toContain(
+    'role="img"',
+  );
+  expect(
+    renderToString(createElement(CmsPage, { plan: plan("Image", { alt: "Ваза" }) })),
+  ).toContain('role="img" aria-label="Ваза"');
+});

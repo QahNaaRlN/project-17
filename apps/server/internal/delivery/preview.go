@@ -19,38 +19,20 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/previewtoken"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
 // PreviewTTL — срок действия preview-токена (API-041: не больше 15 минут).
-const PreviewTTL = 15 * time.Minute
+const PreviewTTL = previewtoken.TTL
 
-// previewClaims — поля preview-токена (API-041).
-type previewClaims struct {
-	Project     string     `json:"prj"`
-	Environment string     `json:"env"`
-	Changeset   *uuid.UUID `json:"cs,omitempty"`
-	// Registration pins a token of a preview environment with a source to the
-	// build it was issued for (STU-329).
-	Registration *int32    `json:"reg,omitempty"`
-	Subject      uuid.UUID `json:"sub"`
-	Expires      int64     `json:"exp"`
-}
+type previewClaims = previewtoken.Claims
 
-var jwtHeader = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+var jwtHeader = previewtoken.Header
 
-func sign(key []byte, signingInput string) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(signingInput))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
+func sign(key []byte, signingInput string) string { return previewtoken.MAC(key, signingInput) }
 
-// signToken выпускает JWT HS256 с полями claims.
-func signToken(key []byte, c previewClaims) string {
-	payload, _ := json.Marshal(c) // структура из простых полей
-	input := jwtHeader + "." + base64.RawURLEncoding.EncodeToString(payload)
-	return input + "." + sign(key, input)
-}
+func signToken(key []byte, c previewClaims) string { return previewtoken.Sign(key, c) }
 
 // errTokenInvalid — подпись, формат или срок preview-токена не годятся.
 var errTokenInvalid = errors.New("delivery: недействительный preview-токен")

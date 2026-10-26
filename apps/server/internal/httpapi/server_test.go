@@ -54,6 +54,10 @@ func setup(t *testing.T) env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Stages 8–9 need an application and a check runner; their own tests enable them.
+	if _, err := pool.Exec(context.Background(), "INSERT INTO project_render_checks (project_id, enabled) VALUES ($1, false) ON CONFLICT (project_id) DO UPDATE SET enabled = false", res.ProjectID); err != nil {
+		t.Fatal(err)
+	}
 	actor, err := auth.Authenticate(context.Background(), store.New(pool), "Bearer "+res.Token)
 	if err != nil {
 		t.Fatal(err)

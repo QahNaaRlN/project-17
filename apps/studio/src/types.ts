@@ -460,7 +460,15 @@ export interface Review {
   approvals: number;
   requiredRoles?: string[];
   missingRequiredRoles?: string[];
-  checks: { stage: string; status: string; blocking: boolean; details: unknown }[];
+  checks: {
+    stage: string;
+    status: string;
+    blocking: boolean;
+    details: unknown;
+    /** Stages 8–9 run per environment; stale means no runner took them (STU-494). */
+    environment?: string;
+    stale?: boolean;
+  }[];
   history: {
     approverId: string;
     decision: string;

@@ -41,12 +41,12 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      # The check runner tests (STU-490/491) and the storefront scenarios need Chromium.
+      - run: pnpm --filter @cms/store-example exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm build
       - name: Storefront browser scenarios
-        run: |
-          pnpm --filter @cms/store-example exec playwright install --with-deps chromium
-          pnpm --filter @cms/store-example test:e2e
+        run: pnpm --filter @cms/store-example test:e2e
       - name: Browser failure context
         if: failure()
         uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir -p "$E2E_DIR"
           (cd apps/server && go vet -tags e2e ./internal/capabilitygithub && go test -tags e2e -count=1 -run STU445 ./internal/capabilitygithub && go build -tags e2e -o "$E2E_DIR/cms" ./cmd/cms)
-          pnpm exec turbo run build --filter @cms/studio --filter @cms/store-example
+          pnpm exec turbo run build --filter @cms/studio --filter @cms/store-example --filter @cms/check-runner
       - run: pnpm --filter @cms/store-example exec playwright install --with-deps chromium
       - name: Scenario §2
         run: E2E_SKIP_BUILD=true pnpm e2e:scenario

@@ -161,7 +161,7 @@ func workQueueRoutes(router chi.Router, d Deps) {
 				}
 				limit = n
 			}
-			filters := map[string][]string{"state": {"all", "open", "failed", "changes_requested", "in_review", "approved"}, "ownership": {"all", "mine", "others"}, "kind": {"all", "page", "component", "entity", "asset"}}
+			filters := map[string][]string{"state": {"all", "open", "checking", "failed", "changes_requested", "in_review", "approved"}, "ownership": {"all", "mine", "others"}, "kind": {"all", "page", "component", "entity", "asset"}}
 			selected := map[string]string{}
 			for k, valid := range filters {
 				v := values.Get(k)

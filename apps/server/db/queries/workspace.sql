@@ -53,6 +53,6 @@ JOIN LATERAL (
 ) page ON true
 WHERE c.project_id=sqlc.arg(project_id) AND c.kind='standard'
 AND sqlc.arg(environment)::text=ANY(c.targets) AND c.id>sqlc.arg(after_id)
-AND ((c.owner_id=sqlc.arg(actor_id) AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+AND ((c.owner_id=sqlc.arg(actor_id) AND c.state IN ('open','checking','failed','changes_requested','in_review','approved'))
  OR (c.owner_id<>sqlc.arg(actor_id) AND sqlc.arg(can_review)::boolean AND c.state IN ('in_review','approved')))
 ORDER BY c.id LIMIT 51;

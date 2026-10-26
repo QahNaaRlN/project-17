@@ -7,6 +7,8 @@ import {
   safeDiagnostics,
   diagnosticNode,
   policyViolations,
+  renderCheckPages,
+  renderCheckReason,
 } from "../src/review.js";
 import { fixture, changesetId, documentId } from "./fixture.js";
 import { StudioError, type Review } from "../src/types.js";
@@ -99,4 +101,69 @@ it("STU-071: diagnostics are narrowed to codes and paths, scoped by environment 
     }),
   ).toEqual([{ actorId: changesetId, operation: "node.setDesign", right: "design.compose" }]);
   expect(policyViolations(null)).toEqual([]);
+});
+it("STU-494: render check details become safe text per page", () => {
+  const details = {
+    pages: [
+      { objectId: documentId, path: "/ok", status: 200, diagnostics: [], errors: [] },
+      {
+        path: "/broken",
+        status: 500,
+        diagnostics: [
+          { code: "CMS_COMPONENT_MISSING", severity: "error" },
+          { code: "CMS_IMAGE_UNAVAILABLE", severity: "warning" },
+          { code: "<b>", severity: "error" },
+        ],
+        errors: ["TypeError: <script>"],
+      },
+      {
+        path: "/a11y",
+        violations: [{ id: "button-name", impact: "serious", nodes: 2 }, { id: "<x>" }],
+      },
+      { path: "/later", reason: "PREVIEW_FAILED" },
+      { path: "x".repeat(600), reason: "PREVIEW_FAILED" },
+      null,
+    ],
+  };
+  expect(renderCheckPages(details)).toEqual([
+    { path: "/broken", problems: ["HTTP 500", "CMS_COMPONENT_MISSING", "SCRIPT_ERROR"] },
+    { path: "/a11y", problems: ["button-name (serious, 2)"] },
+    { path: "/later", problems: ["PREVIEW_FAILED"] },
+  ]);
+  expect(renderCheckPages({ pages: "x" })).toEqual([]);
+  expect(renderCheckPages(null)).toEqual([]);
+  expect(renderCheckReason({ reason: "CHECK_APP_URL_MISSING" })).toBe("CHECK_APP_URL_MISSING");
+  expect(renderCheckReason({ reason: "<b>" })).toBeNull();
+  const review = fixture().review;
+  expect(
+    validateReview(
+      {
+        ...review,
+        changeset: { ...review.changeset, state: "checking" },
+        checks: [
+          {
+            stage: "preview",
+            status: "queued",
+            blocking: true,
+            details: {},
+            environment: "staging",
+            stale: true,
+          },
+        ],
+      },
+      changesetId,
+    ).changeset.state,
+  ).toBe("checking");
+  for (const check of [{ environment: 1 }, { stale: "yes" }])
+    expect(() =>
+      validateReview(
+        {
+          ...review,
+          checks: [
+            { stage: "axe", status: "queued", blocking: true, details: {}, ...check } as never,
+          ],
+        },
+        changesetId,
+      ),
+    ).toThrow(StudioError);
 });

@@ -67,7 +67,7 @@ func errCode(err error) string {
 
 func TestBootstrap(t *testing.T) {
 	e := setup(t)
-	if len(e.admin.Rights) != len(auth.AllRights)-1 || e.admin.Rights.Has(auth.CapabilityDeliver) || e.admin.ProjectSlug != "store" || e.admin.DisplayName != "bootstrap-admin" {
+	if len(e.admin.Rights) != len(auth.AllRights)-2 || e.admin.Rights.Has(auth.CapabilityDeliver) || e.admin.Rights.Has(auth.ChecksRun) || e.admin.ProjectSlug != "store" || e.admin.DisplayName != "bootstrap-admin" {
 		t.Errorf("администратор: %+v", e.admin)
 	}
 	envs, err := projects.ListEnvironments(context.Background(), store.New(e.pool), e.admin.ProjectID)
@@ -152,5 +152,46 @@ func TestListEnvironmentsError(t *testing.T) {
 	e.pool.Close()
 	if _, err := projects.ListEnvironments(context.Background(), store.New(e.pool), e.admin.ProjectID); err == nil {
 		t.Error("ожидалась ошибка")
+	}
+}
+
+// STU-481/488: storage failures of the runner token and the application address.
+func TestCheckRunnerTokenAndAppURLFailures(t *testing.T) {
+	for _, table := range []string{"roles", "actors", "role_bindings", "api_tokens"} {
+		t.Run(table, func(t *testing.T) {
+			e := setup(t)
+			fail(t, e, table, "INSERT")
+			if _, err := projects.CheckRunnerToken(context.Background(), e.pool, "store", time.Hour); err == nil {
+				t.Fatal("ожидалась ошибка БД")
+			}
+		})
+	}
+	t.Run("lookup", func(t *testing.T) {
+		e := setup(t)
+		if _, err := e.pool.Exec(context.Background(), "ALTER TABLE role_bindings RENAME TO role_bindings_broken"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := projects.CheckRunnerToken(context.Background(), e.pool, "store", time.Hour); err == nil {
+			t.Fatal("ожидалась ошибка БД")
+		}
+	})
+	t.Run("app url", func(t *testing.T) {
+		e := setup(t)
+		fail(t, e, "environments", "UPDATE")
+		_, err := e.bus.Dispatch(context.Background(), e.admin, commandbus.Request{Name: "set-environment-app-url", IdempotencyKey: "app-url",
+			Payload: []byte(`{"environment":"staging","appUrl":"https://shop.example"}`)})
+		var ce *commandbus.Error
+		if err == nil || errors.As(err, &ce) {
+			t.Fatal(err)
+		}
+	})
+}
+
+func fail(t *testing.T, e env, table, op string) {
+	t.Helper()
+	if _, err := e.pool.Exec(context.Background(), `CREATE OR REPLACE FUNCTION cms_test_fail() RETURNS trigger LANGUAGE plpgsql AS
+		$$BEGIN RAISE EXCEPTION 'сбой, внесённый тестом'; END$$;
+		CREATE TRIGGER cms_test_fail BEFORE `+op+` ON `+table+` FOR EACH STATEMENT EXECUTE FUNCTION cms_test_fail()`); err != nil {
+		t.Fatal(err)
 	}
 }

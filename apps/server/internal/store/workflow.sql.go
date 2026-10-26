@@ -312,7 +312,7 @@ func (q *Queries) ListApprovals(ctx context.Context, changesetID uuid.UUID) ([]A
 }
 
 const listChecks = `-- name: ListChecks :many
-SELECT id, changeset_id, content_hash, environment, stage, status, blocking, details, artifacts, started_at, finished_at FROM checks WHERE changeset_id = $1 AND content_hash = $2 ORDER BY stage
+SELECT id, changeset_id, content_hash, environment, stage, status, blocking, details, artifacts, started_at, finished_at, created_at, lease_id, lease_expires_at, attempts FROM checks WHERE changeset_id = $1 AND content_hash = $2 ORDER BY stage
 `
 
 type ListChecksParams struct {
@@ -341,6 +341,10 @@ func (q *Queries) ListChecks(ctx context.Context, arg ListChecksParams) ([]Check
 			&i.Artifacts,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.LeaseID,
+			&i.LeaseExpiresAt,
+			&i.Attempts,
 		); err != nil {
 			return nil, err
 		}

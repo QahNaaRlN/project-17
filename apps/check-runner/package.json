@@ -1,0 +1,22 @@
+{
+  "name": "@cms/check-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cms-check-runner": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "playwright": "1.56.1"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.11"
+  }
+}

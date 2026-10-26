@@ -213,7 +213,31 @@ export async function startStand({
         }),
       );
       stores[environment] = { origin: origin(n), port: port(n), configFile: file };
+      // STU-481: stages 8–9 render through the storefront of the environment.
+      await command("set-environment-app-url", { environment, appUrl: origin(n) });
     }
+    // STU-488/492: the check runner leases stage 8–9 checks with its own narrow token.
+    const runnerToken = spawnSync(
+      binary,
+      ["check-runner-token", "-slug", project, "-token-ttl", "8h"],
+      {
+        env,
+        encoding: "utf8",
+        windowsHide: true,
+      },
+    );
+    if (runnerToken.status !== 0)
+      throw Error("Check runner token failed: " + runnerToken.stderr.slice(0, 500));
+    start(
+      process.execPath,
+      [join(repo, "apps", "check-runner", "dist", "main.js")],
+      {
+        CMS_API_URL: apiOrigin,
+        CMS_PROJECT: project,
+        CMS_CHECK_RUNNER_TOKEN: runnerToken.stdout.trim(),
+      },
+      "check-runner.log",
+    );
     const studioFile = join(local, "studio.private.json");
     writeFileSync(
       studioFile,

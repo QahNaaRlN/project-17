@@ -62,7 +62,11 @@ export async function loadPage(
   }
   if (page.diagnostics)
     plan.diagnostics.push(
-      ...page.diagnostics.map((d) => ({ code: d.code, nodeId: d.nodeId ?? page.document.root })),
+      ...page.diagnostics.map((d) => ({
+        code: d.code,
+        nodeId: d.nodeId ?? page.document.root,
+        severity: d.severity,
+      })),
     );
   await loadPlanImages(cms, plan, options.read);
   return plan;

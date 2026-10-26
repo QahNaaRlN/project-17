@@ -39,7 +39,10 @@ it("SDK-030: preview маркирует примитивы и native, published 
   };
   expect(
     renderToString(createElement(CmsPage, { plan: nativePlan, registry: { Native: Component } })),
-  ).toBe('<article data-cms-node="text"></article>');
+  ).toBe(
+    '<article data-cms-node="text"></article>' +
+      '<script type="application/json" id="cms-render-diagnostics">[]</script>',
+  );
 });
 it("SDK-031/033/042: design перехватывает ближайший экземпляр, interact разрешает действие, layout ограничен 60 мс", async () => {
   vi.useFakeTimers();

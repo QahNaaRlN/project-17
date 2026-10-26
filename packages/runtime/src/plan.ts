@@ -20,6 +20,8 @@ export interface PlanNode {
 export interface PlanDiagnostic {
   code: string;
   nodeId: string;
+  /** Draft diagnostics of the Delivery API keep their severity (STU-489). */
+  severity?: "error" | "warning";
 }
 export interface RenderPlan {
   images?: Record<string, ReturnType<typeof Image>["props"]>;

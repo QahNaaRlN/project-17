@@ -1,6 +1,6 @@
 import { StudioError, type List, type WorkQueueCard, type WorkQueueItem } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const states = ["open", "failed", "changes_requested", "in_review", "approved"];
+const states = ["open", "checking", "failed", "changes_requested", "in_review", "approved"];
 const count = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0;
 export function validateQueueItem(i: WorkQueueItem): WorkQueueItem {
   if (

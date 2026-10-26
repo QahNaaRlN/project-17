@@ -144,6 +144,9 @@ X-CMS-Project: store
 | `create-capability-request` / `update-capability-request` | см. [09-agent.md §5](09-agent.md#5-missing-capability) | `capability.request` |
 | `start-agent-session` / `end-agent-session` | см. [09-agent.md §3](09-agent.md#3-идентичность-и-делегирование-агента) | `agent.delegate` |
 | `create-environment` / `delete-environment` | `name`, `kind`, `appUrl` | `project.admin`; для `preview` — `manifest.register` |
+| `set-environment-app-url` | `environment`, `appUrl` | `project.admin`; адрес приложения стандартного окружения для этапов 8–9 ([STU-481](../pipeline-render-checks.md)) |
+| `claim-check` | — | `checks.run`, только сервисный актор исполнителя; аренда проверки этапа 8–9 на 5 мин, страницы и preview-токен; пустая очередь — `check: null` ([STU-485](../pipeline-render-checks.md)) |
+| `complete-check` | `checkId`, `leaseId`, `status`, `details` | `checks.run`; результат по действующей аренде, затем пересчёт состояния CS ([STU-486](../pipeline-render-checks.md)) |
 | `set-policy` | `body` | `project.admin` |
 
 ## 4. Query API
@@ -282,9 +285,9 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
-| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `PROMOTE_SNAPSHOT_STALE`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
+| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `PROMOTE_SNAPSHOT_STALE`, `CHECKS_PENDING`, `CHECK_LEASE_LOST`, `CHECK_APP_URL_MISSING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
 | 413 | `LIMIT_EXCEEDED` |
-| 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED` |
+| 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED`, `CHECKS_FAILED` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |
 
 ## 7. Ограничения частоты

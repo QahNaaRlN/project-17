@@ -167,7 +167,7 @@ JOIN LATERAL (
 ) page ON true
 WHERE c.project_id=$1 AND c.kind='standard'
 AND $2::text=ANY(c.targets) AND c.id>$3
-AND ((c.owner_id=$4 AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+AND ((c.owner_id=$4 AND c.state IN ('open','checking','failed','changes_requested','in_review','approved'))
  OR (c.owner_id<>$4 AND $5::boolean AND c.state IN ('in_review','approved')))
 ORDER BY c.id LIMIT 51
 `

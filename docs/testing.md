@@ -66,9 +66,14 @@
 - Сценарий §2 ([e2e-scenario.md](e2e-scenario.md)) идёт против стенда
   [`scripts/e2e-stand.mjs`](../scripts/e2e-stand.mjs): CMS с тегом сборки `e2e`,
   PostgreSQL, Studio, витрины staging и production, локальный OIDC (Alice, Bob,
-  Erin), приёмник CDN purge и сервер фактов GitHub. Повторов проверок нет
-  (`retries: 0`); незавершённые части — только через реестр
-  `e2e/scenario/pending.ts`. Измерения времени — в `e2e-metrics.json`.
+  Erin), приёмник CDN purge, сервер фактов GitHub и исполнитель проверок этапов 8–9
+  (`apps/check-runner`). Повторов проверок нет (`retries: 0`); незавершённые части —
+  только через реестр `e2e/scenario/pending.ts` (с этапами 8–9 он пуст).
+  Измерения времени — в `e2e-metrics.json`.
+- Тесты исполнителя проверок (`apps/check-runner`) рендерят фикстурное приложение
+  в настоящем Chromium; в CI браузер ставится до `pnpm test`.
+- Командные тесты Go (`cmstest`) выключают этапы 8–9 строкой таблицы `project_render_checks`;
+  тесты этапов включают его, задают адрес приложения и выступают исполнителем.
 
 ## 4. Метрики и пороги
 
@@ -130,7 +135,7 @@ CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 | Workflow | Триггер | Что делает |
 |---|---|---|
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
-| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL как `services`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
+| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 
 ## 7. Чек-лист ревьюера

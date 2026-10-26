@@ -105,7 +105,7 @@ func GetStudioReview(ctx context.Context, q *store.Queries, actor auth.Actor, id
 				} else if len(out.Objects) == 0 {
 					reason = "CHANGESET_EMPTY"
 				}
-			} else if !slices.Contains([]string{"failed", "changes_requested", "in_review", "approved"}, cs.State) {
+			} else if !slices.Contains([]string{"checking", "failed", "changes_requested", "in_review", "approved"}, cs.State) {
 				reason = "CHANGESET_STATE_INVALID"
 			}
 		case "approve", "request-changes":

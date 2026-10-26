@@ -115,6 +115,10 @@ func reopen(ctx context.Context, q *store.Queries, cs *store.Changeset) error {
 	if err := q.InvalidateApprovals(ctx, cs.ID); err != nil {
 		return err
 	}
+	// STU-495: unfinished stage 8–9 checks of the old content are cancelled.
+	if err := q.SkipOpenRenderChecks(ctx, store.SkipOpenRenderChecksParams{ChangesetID: cs.ID, Reason: "CHANGESET_REOPENED"}); err != nil {
+		return err
+	}
 	if err := q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: "open"}); err != nil {
 		return err
 	}
@@ -147,6 +151,24 @@ func reevaluate(ctx context.Context, q *store.Queries, projectID uuid.UUID, cs *
 		state = "in_review"
 		if status.count >= ev.required && len(status.missing) == 0 {
 			state = "approved"
+		}
+	}
+	if (state == "in_review" || state == "approved") && cs.Kind != "schema" {
+		// STU-484: rebased content is new content; stages 8–9 run for it again.
+		if err := q.SkipOpenRenderChecks(ctx, store.SkipOpenRenderChecksParams{ChangesetID: cs.ID, Reason: "CHANGESET_REBASED"}); err != nil {
+			return nil, err
+		}
+		versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+		if err != nil {
+			return nil, err
+		}
+		next, render, err := queueRenderChecks(ctx, q, *cs, ev, versions)
+		if err != nil {
+			return nil, err
+		}
+		ev.checks = append(ev.checks, render...)
+		if next != "" {
+			state = next
 		}
 	}
 	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: cs.Targets}); err != nil {

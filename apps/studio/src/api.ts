@@ -1045,7 +1045,9 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
             typeof i.path !== "string" ||
             !i.path.startsWith("/") ||
             i.path.startsWith("//") ||
-            !["open", "failed", "changes_requested", "in_review", "approved"].includes(i.state),
+            !["open", "checking", "failed", "changes_requested", "in_review", "approved"].includes(
+              i.state,
+            ),
         )
       )
         throw new StudioError("RESPONSE_INVALID");
@@ -1079,7 +1081,7 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
       if (action !== "publish") {
         const cs = result?.result?.changeset;
         const states = {
-          submit: ["failed", "in_review", "approved"],
+          submit: ["checking", "failed", "in_review", "approved"],
           reopen: ["open"],
           approve: ["in_review", "approved"],
           "request-changes": ["changes_requested"],

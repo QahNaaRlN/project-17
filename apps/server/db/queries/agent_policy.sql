@@ -24,7 +24,7 @@ SELECT DISTINCT schema_name FROM schema_versions WHERE project_id = $1 ORDER BY 
 
 -- name: ReviewedAgentChangesets :many
 SELECT c.id FROM changesets c
-WHERE c.project_id = $1 AND c.state IN ('in_review', 'approved')
+WHERE c.project_id = $1 AND c.state IN ('checking', 'in_review', 'approved')
   AND EXISTS (SELECT 1 FROM operations o WHERE o.changeset_id = c.id AND o.source = 'agent' AND o.status = 'applied')
 ORDER BY c.id;
 
