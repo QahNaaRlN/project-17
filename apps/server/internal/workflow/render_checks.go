@@ -11,14 +11,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
-	"github.com/qahnaarln/project-17/apps/server/internal/previewtoken"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/qahnaarln/project-17/apps/server/internal/previewtoken"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
