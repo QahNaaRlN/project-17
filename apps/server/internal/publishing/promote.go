@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,8 +19,9 @@ import (
 )
 
 type promotePayload struct {
-	PublicationID uuid.UUID `json:"publicationId"`
-	ToEnvironment string    `json:"toEnvironment"`
+	ExpectedPromoteSnapshot *string   `json:"expectedPromoteSnapshot,omitempty"`
+	PublicationID           uuid.UUID `json:"publicationId"`
+	ToEnvironment           string    `json:"toEnvironment"`
 }
 
 // handlePromote переносит версии публикации в другое окружение (06 §7.2): указатели
@@ -29,6 +32,27 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 	q := store.New(tx)
 	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
 		return Publication{}, err
+	}
+	if p.ExpectedPromoteSnapshot != nil {
+		// STU-466: перенос из Studio исполняется только по актуальному просмотренному снимку.
+		fresh, err := currentHistoryActor(ctx, q, actor)
+		if err != nil {
+			return Publication{}, err
+		}
+		if err := commandbus.Require(fresh, auth.ContentPublish); err != nil {
+			return Publication{}, err
+		}
+		actor = fresh
+		if reason := strings.TrimSpace(commandbus.ReasonFrom(ctx)); reason == "" || utf8.RuneCountInString(reason) > 2000 {
+			return Publication{}, historyError(400, "INVALID_ARGUMENT")
+		}
+		card, _, _, err := LoadPromotePreview(ctx, q, actor, p.PublicationID, p.ToEnvironment, nil)
+		if err != nil {
+			return Publication{}, err
+		}
+		if card.Snapshot != *p.ExpectedPromoteSnapshot {
+			return Publication{}, historyError(409, "PROMOTE_SNAPSHOT_STALE")
+		}
 	}
 	src, err := q.GetPublication(ctx, store.GetPublicationParams{ID: p.PublicationID, ProjectID: actor.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {

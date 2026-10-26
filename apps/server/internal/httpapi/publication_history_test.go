@@ -58,3 +58,38 @@ func TestPublicationHistoryQueriesAndGuardedRollback(t *testing.T) {
 		t.Fatal(v)
 	}
 }
+
+// STU-462, 463, 466: promote preview, its diff and the guarded command over HTTP.
+func TestPublicationHistoryPromotePreview(t *testing.T) {
+	e := setup(t)
+	e.command(t, "set-approval-policy", `{"low":0,"medium":0,"high":0}`)
+	cs := e.command(t, "create-changeset", `{"title":"Promote","targets":["staging"]}`)["id"].(string)
+	result := e.command(t, "apply-operations", `{"changesetId":"`+cs+`","expectedSeq":0,"operations":[{"type":"document.create","payload":{"kind":"page","path":"/promote","root":{"id":"n_root","type":"Box","name":"Promote"}}}]}`)
+	doc := result["operations"].([]any)[0].(map[string]any)["target"].(string)
+	e.command(t, "submit-changeset", `{"changesetId":"`+cs+`","expectedSeq":1}`)
+	p := e.command(t, "publish", `{"changesetId":"`+cs+`","environment":"staging"}`)["id"].(string)
+	preview := "/api/v1/publication-history/" + p + "/promote-preview?environment=staging&toEnvironment=production"
+	r, v := e.do(t, "GET", preview, "", e.authed(nil))
+	if r.StatusCode != 200 || v["canPromote"] != true || v["toEnvironment"] != "production" {
+		t.Fatal(v)
+	}
+	snapshot := v["snapshot"].(string)
+	detail := "/api/v1/publication-history/" + p + "/promote-preview/diff?toEnvironment=production&objectId=" + doc + "&snapshot=" + snapshot + "&limit=1"
+	r, v = e.do(t, "GET", detail, "", e.authed(nil))
+	if r.StatusCode != 200 {
+		t.Fatal(v)
+	}
+	for _, bad := range []string{strings.Replace(preview, "&toEnvironment=production", "", 1), preview + "&toEnvironment=staging", strings.Replace(preview, "production", strings.Repeat("p", 101), 1), strings.Replace(preview, "production", "missing", 1), strings.Replace(detail, "toEnvironment", "environment", 1)} {
+		r, v = e.do(t, "GET", bad, "", e.authed(nil))
+		if r.StatusCode < 400 {
+			t.Fatal(bad, v)
+		}
+	}
+	body := `{"reason":"Release","payload":{"publicationId":"` + p + `","toEnvironment":"production","expectedPromoteSnapshot":"` + snapshot + `"}}`
+	r, v = e.do(t, "POST", "/api/v1/commands/promote", body, e.authed(map[string]string{"Idempotency-Key": "history-promote"}))
+	if r.StatusCode != 200 || v["result"].(map[string]any)["kind"] != "promote" {
+		t.Fatal(v)
+	}
+	r, v = e.do(t, "GET", detail, "", e.authed(nil))
+	expectProblem(t, r, v, 409, "PROMOTE_SNAPSHOT_STALE")
+}
