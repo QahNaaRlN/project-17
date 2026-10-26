@@ -575,23 +575,26 @@ test("§2: MVP acceptance scenario", async () => {
     await expect(panel).toContainText("Публикация подтверждена: staging");
     const staging = await (await fetch(stand.stores.staging.origin + "/store")).text();
     expect(staging).toContain(state.title);
-    stillPending(
-      "studio-promote",
-      (await panel.getByRole("button", { name: /production|Перенести/ }).count()) > 0,
-    );
     const publications = (await read(stand, bob, "/publications?environment=staging")).items;
     const ofShowcase = publications.find((p: any) => p.changesetId === state.cs);
     const ofEntity = publications.find((p: any) => p.changesetId === state.entityChangeset);
     expect(ofEntity && ofShowcase, JSON.stringify(publications)).toBeTruthy();
     const before = (await purges()).length;
-    await command(stand, bob, "promote", {
-      publicationId: ofEntity.id,
-      toEnvironment: "production",
-    });
-    await command(stand, bob, "promote", {
-      publicationId: ofShowcase.id,
-      toEnvironment: "production",
-    });
+    // STU-477: Bob promotes both staging publications in Studio; the page needs the entity first.
+    for (const publication of [ofEntity, ofShowcase]) {
+      await bob.page.goto(
+        stand.studioOrigin + "/editor#publication=" + publication.id + "&environment=staging",
+      );
+      await bob.page.reload({ waitUntil: "domcontentloaded" });
+      const history = bob.page.getByRole("region", { name: "История публикаций", exact: true });
+      await history.getByRole("button", { name: "Перенести в production…", exact: true }).click();
+      await expect(history.getByText(/Будет перенесено: [1-9]/)).toBeVisible();
+      await history.getByRole("button", { name: "Перенести в production", exact: true }).click();
+      const dialog = bob.page.getByRole("dialog");
+      await dialog.locator("textarea").fill("Релиз витрины §2");
+      await dialog.getByRole("button", { name: "Подтвердить перенос", exact: true }).click();
+      await expect(history.getByText(/Перенос выполнен: production/)).toBeVisible();
+    }
     // FR-031/PUB-020: visible in production within 10 s (strict gate, §6).
     const visible = await until(async () => {
       const html = await (await fetch(stand.stores.production.origin + "/store")).text();
@@ -609,9 +612,21 @@ test("§2: MVP acceptance scenario", async () => {
   });
 
   await test.step("9. Production rollback", async () => {
-    stillPending("studio-production-rollback", false);
     const before = (await purges()).length;
-    await command(stand, bob, "rollback", { publicationId: state.promotion.id, resetHead: false });
+    // STU-477: Bob rolls back the production promotion in Studio.
+    await bob.page.goto(
+      stand.studioOrigin + "/editor#publication=" + state.promotion.id + "&environment=production",
+    );
+    await bob.page.reload({ waitUntil: "domcontentloaded" });
+    const history = bob.page.getByRole("region", { name: "История публикаций", exact: true });
+    await history
+      .getByRole("button", { name: "Посмотреть последствия отката", exact: true })
+      .click();
+    await history.getByRole("button", { name: "Отменить публикацию…", exact: true }).click();
+    const dialog = bob.page.getByRole("dialog");
+    await dialog.locator("textarea").fill("Откат релиза §2");
+    await dialog.getByRole("button", { name: "Подтвердить откат", exact: true }).click();
+    await expect(history.getByText("Публикация отменена. Черновики сохранены.")).toBeVisible();
     // FR-032/PUB-030: the previous version is visible within 10 s; no new versions.
     const back = await until(async () => {
       const html = await (await fetch(stand.stores.production.origin + "/store")).text();

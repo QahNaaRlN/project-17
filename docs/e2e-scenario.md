@@ -124,6 +124,9 @@ GitHub Actions (ubuntu-latest)
 | 7 | Этапы pipeline 8 (preview build) и 9 (axe) `passed` | Проверяются этапы 1–7, 13; отсутствие 8–9 фиксируется аннотацией | Когда результаты этапов 8–9 появляются в `checks` — запись удаляется пакетом этапов M6, иначе тест падает «pending выполнен» |
 | 8 | `promote` через Studio | `promote` командой API от имени Bob | Когда в Studio есть кнопка переноса — запись удаляется пакетом M4 |
 
+Записи шагов 8–9 (`studio-promote`, `studio-production-rollback`) удалены пакетом
+[переноса в production](studio-promote.md): шаги выполняются в Studio.
+
 Каждая запись ссылается на строку плана MVP. Иных пропусков (`test.skip`,
 `fixme`) в сценарии нет.
 
