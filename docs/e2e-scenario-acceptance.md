@@ -1,6 +1,7 @@
 # Сквозной сценарий §2 в CI: реализация и проверка
 
-Дата: 2026-10-21. Ветка: `feature/e2e-scenario` от `dev` `1f6a6e1`.
+Дата: 2026-10-21. Ветка: `feature/e2e-scenario` от `dev` `1f6a6e1`; слита в dev
+2026-10-26 в [PR #81](https://github.com/QahNaaRlN/project-17/pull/81), merge `88b7181`; [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройден.
 [Спецификация STU-440…459](e2e-scenario.md) одобрена пользователем 2026-10-21
 вместе с решениями §11.
 
