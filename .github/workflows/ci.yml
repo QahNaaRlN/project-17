@@ -72,10 +72,11 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 20
     env:
-      E2E_DIR: ${{ runner.temp }}/e2e
       CMS_DATABASE_URL: postgres://postgres:local@127.0.0.1:5432/e2e?sslmode=disable
     steps:
       - uses: actions/checkout@v5
+      # The runner context is not available in job-level env.
+      - run: echo "E2E_DIR=$RUNNER_TEMP/e2e" >> "$GITHUB_ENV"
       - run: corepack enable
       - uses: actions/setup-node@v5
         with:
