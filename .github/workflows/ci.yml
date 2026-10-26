@@ -109,6 +109,40 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # STU-500/501: dependency and image scanners (SEC-007). High and critical
+  # findings are never excepted; govulncheck fails on called vulnerabilities.
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: corepack enable
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm audit with exceptions
+        run: |
+          node --test scripts/security-audit.test.mjs
+          node scripts/security-audit.mjs
+      - name: govulncheck
+        working-directory: apps/server
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Build server image
+        run: docker build -t cms/server:security apps/server
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cms/server:security
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+
   docker:
     name: Docker image
     runs-on: ubuntu-latest
