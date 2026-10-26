@@ -152,3 +152,60 @@ export function publicationPage(
     throw new StudioError("RESPONSE_INVALID");
   return v;
 }
+export interface PromoteObject extends PublicationObject {
+  skipped: boolean;
+}
+export interface PromoteDependency {
+  objectId: string;
+  publicationId: string | null;
+}
+export interface PromoteCard {
+  publication: PublicationEntry;
+  toEnvironment: string;
+  objects: PromoteObject[];
+  snapshot: string;
+  canPromote: boolean;
+  blockers: string[];
+  diagnostics: Record<string, { code: string; message?: string; pointer?: string }[]>;
+  dependencies: PromoteDependency[];
+}
+export interface PromoteAttempt {
+  publicationId: string;
+  toEnvironment: string;
+  expectedPromoteSnapshot: string;
+  reason: string;
+  key: string;
+  startedAt: number;
+}
+/** STU-462: the promote preview of one publication into one target environment. */
+export function promoteCard(
+  v: PromoteCard,
+  id: string,
+  environment: string,
+  toEnvironment: string,
+): PromoteCard {
+  if (
+    !v ||
+    v.toEnvironment !== toEnvironment ||
+    environment === toEnvironment ||
+    typeof v.canPromote !== "boolean" ||
+    !v.diagnostics ||
+    typeof v.diagnostics !== "object" ||
+    Object.values(v.diagnostics).some(
+      (ds) => !Array.isArray(ds) || ds.some((d) => typeof d?.code !== "string"),
+    ) ||
+    !Array.isArray(v.dependencies) ||
+    v.dependencies.some((d) => !d || !uuid.test(d.objectId) || !nullableID(d.publicationId)) ||
+    !Array.isArray(v.objects) ||
+    v.objects.some((o) => typeof o?.skipped !== "boolean") ||
+    (v.canPromote && v.blockers?.length !== 0)
+  )
+    throw new StudioError("RESPONSE_INVALID");
+  // The common fields follow the history card contract.
+  publicationCard(
+    { ...v, complete: true, canRollback: false } as unknown as PublicationCard,
+    id,
+    environment,
+  );
+  return v;
+}
