@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
+	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 	"golang.org/x/oauth2"
 )
@@ -199,6 +201,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			reply(w, 503, map[string]string{"code": "SESSION_UNAVAILABLE"})
 			return
 		}
+		if err == nil {
+			s.event(r, "auth.logout", &info.Actor.ID, nil)
+		}
 		s.cookie(w, "", false, -1)
 		s.cookie(w, "", true, -1)
 		reply(w, 200, map[string]bool{"ok": true})
@@ -228,42 +233,43 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce)), http.StatusFound)
 }
 func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
-	fail := func() {
+	fail := func(reason string) {
+		s.event(r, "auth.login_failed", nil, map[string]any{"reason": reason})
 		http.Redirect(w, r, s.Config.PublicOrigin+"/editor?authError=OIDC_LOGIN_FAILED", http.StatusFound)
 	}
 	values := r.URL.Query()
 	if len(values["state"]) != 1 || len(values["code"]) != 1 || len(values.Get("state")) != 43 || len(values.Get("code")) > 4096 || values.Get("code") == "" || values.Has("error") {
-		fail()
+		fail("REQUEST_INVALID")
 		return
 	}
 	q := store.New(s.Pool)
 	login, err := q.ConsumeOIDCLogin(r.Context(), store.ConsumeOIDCLoginParams{StateHash: auth.HashToken(values.Get("state")), BrowserHash: auth.HashToken(s.secret(r, true)), ProjectSlug: r.Header.Get("X-CMS-Project")})
 	if err != nil || login.ProjectSlug != r.Header.Get("X-CMS-Project") {
-		fail()
+		fail("STATE_INVALID")
 		return
 	}
 	s.cookie(w, "", true, -1)
 	ctx := oidc.ClientContext(r.Context(), s.client)
 	token, err := s.oauth.Exchange(ctx, values.Get("code"), oauth2.VerifierOption(login.Verifier))
 	if err != nil {
-		fail()
+		fail("CODE_EXCHANGE_FAILED")
 		return
 	}
 	raw, ok := token.Extra("id_token").(string)
 	if !ok {
-		fail()
+		fail("ID_TOKEN_MISSING")
 		return
 	}
 	verified, err := s.verifier.Verify(ctx, raw)
 	if err != nil || subtle.ConstantTimeCompare([]byte(verified.Nonce), []byte(login.Nonce)) != 1 || verified.Subject == "" || len(verified.Subject) > 255 {
-		fail()
+		fail("ID_TOKEN_INVALID")
 		return
 	}
 	var claims struct {
 		Name string `json:"name"`
 	}
 	if err := verified.Claims(&claims); err != nil {
-		fail()
+		fail("CLAIMS_INVALID")
 		return
 	}
 	name := []rune(claims.Name)
@@ -277,32 +283,44 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	csrf, _ := auth.NewToken("")
 	tx, err := s.Pool.Begin(r.Context())
 	if err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
 	defer tx.Rollback(r.Context()) //nolint:errcheck
 	tq := store.New(tx)
 	actor, err := tq.UpsertOIDCHuman(r.Context(), store.UpsertOIDCHumanParams{ID: uuid.Must(uuid.NewV7()), DisplayName: string(name), OidcIssuer: &verified.Issuer, OidcSubject: &verified.Subject})
 	if err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
 	if err := tq.CleanupHumanSessions(r.Context()); err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
 	if err := tq.DeleteHumanSession(r.Context(), auth.HashToken(s.secret(r, false))); err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
 	if err := tq.CreateHumanSession(r.Context(), store.CreateHumanSessionParams{TokenHash: hash, ActorID: actor.ID, CsrfToken: csrf, ExpiresAt: time.Now().Add(8 * time.Hour)}); err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
-		fail()
+		fail("SESSION_FAILED")
 		return
 	}
+	s.event(r, "auth.login", &actor.ID, map[string]any{"issuer": verified.Issuer, "subjectSha256": hex.EncodeToString(auth.HashToken(verified.Subject))})
 	s.cookie(w, secret, false, 8*3600)
 	http.Redirect(w, r, s.Config.PublicOrigin+"/editor", http.StatusFound)
+}
+
+// event — STU-506: входы и выходы в журнале SEC-005. Проект — из заголовка проекта
+// Studio, если он существует; без токенов, cookie и сырого subject.
+func (s *Service) event(r *http.Request, typ string, actor *uuid.UUID, data map[string]any) {
+	ctx := context.WithoutCancel(r.Context())
+	var project *uuid.UUID
+	if p, err := store.New(s.Pool).GetProjectBySlug(ctx, r.Header.Get("X-CMS-Project")); err == nil {
+		project = &p.ID
+	}
+	_ = securityevents.Record(ctx, s.Pool, securityevents.Event{ProjectID: project, ActorID: actor, Type: typ, Data: data})
 }

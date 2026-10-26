@@ -48,7 +48,7 @@ func TestConfigError(t *testing.T) {
 
 func TestDatabaseUnavailable(t *testing.T) {
 	env := map[string]string{"CMS_DATABASE_URL": "postgres://nobody@127.0.0.1:1/x?connect_timeout=1"}
-	for _, args := range [][]string{{"serve"}, {"migrate", "up"}, {"bootstrap", "-slug", "s1", "-name", "n"}, {"check-runner-token", "-slug", "s1"}} {
+	for _, args := range [][]string{{"serve"}, {"migrate", "up"}, {"bootstrap", "-slug", "s1", "-name", "n"}, {"check-runner-token", "-slug", "s1"}, {"anonymize-user", "-issuer", "i", "-subject", "s"}} {
 		if _, err := run(t, env, args...); err == nil {
 			t.Errorf("%v: ожидалась ошибка подключения", args)
 		}
@@ -104,6 +104,23 @@ func TestMigrateAndBootstrap(t *testing.T) {
 		if err != nil || !regexp.MustCompile(`^cms_svc_[A-Za-z0-9_-]{43}
 $`).MatchString(out) {
 			t.Fatalf("check-runner-token: %v %q", err, out)
+		}
+	}
+	// SEC-008: the operator command validates its flags and reports an unknown person.
+	for _, args := range [][]string{{"anonymize-user"}, {"anonymize-user", "-issuer", "i"}, {"anonymize-user", "-bogus"}} {
+		if _, err := run(t, env, args...); !errors.Is(err, app.ErrUsage) {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	if _, err := run(t, env, "anonymize-user", "-issuer", "https://idp.example", "-subject", "nobody"); err == nil {
+		t.Error("обезличивание неизвестного пользователя")
+	}
+	if _, err := pool.Exec(context.Background(), `INSERT INTO actors (id, kind, display_name, oidc_issuer, oidc_subject) VALUES (gen_random_uuid(), 'human', 'Ann', 'https://idp.example', 'ann')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"обезличен; сессии", "уже обезличен"} {
+		if out, err := run(t, env, "anonymize-user", "-issuer", "https://idp.example", "-subject", "ann"); err != nil || !strings.Contains(out, want) {
+			t.Fatalf("anonymize-user: %v %q", err, out)
 		}
 	}
 	var runners int

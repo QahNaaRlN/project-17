@@ -67,6 +67,9 @@ func TestHumanIdentityMigrationGuard(t *testing.T) {
 			// Reach the identity migration; later transport metadata can be removed
 			// without weakening the guard on persisted human/session facts.
 			log := slog.New(slog.NewTextHandler(io.Discard, nil))
+			// Bootstrap and login journal entries (SEC-005) would stop the agent
+			// migration's own guard before the identity one is reached.
+			f.e.Exec("DELETE FROM security_events")
 			for {
 				var version int
 				if err := f.e.Pool.QueryRow(context.Background(), `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil {
