@@ -74,6 +74,10 @@ func TestSTU425AgentPolicyOperationsAndReview(t *testing.T) {
 	if err := apply("a2", 2, setProps("n_root")); err != nil {
 		t.Fatal(err)
 	}
+	// STU-449: the operation log names the delegate of an agent operation.
+	if log, err := changes.ListOperations(ctx, e.Q, h.ProjectID, cs, 2); err != nil || len(log) != 1 || log[0].OnBehalfOf == nil || *log[0].OnBehalfOf != h.ID || log[0].Source != "agent" {
+		t.Fatal("delegate in the operation log", log, err)
+	}
 	changeset, err := e.Q.GetChangeset(ctx, store.GetChangesetParams{ID: cs, ProjectID: h.ProjectID})
 	if err != nil || !slices.Equal(changeset.PolicyApproval, []string{"staging-review"}) {
 		t.Fatal("requireApproval label", changeset.PolicyApproval, err)

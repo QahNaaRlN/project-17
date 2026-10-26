@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "e2e",
+  // The §2 scenario runs against the real stand: playwright.scenario.config.ts.
+  testIgnore: "scenario/**",
   workers: 1,
   timeout: 30_000,
   use: {

@@ -2,6 +2,8 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, it, expect, vi } from "vitest";
 import { StoreApp, CatalogImage } from "../src/app.js";
+import { Card } from "../src/sections.js";
+import type { NativeProps } from "@cms/react";
 import { model } from "./fixtures.js";
 import type { ImageProps } from "../src/model.js";
 let root: Root | undefined;
@@ -274,4 +276,22 @@ it("STORE-006: загруженное до подключения React изоб
   );
   expect(document.querySelector("img")!.getAttribute("alt")).toBe("Ваза");
   expect(document.querySelector(".image-fallback")).toBeNull();
+});
+it("STU-447: ProductCard renders the compact variant of the §2 scenario", async () => {
+  const product = model().catalog!.products[0]!;
+  for (const variant of ["compact", undefined]) {
+    await mount(
+      createElement(Card, {
+        values: { product, variant },
+        className: "x",
+      } as unknown as NativeProps),
+    );
+    const card = document.querySelector(".product-card")!;
+    expect(card.className).toContain(
+      variant === "compact" ? "product-card-compact" : "product-card-default",
+    );
+    expect(card.textContent).toContain(product.title);
+    await act(async () => root!.unmount());
+    root = undefined;
+  }
 });

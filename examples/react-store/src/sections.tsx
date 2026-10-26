@@ -68,6 +68,20 @@ export function Item({ values: p, className, events, previewAttributes }: Native
     />
   );
 }
+// The §2 scenario card: the same catalogue card with a compact variant (STU-447).
+export function Card({ values: p, className, previewAttributes }: NativeProps) {
+  const { images } = useContext(StoreRenderContext);
+  const product = p.product as Product;
+  const variant = p.variant === "compact" ? "compact" : "default";
+  return (
+    <ProductCard
+      product={product}
+      image={images[`product:${product.id}`]}
+      className={`${className ?? ""} product-card-${variant}`.trim()}
+      {...(previewAttributes ? { previewAttributes } : {})}
+    />
+  );
+}
 export function Empty({ className, previewAttributes }: NativeProps) {
   return (
     <div className={`empty-state ${className}`} {...previewAttributes}>

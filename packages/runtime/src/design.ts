@@ -67,6 +67,8 @@ export function designDeclarations(
     return `flex-direction:${value === "vertical" ? "column" : "row"}`;
   else if (property === "wrap" && typeof value === "boolean")
     return `flex-wrap:${value ? "wrap" : "nowrap"}`;
+  else if (property === "columns" || property === "rows")
+    return `grid-template-${property}:${gridTracks(value)}`;
   else throw new Error("CMS_DESIGN_UNSUPPORTED");
   if (
     (property === "width" || property === "maxWidth") &&
@@ -89,6 +91,22 @@ export function designDeclarations(
   )
     return `${cssProperty}:${validate((value as { raw: unknown }).raw)}`;
   // Lengths/colors require a token or an explicit raw value.
+  throw new Error("CMS_DESIGN_INVALID");
+}
+/** Grid tracks of the design system (03 §3): a count 1…12 or tracks `Nfr`/`auto`. */
+function gridTracks(value: unknown): string {
+  if (Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 12)
+    return `repeat(${String(value)},minmax(0,1fr))`;
+  if (
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= 12 &&
+    value.every((track) => typeof track === "string" && /^(?:(?:[1-9]|1[0-2])fr|auto)$/.test(track))
+  )
+    return value
+      .map((track: string) => (track === "auto" ? "auto" : `minmax(0,${track})`))
+      .join(" ");
+  // Raw grid tracks (px, %, minmax) are not supported yet.
   throw new Error("CMS_DESIGN_INVALID");
 }
 export function atom(declarations: string, minWidth?: number): { className: string; css: string } {

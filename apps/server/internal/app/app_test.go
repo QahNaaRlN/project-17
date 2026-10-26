@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/qahnaarln/project-17/apps/server/internal/app"
 	"github.com/qahnaarln/project-17/apps/server/internal/testsupport/pgtest"
 )
@@ -60,7 +61,7 @@ func TestMigrateAndBootstrap(t *testing.T) {
 		t.Fatalf("migrate up: %v\n%s", err, out)
 	}
 
-	for _, args := range [][]string{{"bootstrap"}, {"bootstrap", "-slug", "s1"}, {"bootstrap", "-bogus"}} {
+	for _, args := range [][]string{{"bootstrap"}, {"bootstrap", "-slug", "s1"}, {"bootstrap", "-bogus"}, {"bootstrap", "-slug", "s1", "-name", "n", "-max-mode", "ANY"}} {
 		if _, err := run(t, env, args...); !errors.Is(err, app.ErrUsage) {
 			t.Errorf("%v: %v", args, err)
 		}
@@ -72,6 +73,19 @@ func TestMigrateAndBootstrap(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(?m)^cms_svc_[A-Za-z0-9_-]{43}$`).MatchString(out) {
 		t.Errorf("в выводе нет токена:\n%s", out)
+	}
+	// The §2 scenario stand allows CODE zones through project configuration (STU-453).
+	if _, err := run(t, env, "bootstrap", "-slug", "code", "-name", "Code", "-max-mode", "CODE"); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := pgxpool.New(context.Background(), env["CMS_DATABASE_URL"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var maxMode string
+	if err := pool.QueryRow(context.Background(), `SELECT settings->>'maxMode' FROM projects WHERE slug='code'`).Scan(&maxMode); err != nil || maxMode != "CODE" {
+		t.Fatal(maxMode, err)
 	}
 	if _, err := run(t, env, "bootstrap", "-slug", "store", "-name", "x"); err == nil {
 		t.Error("повторный bootstrap должен падать")

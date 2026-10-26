@@ -633,3 +633,11 @@ h2 {
   background: #1f4fd1;
   color: #ffffff;
 }
+
+/* §2 scenario: compact product card variant (STU-447). */
+.product-card-compact .product-art {
+  aspect-ratio: 2 / 1;
+}
+.product-card-compact .material {
+  display: none;
+}

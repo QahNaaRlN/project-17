@@ -36,7 +36,17 @@ type Client struct {
 	now    func() time.Time
 }
 
+// apiOrigin is the only GitHub origin of a product build. Only the e2e build
+// tag (the §2 scenario in CI, STU-445) replaces it with a loopback fixture.
+var apiOrigin = "https://api.github.com"
+
+// e2eClient is set only by the e2e build tag; product builds never read it.
+var e2eClient func() *http.Client
+
 func NewClient() *Client {
+	if e2eClient != nil {
+		return &Client{client: e2eClient()}
+	}
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, MaxResponseHeaderBytes: 32 << 10, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: "api.github.com"}, DialContext: githubDial}
 	return &Client{client: &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect blocked") }}}
 }
@@ -98,7 +108,7 @@ func (s *session) request(ctx context.Context, method, path, token string, body 
 	if s.calls > 40 {
 		return failure("incomplete")
 	}
-	req, e := http.NewRequestWithContext(ctx, method, "https://api.github.com"+path, body)
+	req, e := http.NewRequestWithContext(ctx, method, apiOrigin+path, body)
 	if e != nil {
 		return failure("invalid_response")
 	}

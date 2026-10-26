@@ -53,7 +53,7 @@ test("local OIDC signs two distinct users and rejects redirect, PKCE and code re
     });
   const selection = await fetch(origin + "/authorize?" + params);
   assert.match(await selection.text(), /Войти как Alice/);
-  for (const user of ["alice", "bob"]) {
+  for (const user of ["alice", "bob", "erin"]) {
     const result = await authorize(user);
     assert.equal(result.status, 302);
     const location = new URL(result.headers.get("location"));
