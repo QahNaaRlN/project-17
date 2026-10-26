@@ -203,6 +203,17 @@ export function PublishingPanel({
   const state = useStore(editor.store),
     session = state.session,
     t = copy[state.locale];
+  const checking = session?.changeset.state === "checking";
+  // STU-494: the check runner decides stages 8–9 in the background; the work view has no
+  // event stream, so the review is reread while the draft is being checked.
+  useEffect(() => {
+    if (!checking) return;
+    const timer = setInterval(() => {
+      editor.remoteChanged();
+      void editor.refreshRemote();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [editor, checking]);
   const [choice, setChoice] = useState<"publish" | "reopen" | "request-changes" | null>(null),
     [comment, setComment] = useState("");
   const [diffSnapshot, setDiffSnapshot] = useState<string | null>(null),

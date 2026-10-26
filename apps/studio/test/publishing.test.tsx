@@ -259,3 +259,21 @@ it("STU-494: checking shows stage 8–9 progress, findings and only reopen", asy
   expect(button("Вернуть в работу")).toBeDefined();
   expect(button("Согласовать")).toBeUndefined();
 });
+it("STU-494: a checking draft is reread until the runner decides", async () => {
+  vi.useFakeTimers();
+  try {
+    const { session, api } = await setup("checking");
+    session.review.changeset.state = "checking";
+    await reread();
+    const before = vi.mocked(api.open).mock.calls.length;
+    session.changeset.state = "in_review";
+    session.review.changeset.state = "in_review";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+    expect(vi.mocked(api.open).mock.calls.length).toBeGreaterThan(before);
+    expect(document.body.textContent).toContain("На согласовании");
+  } finally {
+    vi.useRealTimers();
+  }
+});

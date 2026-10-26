@@ -187,9 +187,13 @@ export function ReviewDiff({
       </div>
       {!allowed ? (
         <Notice>
-          {ru
-            ? "Работа завершена. Текущее сравнение недоступно."
-            : "This work is closed; current comparison is unavailable."}
+          {session.changeset.state === "checking"
+            ? ru
+              ? "Сравнение будет доступно после проверок страниц."
+              : "The comparison is available after page checks."
+            : ru
+              ? "Работа завершена. Текущее сравнение недоступно."
+              : "This work is closed; current comparison is unavailable."}
         </Notice>
       ) : (
         <>
