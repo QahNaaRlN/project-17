@@ -426,6 +426,13 @@ func (e *env) historyMigrationBase(ctx context.Context, log *slog.Logger) {
 		if version < 15 {
 			e.t.Fatal("history migration is not applied", version)
 		}
+		// Bootstrap and login journal entries (SEC-005) would stop the agent
+		// migration's own guard before the guard under test is reached.
+		if version > 18 {
+			if _, err := e.pool.Exec(ctx, "DELETE FROM security_events"); err != nil {
+				e.t.Fatal(err)
+			}
+		}
 		if err := postgres.Migrate(ctx, e.pool, "down", log); err != nil {
 			e.t.Fatal(err)
 		}

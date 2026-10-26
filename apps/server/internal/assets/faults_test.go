@@ -102,6 +102,11 @@ func TestAssetDowngradePreservesAudit(t *testing.T) {
 		if version < 14 {
 			t.Fatalf("asset migration missing: %d", version)
 		}
+		// Bootstrap and login journal entries (SEC-005) would stop the agent
+		// migration's own guard before the guard under test is reached.
+		if version > 18 {
+			e.Exec("DELETE FROM security_events")
+		}
 		if err := postgres.Migrate(ctx, e.Pool, "down", log); err != nil {
 			t.Fatal(err)
 		}
