@@ -47,6 +47,13 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | [PR #81](https://github.com/QahNaaRlN/project-17/pull/81) слит в dev 2026-10-26; локальная [приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699) (job `E2E scenario (§2)` 2 мин 46 с) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены; после пяти зелёных прогонов подряд job обязателен для PR в `dev` и `main` с 2026-10-26 |
 | Выполнено | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | [PR #84](https://github.com/QahNaaRlN/project-17/pull/84) слит в dev 2026-10-26; локальная [приёмка](../studio-promote-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены; шаги 8–9 сценария §2 выполняются в Studio |
 | Выполнено | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | [PR #87](https://github.com/QahNaaRlN/project-17/pull/87) слит в dev 2026-10-26; локальная [приёмка](../pipeline-render-checks-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) (Go coverage 95.0%) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; реестр `pending.ts` сценария §2 пуст; этапы 10–11 — следующий пакет |
+| 1 | [Безопасность MVP: сканеры, журнал событий, сверка SEC](../security-hardening.md), STU-500…519 | Спецификация на одобрении; критерий готовности 4 |
+| 2 | Кэш Delivery на origin (Redis) и лимиты запросов | Нет спецификации; предпосылка NFR-002 и нагрузочных тестов |
+| 3 | Нагрузочные тесты NFR-001…007 по профилю 01 §5 | Нет спецификации; критерий готовности 2 |
+| 4 | Этапы pipeline 10–11: visual regression и Lighthouse | Нет спецификации; нужно решение о хранилище артефактов |
+| 5 | Наблюдаемость OPS-020…023 | Нет спецификации; включена в M6 решением 2026-10-27 |
+| 6 | Спецификация по итогам реализации и ADR отступлений | Нет спецификации; критерий готовности 5 |
+| 7 | Набор для эксперимента и пороги Q-08 на утверждение | Нет спецификации; эксперимент проводится после M6 |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
