@@ -1,6 +1,7 @@
 # Этапы pipeline 8–9: реализация и проверка
 
-Дата: 2026-10-26. Ветка: `feature/pipeline-render-checks` от `dev` `26a84be`.
+Дата: 2026-10-26. Ветка: `feature/pipeline-render-checks` от `dev` `26a84be`; слита в dev
+2026-10-26 в [PR #87](https://github.com/QahNaaRlN/project-17/pull/87), merge `c607dec`; [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены.
 [Спецификация STU-480…499](pipeline-render-checks.md) одобрена пользователем
 2026-10-26 вместе с решениями §11.
 
@@ -104,7 +105,14 @@ Go: полный набор пакетов на Windows зелёный, кром
   ошибка рендера, 500, исключение, нет блока диагностик, уход с `appUrl`, axe,
   усечение, клиент), Studio (ревью, панель публикации в `checking`, перечитывание).
 
+## CI
+
+[CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098): `Check (TS + Go)` (lint, typecheck, тесты с Chromium, `go test -race`, покрытие Go
+95.0% — ровно на пороге), `Docker image`, `E2E scenario (§2)` — сценарий 1,2 мин, оба
+теста пройдены; 12,5 мин job ушли на установку Chromium. [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройден. До этого в PR
+два исправления: порядок импортов (gofmt) и тесты ветвей и сбоев БД, поднявшие покрытие
+с 94.6%.
+
 ## Не проверено
 
-- CI итогового SHA и job `E2E scenario (§2)` в PR.
 - Реальное CDN-приложение и production-развёртывание исполнителя.
