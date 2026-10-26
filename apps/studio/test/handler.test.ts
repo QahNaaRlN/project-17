@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createServer, request as httpRequest } from "node:http";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkConfig, createStudioHandler, type ServerConfig } from "../src/handler.js";
@@ -1094,4 +1094,21 @@ it("STU-336/351: fulfillment routes pin environment and preflight the request or
     (await post(command + "check-capability-fulfillment", { payload: { requestId: documentId } }))
       .status,
   ).toBe(404);
+});
+it("SEC-003, STU-511: Studio CSP is strict and the page has no inline script", async () => {
+  const { origin } = await setup();
+  const csp = (await fetch(origin + "/")).headers.get("content-security-policy") ?? "";
+  for (const directive of [
+    "default-src 'self'",
+    "connect-src 'self'",
+    "script-src 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-src " + config.appOrigin,
+  ])
+    expect(csp).toContain(directive);
+  expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  for (const tag of html.match(/<script\b[^>]*>/g) ?? []) expect(tag).toMatch(/\ssrc=/);
 });
