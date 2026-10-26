@@ -819,43 +819,35 @@ test("§2: MVP acceptance scenario", async () => {
   });
 });
 
-// STU-496: a serious axe violation on a routed page fails stage 9 and the Change Set.
+// STU-496: a serious axe violation on the store page fails stage 9 and the Change Set.
+// It reuses the page of the scenario; the storefront serves only its own route.
 test("§2: a page with a nameless button fails the accessibility stage", async () => {
   const cs = await command(stand, alice, "create-changeset", {
     title: "Нарушение доступности",
     targets: ["staging"],
   });
-  const created = await command(stand, alice, "apply-operations", {
+  await command(stand, alice, "apply-operations", {
     changesetId: cs.id,
     expectedSeq: 0,
     operations: [
       {
-        type: "document.create",
+        type: "node.insert",
+        target: state.page,
         payload: {
-          kind: "page",
-          path: "/a11y-negative",
-          root: {
-            id: "n_root",
-            type: "Box",
-            children: [{ id: "n_blank", type: "Button", bindings: { label: "$local.t_blank" } }],
-          },
+          parentId: "n_root",
+          index: 0,
+          subtree: { id: "n_blank", type: "Button", bindings: { label: "$local.t_blank" } },
         },
       },
-    ],
-  });
-  const page = created.operations[0].target;
-  await command(stand, alice, "apply-operations", {
-    changesetId: cs.id,
-    expectedSeq: 1,
-    operations: [
       {
         type: "localContent.set",
-        target: page,
+        target: state.page,
         payload: { key: "t_blank", type: "text", value: { ru: " ", en: " " } },
       },
     ],
   });
-  await command(stand, alice, "submit-changeset", { changesetId: cs.id, expectedSeq: 2 });
+  const seq = (await read(stand, alice, "/changesets/" + cs.id)).seq;
+  await command(stand, alice, "submit-changeset", { changesetId: cs.id, expectedSeq: seq });
   await expect
     .poll(async () => (await read(stand, alice, "/changesets/" + cs.id)).state, {
       timeout: 90_000,
@@ -863,10 +855,12 @@ test("§2: a page with a nameless button fails the accessibility stage", async (
     .not.toMatch(/^(open|checking)$/);
   const review = await read(stand, alice, `/changesets/${cs.id}/review`);
   expect(review.changeset.state, JSON.stringify(review.checks)).toBe("failed");
+  const preview = review.checks.find((c: any) => c.stage === "preview");
   const axe = review.checks.find((c: any) => c.stage === "axe");
-  expect(axe.status).toBe("failed");
+  expect(preview.status, JSON.stringify(preview.details)).toBe("passed");
+  expect(axe.status, JSON.stringify(axe.details)).toBe("failed");
   expect(JSON.stringify(axe.details)).toContain("button-name");
   await expect(
-    command(stand, bob, "approve-changeset", { changesetId: cs.id, expectedSeq: 2 }),
+    command(stand, bob, "approve-changeset", { changesetId: cs.id, expectedSeq: seq }),
   ).rejects.toMatchObject({ status: 409 });
 });
