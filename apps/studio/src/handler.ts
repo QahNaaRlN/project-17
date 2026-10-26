@@ -58,6 +58,7 @@ export function checkConfig(config: ServerConfig): ServerConfig {
         upload.password)) ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.project) ||
     !/^[a-zA-Z0-9_-]{1,100}$/.test(config.environment) ||
+    !promotionTargetsValid(config, local) ||
     ![undefined, "service", "oidc"].includes(config.authMode) ||
     (config.authMode === "oidc"
       ? config.credential !== undefined
@@ -66,6 +67,36 @@ export function checkConfig(config: ServerConfig): ServerConfig {
     throw new Error("STUDIO_CONFIG_INVALID");
   return { ...config, baseUrl: base.origin };
 }
+// STU-460: standard environments other than the base one, unique, with exact app origins.
+function promotionTargetsValid(config: ServerConfig, local: (url: URL) => boolean) {
+  const targets = config.promotionTargets ?? [];
+  if (!Array.isArray(targets) || targets.length > 4) return false;
+  const names = new Set<string>();
+  for (const target of targets) {
+    if (
+      typeof target?.environment !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,100}$/.test(target.environment) ||
+      target.environment === config.environment ||
+      names.has(target.environment) ||
+      Object.keys(target).some((key) => key !== "environment" && key !== "appOrigin")
+    )
+      return false;
+    names.add(target.environment);
+    try {
+      const url = new URL(target.appOrigin);
+      if (
+        !(local(url) || url.protocol === "https:") ||
+        url.origin !== target.appOrigin ||
+        url.username ||
+        url.password
+      )
+        return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
 export function createStudioHandler(
   input: ServerConfig,
   clientDirectory: string,
@@ -73,7 +104,10 @@ export function createStudioHandler(
 ) {
   const config = checkConfig(input),
     directory = resolve(clientDirectory),
-    host = new URL(config.studioOrigin).host;
+    host = new URL(config.studioOrigin).host,
+    targets = (config.promotionTargets ?? []).map((target) => target.environment),
+    // STU-461: history and rollback also work in promotion targets; work stays in the base.
+    historyEnvironments = [config.environment, ...targets];
   return async function handle(req: IncomingMessage, res: ServerResponse) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -123,6 +157,9 @@ export function createStudioHandler(
               ? { previewAppOrigins: config.previewAppOrigins }
               : {}),
             ...(config.assetUploadOrigin ? { assetUploadOrigin: config.assetUploadOrigin } : {}),
+            ...(config.promotionTargets?.length
+              ? { promotionTargets: config.promotionTargets }
+              : {}),
             ...(config.authMode === "oidc" ? { authMode: "oidc" } : {}),
           }),
         );
@@ -133,7 +170,7 @@ export function createStudioHandler(
         const uuid = "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}";
         const diffRoute = new RegExp(`^/api/v1/changesets/${uuid}/diff(?:/${uuid})?$`).test(path);
         const publicationRoute = new RegExp(
-          `^/api/v1/publication-history(?:/${uuid}(?:/diff|/rollback-preview(?:/diff)?)?)?$`,
+          `^/api/v1/publication-history(?:/${uuid}(?:/diff|/(?:rollback|promote)-preview(?:/diff)?)?)?$`,
         ).test(path);
         const queueRoute = new RegExp(`^/api/v1/work-queue(?:/${uuid})?$`).test(path);
         const capabilityRoute = new RegExp(
@@ -176,6 +213,7 @@ export function createStudioHandler(
           ...deliveryCommands.map((name) => "/api/v1/commands/" + name),
           ...capabilityCommands.map((name) => "/api/v1/commands/" + name),
           "/api/v1/commands/rollback",
+          "/api/v1/commands/promote",
           "/api/v1/commands/start-agent-run",
           "/api/v1/commands/set-agent-policy",
           "/api/v1/agent-policy/explain",
@@ -234,11 +272,13 @@ export function createStudioHandler(
           } else if (publicationRoute) {
             const p = url.searchParams;
             const detail = path.endsWith("/diff"),
-              list = path === "/api/v1/publication-history";
+              list = path === "/api/v1/publication-history",
+              promote = path.includes("/promote-preview");
             const allowed = [
               "environment",
               ...(list ? ["limit", "cursor"] : []),
               ...(detail ? ["objectId", "limit", "cursor", "snapshot"] : []),
+              ...(promote ? ["toEnvironment"] : []),
             ];
             if (
               [...p.keys()].some((k) => !allowed.includes(k) || p.getAll(k).length !== 1) ||
@@ -249,7 +289,12 @@ export function createStudioHandler(
                   !/^sha256:[a-f0-9]{64}$/.test(p.get("snapshot") ?? "")))
             )
               return error(400, "PARAM_INVALID");
-            if (p.get("environment") !== config.environment)
+            if (
+              !historyEnvironments.includes(p.get("environment") ?? "") ||
+              (promote &&
+                (!targets.includes(p.get("toEnvironment") ?? "") ||
+                  p.get("toEnvironment") === p.get("environment")))
+            )
               return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
             upstream.search = url.search;
           } else if (path === "/api/v1/events" || path === "/api/v1/agent-runs") {
@@ -556,18 +601,40 @@ export function createStudioHandler(
             )
               return error(400, "PAYLOAD_INVALID");
             const check = await fetcher(
-              new URL(
-                "/api/v1/publication-history/" +
-                  p.publicationId +
-                  "?environment=" +
-                  encodeURIComponent(config.environment),
-                config.baseUrl,
-              ),
+              new URL("/api/v1/publication-history/" + p.publicationId, config.baseUrl),
               { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
             );
             if (!check.ok) return error(check.status, "ROLLBACK_PREVIEW_UNAVAILABLE");
             const card = await check.json();
-            if (card?.publication?.environment !== config.environment)
+            if (!historyEnvironments.includes(card?.publication?.environment))
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+          }
+          if (path.endsWith("/commands/promote")) {
+            // STU-467: reviewed snapshot, a reason and an allowed source and target.
+            const p = envelope.payload;
+            if (
+              Object.keys(envelope).some((k) => !["payload", "reason"].includes(k)) ||
+              Object.keys(p).some(
+                (k) => !["publicationId", "toEnvironment", "expectedPromoteSnapshot"].includes(k),
+              ) ||
+              !new RegExp(`^${uuid}$`).test(String(p.publicationId)) ||
+              typeof p.toEnvironment !== "string" ||
+              !/^sha256:[a-f0-9]{64}$/.test(p.expectedPromoteSnapshot) ||
+              typeof envelope.reason !== "string" ||
+              !envelope.reason.trim() ||
+              [...envelope.reason.trim()].length > 2000
+            )
+              return error(400, "PAYLOAD_INVALID");
+            if (!targets.includes(p.toEnvironment))
+              return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
+            const check = await fetcher(
+              new URL("/api/v1/publication-history/" + p.publicationId, config.baseUrl),
+              { headers, redirect: "error", signal: AbortSignal.timeout(15000) },
+            );
+            if (!check.ok) return error(check.status, "PROMOTE_PREVIEW_UNAVAILABLE");
+            const card = await check.json();
+            const source = card?.publication?.environment;
+            if (!historyEnvironments.includes(source) || source === p.toEnvironment)
               return error(403, "STUDIO_ENVIRONMENT_FORBIDDEN");
           }
           if (path.includes("/commands/presence-")) {

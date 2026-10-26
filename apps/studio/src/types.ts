@@ -8,6 +8,12 @@ export interface Config {
   appOrigin: string;
   /** Exact origins of PR preview deployments (STU-328). */
   previewAppOrigins?: string[];
+  /** Environments that publications can be promoted to, with their app origins (STU-460). */
+  promotionTargets?: PromotionTarget[];
+}
+export interface PromotionTarget {
+  environment: string;
+  appOrigin: string;
 }
 export interface Changeset {
   id: string;
