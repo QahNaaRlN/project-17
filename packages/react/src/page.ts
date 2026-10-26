@@ -165,11 +165,10 @@ export function CmsPage({
         const image = plan.images?.[node.key];
         return image
           ? createElement("img", { ...common, ...image })
-          : createElement("span", {
-              ...common,
-              role: "img",
-              "aria-label": String(props.alt ?? ""),
-            });
+          : props.decorative === true || !props.alt
+            ? // A decorative or unnamed placeholder is hidden from assistive technology.
+              createElement("span", { ...common, "aria-hidden": "true" })
+            : createElement("span", { ...common, role: "img", "aria-label": String(props.alt) });
       }
       case "Heading":
         return createElement(`h${props.level ?? 2}`, common, String(props.text ?? ""));

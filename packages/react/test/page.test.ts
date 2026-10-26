@@ -136,3 +136,16 @@ it("STU-489: preview pages expose escaped render diagnostics; normal pages do no
     "cms-render-diagnostics",
   );
 });
+it("STU-491: an image placeholder without a name is hidden; a named one is an image", () => {
+  const hidden = renderToString(
+    createElement(CmsPage, { plan: plan("Image", { decorative: true }) }),
+  );
+  expect(hidden).toContain('aria-hidden="true"');
+  expect(hidden).not.toContain('role="img"');
+  expect(renderToString(createElement(CmsPage, { plan: plan("Image", {}) }))).not.toContain(
+    'role="img"',
+  );
+  expect(
+    renderToString(createElement(CmsPage, { plan: plan("Image", { alt: "Ваза" }) })),
+  ).toContain('role="img" aria-label="Ваза"');
+});

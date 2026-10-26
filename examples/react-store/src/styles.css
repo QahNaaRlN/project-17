@@ -216,7 +216,8 @@ button:focus-visible {
   min-height: 140px;
   padding: 18px;
   text-align: center;
-  color: var(--muted);
+  /* The fallback sits on toned card backgrounds: --muted fails WCAG AA contrast there. */
+  color: var(--ink);
   font-size: 12px;
 }
 .collection {
