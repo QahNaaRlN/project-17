@@ -19,6 +19,7 @@ export function validateReview(value: Review, id: string): Review {
     value.changeset.seq < 0 ||
     ![
       "open",
+      "checking",
       "in_review",
       "approved",
       "failed",
@@ -57,7 +58,9 @@ export function validateReview(value: Review, id: string): Review {
         !c ||
         typeof c.stage !== "string" ||
         typeof c.status !== "string" ||
-        typeof c.blocking !== "boolean",
+        typeof c.blocking !== "boolean" ||
+        (c.environment !== undefined && typeof c.environment !== "string") ||
+        (c.stale !== undefined && typeof c.stale !== "boolean"),
     ) ||
     !Array.isArray(value.history) ||
     value.history.some(
@@ -72,6 +75,45 @@ export function validateReview(value: Review, id: string): Review {
   )
     throw new StudioError("REVIEW_INVALID");
   return value;
+}
+export interface RenderCheckPage {
+  path: string;
+  problems: string[];
+}
+/**
+ * STU-494: pages of a stage 8–9 check with their problems — codes, axe rule IDs with
+ * impact and node counts, HTTP status. Text only; no markup or URLs from the runner.
+ */
+export function renderCheckPages(details: unknown): RenderCheckPage[] {
+  const pages = object(details).pages;
+  if (!Array.isArray(pages)) return [];
+  return pages.slice(0, 50).flatMap((raw) => {
+    const page = object(raw);
+    if (typeof page.path !== "string" || page.path.length > 512) return [];
+    const problems: string[] = [];
+    if (typeof page.status === "number" && page.status !== 200)
+      problems.push("HTTP " + page.status);
+    if (typeof page.reason === "string" && code.test(page.reason)) problems.push(page.reason);
+    for (const d of Array.isArray(page.diagnostics) ? page.diagnostics : []) {
+      const item = object(d);
+      if (typeof item.code === "string" && code.test(item.code) && item.severity === "error")
+        problems.push(item.code);
+    }
+    if (Array.isArray(page.errors) && page.errors.length) problems.push("SCRIPT_ERROR");
+    for (const v of Array.isArray(page.violations) ? page.violations : []) {
+      const item = object(v);
+      if (typeof item.id === "string" && /^[a-z0-9-]{1,80}$/.test(item.id))
+        problems.push(
+          `${item.id} (${typeof item.impact === "string" ? item.impact : "?"}, ${Number(item.nodes) || 0})`,
+        );
+    }
+    return problems.length ? [{ path: page.path, problems: problems.slice(0, 20) }] : [];
+  });
+}
+/** The reason a stage 8–9 check has no page result. */
+export function renderCheckReason(details: unknown): string | null {
+  const reason = object(details).reason;
+  return typeof reason === "string" && code.test(reason) ? reason : null;
 }
 // Never render error detail, raw values, arbitrary params or a server-provided URL.
 export function reviewDiagnostics(details: unknown, environment = ""): ReviewDiagnostic[] {

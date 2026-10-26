@@ -8,6 +8,8 @@ import {
   diagnosticNode,
   reviewDiagnostics,
   policyViolations,
+  renderCheckPages,
+  renderCheckReason,
 } from "./review.js";
 import type { WorkflowAction } from "./types.js";
 const copy = {
@@ -42,6 +44,7 @@ const copy = {
       "Показаны результаты последней подачи. При согласовании и публикации сервер повторит необходимые проверки.",
     states: {
       open: "В работе",
+      checking: "Идут проверки страниц",
       in_review: "На согласовании",
       approved: "Готов к публикации",
       failed: "Проверки не пройдены",
@@ -61,9 +64,19 @@ const copy = {
       passed: "Пройдена",
       failed: "Не пройдена",
       pending: "Ожидает",
+      queued: "В очереди",
       running: "Выполняется",
+      warning: "Есть замечания",
+      skipped: "Пропущена",
     },
-    stages: { ir: "Страница и контракт окружения", policy: "Права и правила проекта" },
+    stages: {
+      ir: "Страница и контракт окружения",
+      policy: "Права и правила проекта",
+      preview: "Сборка страниц (этап 8)",
+      axe: "Доступность axe (этап 9)",
+    },
+    renderStale: "Исполнитель проверок не забирает проверку больше 15 минут.",
+    checkingHint: "Согласование станет доступно, когда проверки страниц завершатся.",
     reasons: {
       DIFF_SNAPSHOT_STALE: "Работа или окружение изменились. Перечитайте сравнение перед решением.",
       FORBIDDEN: "У текущей учётной записи нет права на это действие.",
@@ -119,6 +132,7 @@ const copy = {
       "These are the results of the last submission. The server repeats required checks on approval and publication.",
     states: {
       open: "In progress",
+      checking: "Page checks running",
       in_review: "In review",
       approved: "Ready to publish",
       failed: "Checks failed",
@@ -134,8 +148,23 @@ const copy = {
       publish: "Publish",
     },
     risks: { low: "Low", medium: "Medium", high: "High" },
-    status: { passed: "Passed", failed: "Failed", pending: "Pending", running: "Running" },
-    stages: { ir: "Page and environment contract", policy: "Permissions and project rules" },
+    status: {
+      passed: "Passed",
+      failed: "Failed",
+      pending: "Pending",
+      queued: "Queued",
+      running: "Running",
+      warning: "Has findings",
+      skipped: "Skipped",
+    },
+    stages: {
+      ir: "Page and environment contract",
+      policy: "Permissions and project rules",
+      preview: "Page render (stage 8)",
+      axe: "Accessibility axe (stage 9)",
+    },
+    renderStale: "No check runner has taken this check for over 15 minutes.",
+    checkingHint: "Approval becomes available when page checks finish.",
     reasons: {
       DIFF_SNAPSHOT_STALE: "Work or environment changed. Reload the comparison before deciding.",
       FORBIDDEN: "The current account cannot perform this action.",
@@ -236,7 +265,7 @@ export function PublishingPanel({
         ? ["approve", "request-changes", "reopen"]
         : session.changeset.state === "approved"
           ? ["publish", "reopen"]
-          : ["failed", "changes_requested"].includes(session.changeset.state)
+          : ["checking", "failed", "changes_requested"].includes(session.changeset.state)
             ? ["reopen"]
             : [];
   async function act(action: WorkflowAction) {
@@ -307,6 +336,7 @@ export function PublishingPanel({
             : "Save the entered values before submitting the draft."}
         </p>
       )}
+      {session.changeset.state === "checking" && <p role="status">{t.checkingHint}</p>}
       {review.needsAttention && (
         <p role="alert">
           {state.locale === "ru"
@@ -466,8 +496,16 @@ export function PublishingPanel({
         <ul>
           {review.checks.map((c, i) => (
             <li key={i}>
-              {(t.stages as Record<string, string>)[c.stage] ?? c.stage}:{" "}
+              {(t.stages as Record<string, string>)[c.stage] ?? c.stage}
+              {c.environment ? ` · ${c.environment}` : ""}:{" "}
               {(t.status as Record<string, string>)[c.status] ?? c.status}
+              {renderCheckReason(c.details) && <code> {renderCheckReason(c.details)}</code>}
+              {c.stale && <span role="status"> {t.renderStale}</span>}
+              {renderCheckPages(c.details).map((p) => (
+                <div key={p.path}>
+                  <code>{p.path}</code>: {p.problems.join(", ")}
+                </div>
+              ))}
             </li>
           ))}
         </ul>

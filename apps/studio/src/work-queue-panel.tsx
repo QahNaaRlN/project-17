@@ -69,6 +69,7 @@ function Queue({ api, editor, compact = true, onOpened, actorId = "service", rig
         open: "В работе",
         failed: "Проверки не пройдены",
         changes_requested: "Нужны правки",
+        checking: "Идут проверки страниц",
         in_review: "На согласовании",
         approved: "Готов к публикации",
       }
@@ -76,6 +77,7 @@ function Queue({ api, editor, compact = true, onOpened, actorId = "service", rig
         open: "In progress",
         failed: "Checks failed",
         changes_requested: "Changes requested",
+        checking: "Page checks running",
         in_review: "In review",
         approved: "Ready to publish",
       };

@@ -216,3 +216,46 @@ it("STU-070: panel without a session is empty; abandoned drafts offer no workflo
   await act(async () => editor.store.setState({ session: null }));
   expect(document.body.textContent).toBe("");
 });
+it("STU-494: checking shows stage 8–9 progress, findings and only reopen", async () => {
+  const { session } = await setup("checking");
+  session.review.changeset.state = "checking";
+  session.review.checks = [
+    {
+      stage: "preview",
+      status: "passed",
+      blocking: true,
+      details: { pages: [] },
+      environment: "staging",
+    },
+    {
+      stage: "axe",
+      status: "queued",
+      blocking: true,
+      environment: "staging",
+      stale: true,
+      details: {
+        pages: [
+          { path: "/store", violations: [{ id: "button-name", impact: "serious", nodes: 1 }] },
+        ],
+      },
+    },
+    {
+      stage: "preview",
+      status: "failed",
+      blocking: true,
+      environment: "production",
+      details: { reason: "CHECK_APP_URL_MISSING" },
+    },
+  ];
+  await reread();
+  const text = document.body.textContent ?? "";
+  expect(text).toContain("Идут проверки страниц");
+  expect(text).toContain("Согласование станет доступно, когда проверки страниц завершатся.");
+  expect(text).toContain("Сборка страниц (этап 8) · staging: Пройдена");
+  expect(text).toContain("Доступность axe (этап 9) · staging: В очереди");
+  expect(text).toContain("Исполнитель проверок не забирает проверку больше 15 минут.");
+  expect(text).toContain("/store: button-name (serious, 1)");
+  expect(text).toContain("CHECK_APP_URL_MISSING");
+  expect(button("Вернуть в работу")).toBeDefined();
+  expect(button("Согласовать")).toBeUndefined();
+});
