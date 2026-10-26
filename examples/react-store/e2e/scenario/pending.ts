@@ -4,20 +4,19 @@
 // package removes its entry, so the scenario only ever gets stricter.
 import { test } from "@playwright/test";
 
-export const pending = {
-  "pipeline-8-9": {
-    step: 7,
-    check: "Этапы pipeline 8 (preview build) и 9 (axe) пройдены",
-    plan: "M6. Укрепление: этапы pipeline 8–11 (docs/spec/14-mvp-plan.md)",
-    workaround: "проверяются этапы 1–7 и 13",
-  },
-} as const;
+// Empty since STU-496: every part of §2 is checked strictly. New entries follow the
+// same shape: { step, check, plan, workaround }.
+export const pending: Record<
+  string,
+  { step: number; check: string; plan: string; workaround: string }
+> = {};
 
 export type Pending = keyof typeof pending;
 
 /** Annotates a pending part, or fails when it has become available. */
 export function stillPending(id: Pending, available: boolean) {
   const entry = pending[id];
+  if (!entry) throw new Error(`Pending «${id}» не зарегистрирован в e2e/scenario/pending.ts`);
   if (available)
     throw new Error(
       `Pending «${id}» уже доступен (${entry.check}): удалите запись из e2e/scenario/pending.ts и сделайте проверку строгой`,

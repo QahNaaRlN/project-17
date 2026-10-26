@@ -22,6 +22,7 @@ if (process.env.E2E_SKIP_BUILD !== "true") {
   run("go", ["build", "-tags", "e2e", "-o", binary, "./cmd/cms"], join(repo, "apps/server"));
   run("pnpm", ["--filter", "@cms/studio", "build"]);
   run("pnpm", ["--filter", "@cms/store-example", "build"]);
+  run("pnpm", ["--filter", "@cms/check-runner", "build"]);
 }
 process.env.E2E_DIR = directory;
 process.env.E2E_CMS_BINARY = binary;

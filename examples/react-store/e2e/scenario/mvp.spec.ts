@@ -21,7 +21,6 @@ import {
   Metrics,
   type Person,
 } from "./support.js";
-import { stillPending } from "./pending.js";
 
 const directory = resolve(
   process.env.E2E_DIR ?? join(repo, "examples/react-store/test-results/scenario-stand"),
@@ -517,9 +516,12 @@ test("§2: MVP acceptance scenario", async () => {
     await alice.page.reload({ waitUntil: "domcontentloaded" });
     const panel = alice.page.getByRole("region", { name: "Проверки и публикация", exact: true });
     await panel.getByRole("button", { name: "Отправить на проверку", exact: true }).click();
+    // STU-496: stages 8–9 run in the check runner before the review opens.
     await expect
-      .poll(async () => (await read(stand, alice, "/changesets/" + state.cs)).state)
-      .not.toBe("open");
+      .poll(async () => (await read(stand, alice, "/changesets/" + state.cs)).state, {
+        timeout: 90_000,
+      })
+      .not.toMatch(/^(open|checking)$/);
     const submitted = await read(stand, alice, `/changesets/${state.cs}/review`);
     expect(
       submitted.changeset.state,
@@ -556,14 +558,17 @@ test("§2: MVP acceptance scenario", async () => {
     const lead = bob.page.getByRole("region", { name: "Проверки и публикация", exact: true });
     await lead.getByRole("button", { name: "Согласовать", exact: true }).click();
     await expect(lead.getByText("Готов к публикации", { exact: true })).toBeVisible();
-    // Pipeline stages 1–7 and 13 pass; stages 8–9 are pending (pending.ts).
+    // Pipeline stages 1–9 and 13 pass; axe findings below serious only warn (STU-491).
     const review = await read(stand, bob, `/changesets/${state.cs}/review`);
-    expect(review.checks.length).toBeGreaterThan(0);
-    for (const check of review.checks) expect(check.status, check.stage).toBe("passed");
-    stillPending(
-      "pipeline-8-9",
-      review.checks.some((c: any) => /preview|axe/i.test(c.stage)),
-    );
+    for (const stage of ["ir", "policy", "preview", "axe"])
+      expect(review.checks.map((c: any) => c.stage)).toContain(stage);
+    for (const check of review.checks)
+      expect(check.status, check.stage + " " + JSON.stringify(check.details)).toMatch(
+        check.stage === "axe" ? /^(passed|warning)$/ : /^passed$/,
+      );
+    expect(
+      review.checks.filter((c: any) => c.stage === "preview").map((c: any) => c.environment),
+    ).toEqual(["staging"]);
     await snap(bob, 7);
   });
 
@@ -794,6 +799,12 @@ test("§2: MVP acceptance scenario", async () => {
       changesetId: cs.id,
       expectedSeq: await seq(),
     });
+    await expect
+      .poll(async () => (await read(stand, alice, "/changesets/" + cs.id)).state, {
+        timeout: 90_000,
+      })
+      .not.toBe("checking");
+    review = await read(stand, alice, `/changesets/${cs.id}/review`);
     expect(review.changeset.state, JSON.stringify(review.checks)).toBe("in_review");
     await command(stand, bob, "approve-changeset", {
       changesetId: cs.id,
@@ -806,4 +817,56 @@ test("§2: MVP acceptance scenario", async () => {
     });
     await snap(alice, 10);
   });
+});
+
+// STU-496: a serious axe violation on a routed page fails stage 9 and the Change Set.
+test("§2: a page with a nameless button fails the accessibility stage", async () => {
+  const cs = await command(stand, alice, "create-changeset", {
+    title: "Нарушение доступности",
+    targets: ["staging"],
+  });
+  const created = await command(stand, alice, "apply-operations", {
+    changesetId: cs.id,
+    expectedSeq: 0,
+    operations: [
+      {
+        type: "document.create",
+        payload: {
+          kind: "page",
+          path: "/a11y-negative",
+          root: {
+            id: "n_root",
+            type: "Box",
+            children: [{ id: "n_blank", type: "Button", bindings: { label: "$local.t_blank" } }],
+          },
+        },
+      },
+    ],
+  });
+  const page = created.operations[0].target;
+  await command(stand, alice, "apply-operations", {
+    changesetId: cs.id,
+    expectedSeq: 1,
+    operations: [
+      {
+        type: "localContent.set",
+        target: page,
+        payload: { key: "t_blank", type: "text", value: { ru: " ", en: " " } },
+      },
+    ],
+  });
+  await command(stand, alice, "submit-changeset", { changesetId: cs.id, expectedSeq: 2 });
+  await expect
+    .poll(async () => (await read(stand, alice, "/changesets/" + cs.id)).state, {
+      timeout: 90_000,
+    })
+    .not.toMatch(/^(open|checking)$/);
+  const review = await read(stand, alice, `/changesets/${cs.id}/review`);
+  expect(review.changeset.state, JSON.stringify(review.checks)).toBe("failed");
+  const axe = review.checks.find((c: any) => c.stage === "axe");
+  expect(axe.status).toBe("failed");
+  expect(JSON.stringify(axe.details)).toContain("button-name");
+  await expect(
+    command(stand, bob, "approve-changeset", { changesetId: cs.id, expectedSeq: 2 }),
+  ).rejects.toMatchObject({ status: 409 });
 });
