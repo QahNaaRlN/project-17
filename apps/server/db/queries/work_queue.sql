@@ -15,10 +15,10 @@ CROSS JOIN LATERAL (
  WHERE co.changeset_id=c.id
 ) counts
 WHERE c.project_id=sqlc.arg(project_id) AND c.kind='standard'
-AND c.state IN ('open','failed','changes_requested','in_review','approved')
+AND c.state IN ('open','checking','failed','changes_requested','in_review','approved')
 AND sqlc.arg(environment)::text=ANY(c.targets)
 AND (sqlc.arg(item_id)::uuid='00000000-0000-0000-0000-000000000000'::uuid OR c.id=sqlc.arg(item_id))
-AND ((c.owner_id=sqlc.arg(actor_id) AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+AND ((c.owner_id=sqlc.arg(actor_id) AND c.state IN ('open','checking','failed','changes_requested','in_review','approved'))
  OR (c.owner_id<>sqlc.arg(actor_id) AND sqlc.arg(can_review)::boolean AND c.state IN ('in_review','approved')))
 AND (sqlc.arg(state_filter)::text='all' OR c.state=sqlc.arg(state_filter))
 AND (sqlc.arg(ownership)::text='all' OR (sqlc.arg(ownership)='mine' AND c.owner_id=sqlc.arg(actor_id)) OR (sqlc.arg(ownership)='others' AND c.owner_id<>sqlc.arg(actor_id)))

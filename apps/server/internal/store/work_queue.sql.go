@@ -29,10 +29,10 @@ CROSS JOIN LATERAL (
  WHERE co.changeset_id=c.id
 ) counts
 WHERE c.project_id=$1 AND c.kind='standard'
-AND c.state IN ('open','failed','changes_requested','in_review','approved')
+AND c.state IN ('open','checking','failed','changes_requested','in_review','approved')
 AND $2::text=ANY(c.targets)
 AND ($3::uuid='00000000-0000-0000-0000-000000000000'::uuid OR c.id=$3)
-AND ((c.owner_id=$4 AND c.state IN ('open','failed','changes_requested','in_review','approved'))
+AND ((c.owner_id=$4 AND c.state IN ('open','checking','failed','changes_requested','in_review','approved'))
  OR (c.owner_id<>$4 AND $5::boolean AND c.state IN ('in_review','approved')))
 AND ($6::text='all' OR c.state=$6)
 AND ($7::text='all' OR ($7='mine' AND c.owner_id=$4) OR ($7='others' AND c.owner_id<>$4))

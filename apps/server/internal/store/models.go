@@ -479,17 +479,21 @@ type ChangesetObject struct {
 }
 
 type Check struct {
-	ID          uuid.UUID  `json:"id"`
-	ChangesetID uuid.UUID  `json:"changesetId"`
-	ContentHash []byte     `json:"contentHash"`
-	Environment string     `json:"environment"`
-	Stage       string     `json:"stage"`
-	Status      string     `json:"status"`
-	Blocking    bool       `json:"blocking"`
-	Details     []byte     `json:"details"`
-	Artifacts   []byte     `json:"artifacts"`
-	StartedAt   *time.Time `json:"startedAt"`
-	FinishedAt  *time.Time `json:"finishedAt"`
+	ID             uuid.UUID  `json:"id"`
+	ChangesetID    uuid.UUID  `json:"changesetId"`
+	ContentHash    []byte     `json:"contentHash"`
+	Environment    string     `json:"environment"`
+	Stage          string     `json:"stage"`
+	Status         string     `json:"status"`
+	Blocking       bool       `json:"blocking"`
+	Details        []byte     `json:"details"`
+	Artifacts      []byte     `json:"artifacts"`
+	StartedAt      *time.Time `json:"startedAt"`
+	FinishedAt     *time.Time `json:"finishedAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	LeaseID        *uuid.UUID `json:"leaseId"`
+	LeaseExpiresAt *time.Time `json:"leaseExpiresAt"`
+	Attempts       int32      `json:"attempts"`
 }
 
 type CodeIndexUpload struct {
@@ -677,6 +681,11 @@ type Project struct {
 	Name      string    `json:"name"`
 	Settings  []byte    `json:"settings"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type ProjectRenderCheck struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Enabled   bool      `json:"enabled"`
 }
 
 type ProjectRevision struct {

@@ -125,6 +125,9 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := reviewdiff.CheckExpected(ctx, q, actor, cs.ID, p.ExpectedDiffSnapshot); err != nil {
 		return Publication{}, err
 	}
+	if err := workflow.RequireRenderChecks(ctx, q, cs, env.Name); err != nil {
+		return Publication{}, err
+	}
 
 	versions, err := q.ChangesetWorkingVersions(ctx, cs.ID) // упорядочены по ID объекта
 	if err != nil {

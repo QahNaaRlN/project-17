@@ -44,6 +44,7 @@ const usage = `Использование: cms <команда> [флаги]
   migrate up|down|status|version
                               миграции схемы БД
   bootstrap -slug S -name N   создать проект, окружения, роль admin и сервисный токен
+  check-runner-token -slug S  токен исполнителя проверок этапов 8–9 (только checks.run)
   version                     версия сборки
 
 Конфигурация — переменные окружения CMS_* (см. apps/server/README.md).
@@ -86,6 +87,8 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout 
 		return postgres.Migrate(ctx, pool, args[1], log)
 	case "bootstrap":
 		return bootstrap(ctx, cfg, args[1:], stdout)
+	case "check-runner-token":
+		return checkRunnerToken(ctx, cfg, args[1:], stdout)
 	}
 	fmt.Fprint(stdout, usage)
 	return ErrUsage
@@ -141,7 +144,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return river.AddWorkerSafely(w, &capabilities.PreviewExpiryWorker{Pool: pool})
 	}, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.FulfillmentWorker{Service: capabilityFulfillment})
-	})
+	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, &workflow.RenderLeaseWorker{Pool: pool}) })
 	if err != nil {
 		return err
 	}
@@ -152,6 +155,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(10*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.FulfillmentArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-fulfillment", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return capabilities.PreviewExpiryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-preview-expiry", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.DeliveryRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-delivery-recovery", RunOnStart: true}))
+	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) { return workflow.RenderLeaseArgs{}, nil }, &river.PeriodicJobOpts{ID: "render-check-leases", RunOnStart: true}))
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
@@ -224,6 +228,29 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	return nil
+}
+
+// checkRunnerToken prints only the token, for the runner's configuration (STU-488).
+func checkRunnerToken(ctx context.Context, cfg config.Config, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("check-runner-token", flag.ContinueOnError)
+	fs.SetOutput(stdout)
+	slug := fs.String("slug", "", "идентификатор проекта")
+	ttl := fs.Duration("token-ttl", 90*24*time.Hour, "срок действия токена")
+	if err := fs.Parse(args); err != nil || *slug == "" {
+		fs.Usage()
+		return ErrUsage
+	}
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	res, err := projects.CheckRunnerToken(ctx, pool, *slug, *ttl)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, res.Token)
 	return nil
 }
 

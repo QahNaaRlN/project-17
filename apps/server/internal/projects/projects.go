@@ -3,6 +3,7 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -97,6 +98,36 @@ func RegisterWith(bus *commandbus.Bus, cfg Preview) {
 			return toEnvironment(env), nil
 		},
 	})
+	// STU-481: stages 8–9 render through the environment's application; bootstrap
+	// environments have no address yet.
+	commandbus.Register(bus, commandbus.Command[AppURLPayload, Environment]{
+		Name:  "set-environment-app-url",
+		Right: auth.ProjectAdmin,
+		Validate: func(p AppURLPayload) error {
+			u, err := url.Parse(p.AppURL)
+			if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+				return commandbus.Validation(map[string]string{"appUrl": "абсолютный URL http(s) без учётных данных, запроса и фрагмента"})
+			}
+			return nil
+		},
+		Handle: func(ctx context.Context, tx pgx.Tx, actor auth.Actor, p AppURLPayload) (Environment, error) {
+			env, err := store.New(tx).SetEnvironmentAppURL(ctx, store.SetEnvironmentAppURLParams{ProjectID: actor.ProjectID, Name: p.Environment, AppUrl: &p.AppURL})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return Environment{}, commandbus.NewError(http.StatusNotFound, "NOT_FOUND", "Окружение не найдено",
+					fmt.Sprintf("Стандартного окружения %q нет в проекте", p.Environment))
+			}
+			if err != nil {
+				return Environment{}, err
+			}
+			return toEnvironment(env), nil
+		},
+	})
+}
+
+// AppURLPayload — payload команды set-environment-app-url (STU-481).
+type AppURLPayload struct {
+	Environment string `json:"environment"`
+	AppURL      string `json:"appUrl"`
 }
 
 func validateEnvironment(p CreateEnvironmentPayload) error {
@@ -172,7 +203,8 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, token
 		for _, r := range auth.AllRights {
 			// External sharing always requires a separately granted role, even
 			// when a human is subsequently bound to this bootstrap admin role.
-			if r != auth.CapabilityDeliver {
+			// The check runner's right belongs to its own service actor (STU-488).
+			if r != auth.CapabilityDeliver && r != auth.ChecksRun {
 				rights = append(rights, string(r))
 			}
 		}
@@ -198,6 +230,52 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, token
 			return err
 		}
 		res = BootstrapResult{ProjectID: project.ID, ActorID: actor.ID, Token: secret, ExpiresAt: token.ExpiresAt}
+		return nil
+	})
+	return res, err
+}
+
+// CheckRunnerToken issues a token of the project's cms-checks service actor, whose only
+// right is checks.run (STU-488). The actor and its role are created on first use.
+func CheckRunnerToken(ctx context.Context, pool *pgxpool.Pool, slug string, tokenTTL time.Duration) (BootstrapResult, error) {
+	var res BootstrapResult
+	err := postgres.InTx(ctx, pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		project, err := q.GetProjectBySlug(ctx, slug)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("проект %q не найден", slug)
+		}
+		if err != nil {
+			return err
+		}
+		var actorID uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT a.id FROM actors a JOIN role_bindings b ON b.actor_id = a.id JOIN roles r ON r.id = b.role_id
+			WHERE a.project_id = $1 AND a.kind = 'service' AND a.display_name = 'cms-checks' AND r.name = 'check-runner' LIMIT 1`, project.ID).Scan(&actorID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			role, err := q.CreateRole(ctx, store.CreateRoleParams{ID: uuid.Must(uuid.NewV7()), ProjectID: project.ID, Name: "check-runner", Capabilities: []string{string(auth.ChecksRun)}})
+			if err != nil {
+				return err
+			}
+			actor, err := q.CreateActor(ctx, store.CreateActorParams{ID: uuid.Must(uuid.NewV7()), Kind: string(auth.ActorService), ProjectID: &project.ID, DisplayName: "cms-checks"})
+			if err != nil {
+				return err
+			}
+			if err := q.BindRole(ctx, store.BindRoleParams{ProjectID: project.ID, ActorID: actor.ID, RoleID: role.ID}); err != nil {
+				return err
+			}
+			actorID = actor.ID
+		} else if err != nil {
+			return err
+		}
+		secret, hash := auth.NewToken(auth.ServiceTokenPrefix)
+		token, err := q.CreateAPIToken(ctx, store.CreateAPITokenParams{
+			ID: uuid.Must(uuid.NewV7()), ProjectID: project.ID, ActorID: actorID, TokenHash: hash,
+			Scopes: []string{string(auth.ChecksRun)}, ExpiresAt: time.Now().Add(tokenTTL),
+		})
+		if err != nil {
+			return err
+		}
+		res = BootstrapResult{ProjectID: project.ID, ActorID: actorID, Token: secret, ExpiresAt: token.ExpiresAt}
 		return nil
 	})
 	return res, err

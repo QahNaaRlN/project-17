@@ -29,6 +29,8 @@ const (
 	ManifestRegister        Right = "manifest.register"
 	AgentDelegate           Right = "agent.delegate"
 	ProjectAdmin            Right = "project.admin"
+	// ChecksRun lets the check runner lease pipeline stage 8–9 checks (STU-488).
+	ChecksRun Right = "checks.run"
 )
 
 // AllRights — полный перечень прав.
@@ -36,7 +38,7 @@ var AllRights = []Right{
 	ContentRead, ContentWrite, ContentDelete, ContentPublish, AssetWrite,
 	DesignRead, DesignCompose, DesignZonesManage, DesignComponentsCertify, DesignTokensModify,
 	ComponentWrite, BehaviorUse, BehaviorPropose, CapabilityRequest, CapabilityDeliver, CodePropose,
-	SchemaRead, SchemaPropose, SchemaApply, ManifestRegister, AgentDelegate, ProjectAdmin,
+	SchemaRead, SchemaPropose, SchemaApply, ManifestRegister, AgentDelegate, ProjectAdmin, ChecksRun,
 }
 
 // ScopeAll — область токена «все права ролей актора».

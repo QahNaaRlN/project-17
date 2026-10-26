@@ -223,7 +223,7 @@ func (q *Queries) PolicySchemaNames(ctx context.Context, projectID uuid.UUID) ([
 
 const reviewedAgentChangesets = `-- name: ReviewedAgentChangesets :many
 SELECT c.id FROM changesets c
-WHERE c.project_id = $1 AND c.state IN ('in_review', 'approved')
+WHERE c.project_id = $1 AND c.state IN ('checking', 'in_review', 'approved')
   AND EXISTS (SELECT 1 FROM operations o WHERE o.changeset_id = c.id AND o.source = 'agent' AND o.status = 'applied')
 ORDER BY c.id
 `

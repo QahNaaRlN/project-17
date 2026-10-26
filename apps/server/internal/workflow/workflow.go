@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -127,6 +128,17 @@ func Register(bus *commandbus.Bus) {
 		Validate: validatePolicy,
 		Handle:   handleSetPolicy,
 	})
+	// STU-485/486: the check runner leases and completes stage 8–9 checks.
+	commandbus.Register(bus, commandbus.Command[struct{}, ClaimedCheck]{
+		Name:   "claim-check",
+		Right:  auth.ChecksRun,
+		Handle: handleClaimCheck,
+	})
+	commandbus.Register(bus, commandbus.Command[completePayload, CompletedCheck]{
+		Name:   "complete-check",
+		Right:  auth.ChecksRun,
+		Handle: handleCompleteCheck,
+	})
 }
 
 type changesetRef struct {
@@ -140,6 +152,10 @@ type Check struct {
 	Status   string          `json:"status"`
 	Blocking bool            `json:"blocking"`
 	Details  json.RawMessage `json:"details"`
+	// Environment is set for per-environment stages 8–9; Stale marks a check queued
+	// longer than 15 minutes, i.e. no runner is working (STU-487).
+	Environment string `json:"environment,omitempty"`
+	Stale       bool   `json:"stale,omitempty"`
 }
 
 // Review — состояние Change Set на проверке.
@@ -205,6 +221,21 @@ func handleSubmit(ctx context.Context, tx pgx.Tx, actor auth.Actor, p submitPayl
 		state = "failed"
 	} else if ev.required == 0 {
 		state = "approved"
+	}
+	if state != "failed" && cs.Kind != "schema" {
+		// STU-480: stages 8–9 run asynchronously after the synchronous checks pass.
+		versions, err := q.ChangesetWorkingVersions(ctx, cs.ID)
+		if err != nil {
+			return Review{}, err
+		}
+		next, render, err := queueRenderChecks(ctx, q, cs, ev, versions)
+		if err != nil {
+			return Review{}, err
+		}
+		ev.checks = append(ev.checks, render...)
+		if next != "" {
+			state = next
+		}
 	}
 	if err := q.SubmitChangeset(ctx, store.SubmitChangesetParams{ID: cs.ID, State: state, Risk: &ev.risk, ContentHash: ev.hash, Targets: ev.targets}); err != nil {
 		return Review{}, err
@@ -646,7 +677,7 @@ func handleReopen(ctx context.Context, tx pgx.Tx, actor auth.Actor, p changesetR
 	if err := RequireExpectedSeq(cs, p.ExpectedSeq); err != nil {
 		return Review{}, err
 	}
-	if err := changes.RequireState(cs, "Возврат в работу", "failed", "changes_requested", "in_review", "approved"); err != nil {
+	if err := changes.RequireState(cs, "Возврат в работу", "checking", "failed", "changes_requested", "in_review", "approved"); err != nil {
 		return Review{}, err
 	}
 	// Правки меняют содержимое — полученные согласования больше не действуют (PUB-004).
@@ -705,7 +736,8 @@ func ListChecks(ctx context.Context, q *store.Queries, cs store.Changeset) ([]Ch
 	}
 	out := make([]Check, len(rows))
 	for i, r := range rows {
-		out[i] = Check{Stage: r.Stage, Status: r.Status, Blocking: r.Blocking, Details: r.Details}
+		out[i] = Check{Stage: r.Stage, Status: r.Status, Blocking: r.Blocking, Details: r.Details, Environment: r.Environment,
+			Stale: r.Status == "queued" && time.Since(r.CreatedAt) > renderStaleAfter}
 	}
 	return out, nil
 }
