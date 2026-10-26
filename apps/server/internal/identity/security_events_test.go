@@ -143,3 +143,66 @@ func TestAnonymizeUser(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+// STU-509: a member without project.admin, malformed cursors and storage failures.
+func TestSecurityJournalGuardsAndFailures(t *testing.T) {
+	f := setup(t)
+	cookies, info := f.login(t, "carol")
+	f.grant(t, info.Actor.ID, "readers", auth.ContentRead)
+	if r, _ := f.request(t, "GET", "/api/v1/security-events", cookies, "", ""); r.StatusCode != 403 {
+		t.Fatal(r.StatusCode)
+	}
+	admin, adminInfo := f.login(t, "dave")
+	f.grant(t, adminInfo.Actor.ID, "admins", auth.ProjectAdmin)
+	for _, cursor := range []string{"eHx5", "MjAyNi0xMC0yN1QwMDowMDowMFp8eA"} {
+		if r, _ := f.request(t, "GET", "/api/v1/security-events?after="+cursor, admin, "", ""); r.StatusCode != 400 {
+			t.Fatal(cursor, r.StatusCode)
+		}
+	}
+	f.e.Break("security_events", "")
+	if r, _ := f.request(t, "GET", "/api/v1/security-events", admin, "", ""); r.StatusCode != 500 {
+		t.Fatal(r.StatusCode)
+	}
+}
+
+// Storage failures of logins, logouts and anonymisation never pretend success.
+func TestIdentityStorageFailures(t *testing.T) {
+	ctx := context.Background()
+	t.Run("session insert", func(t *testing.T) {
+		f := setup(t)
+		f.e.Break("human_sessions", "INSERT")
+		callback, cookies := f.begin(t)
+		if r, _ := f.request(t, "GET", callback, cookies, "", ""); !strings.Contains(r.Header.Get("Location"), "authError") {
+			t.Fatal(r.Header.Get("Location"))
+		}
+		if failed := events(t, f, "auth.login_failed"); len(failed) != 1 || failed[0]["data"].(map[string]any)["reason"] != "SESSION_FAILED" {
+			t.Fatal(failed)
+		}
+	})
+	t.Run("upsert", func(t *testing.T) {
+		f := setup(t)
+		f.e.Break("actors", "INSERT")
+		callback, cookies := f.begin(t)
+		if r, _ := f.request(t, "GET", callback, cookies, "", ""); !strings.Contains(r.Header.Get("Location"), "authError") {
+			t.Fatal(r.Header.Get("Location"))
+		}
+	})
+	t.Run("logout", func(t *testing.T) {
+		f := setup(t)
+		cookies, info := f.login(t, "erin")
+		f.e.Break("human_sessions", "DELETE")
+		if r, _ := f.request(t, "POST", "/auth/logout", cookies, info.CSRFToken, ""); r.StatusCode != 503 {
+			t.Fatal(r.StatusCode)
+		}
+	})
+	for _, c := range []struct{ table, op string }{{"actors", "UPDATE"}, {"human_sessions", "DELETE"}, {"actors", ""}} {
+		t.Run("anonymize "+c.table+" "+c.op, func(t *testing.T) {
+			f := setup(t)
+			f.login(t, "frank")
+			f.e.Break(c.table, c.op)
+			if _, _, err := identity.Anonymize(ctx, f.e.Pool, f.provider.srv.URL, "frank"); err == nil || errors.Is(err, identity.ErrUserNotFound) {
+				t.Fatal(err)
+			}
+		})
+	}
+}

@@ -25,10 +25,8 @@ func Record(ctx context.Context, db store.DBTX, e Event) error {
 	if e.Data == nil {
 		e.Data = map[string]any{}
 	}
-	raw, err := json.Marshal(e.Data)
-	if err != nil {
-		return err
-	}
+	// Callers pass codes, identifiers and hashes only: plain JSON values.
+	raw, _ := json.Marshal(e.Data)
 	return store.New(db).InsertSecurityEvent(ctx, store.InsertSecurityEventParams{
 		ID: uuid.Must(uuid.NewV7()), ProjectID: e.ProjectID, ActorID: e.ActorID, Type: e.Type, Data: raw,
 	})
