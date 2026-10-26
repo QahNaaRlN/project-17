@@ -1,6 +1,7 @@
 # Перенос в production и откат production в Studio: реализация и проверка
 
-Дата: 2026-10-26. Ветка: `feature/studio-promote` от `dev` `96ba0cb`.
+Дата: 2026-10-26. Ветка: `feature/studio-promote` от `dev` `96ba0cb`; слита в dev
+2026-10-26 в [PR #84](https://github.com/QahNaaRlN/project-17/pull/84), merge `2cba143`; [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены.
 [Спецификация STU-460…479](studio-promote.md) одобрена пользователем 2026-10-26
 вместе с решениями §11.
 
@@ -64,7 +65,7 @@ Alice публикует в staging через Studio; Bob в Studio перен�
   UI (`test/promote.test.tsx`: перенос, неизвестный исход, устаревший снимок,
   блокеры, выбор окружения, адаптер и валидатор); 419 тестов, пороги покрытия.
 
-## Не проверено
+## CI
 
-- CI итогового SHA и job `E2E scenario (§2)` в PR.
-- Полный `go test -race` с порогом покрытия — в CI.
+[CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042): `Check (TS + Go)` с `go test -race` и порогами покрытия, `Docker image`,
+`E2E scenario (§2)` (2 мин 44 с) — пройдены; [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройден.
