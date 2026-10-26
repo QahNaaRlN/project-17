@@ -17,10 +17,10 @@
 Итого ≈ 26–30 недель с учётом параллельности. Это исходная оценка для указанной
 команды, не актуальный календарный прогноз оставшейся работы.
 
-### Текущее состояние и приоритет — 2026-10-26
+### Текущее состояние и приоритет — 2026-10-27
 
-Интеграционная база: `dev`, merge `2cba143` после PR #84;
-[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройден. Выпуск из `main` ещё не отражает реализованный объём `dev`.
+Интеграционная база: `dev`, merge `c607dec` после PR #87;
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройден. Выпуск из `main` ещё не отражает реализованный объём `dev`.
 Наличие отдельных пакетов не означает завершение M0…M6: итоговые критерии
 MVP и сквозная автоматическая приёмка ниже остаются обязательными.
 
@@ -32,7 +32,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044, NFR-приёмка |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81) | Этапы pipeline 8–11, нагрузочные тесты NFR-001…007, безопасность, эксперимент |
+| M6. Укрепление | Начат (PR #81, #87) | Этапы pipeline 10–11, нагрузочные тесты NFR-001…007, безопасность, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -46,14 +46,14 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | [PR #78](https://github.com/QahNaaRlN/project-17/pull/78) слит в dev 2026-10-21; локальная [приёмка](../studio-agent-policy-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39570897945) и [CI merge](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройдены; Go coverage 95.08% |
 | Выполнено | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | [PR #81](https://github.com/QahNaaRlN/project-17/pull/81) слит в dev 2026-10-26; локальная [приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699) (job `E2E scenario (§2)` 2 мин 46 с) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены; после пяти зелёных прогонов подряд job обязателен для PR в `dev` и `main` с 2026-10-26 |
 | Выполнено | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | [PR #84](https://github.com/QahNaaRlN/project-17/pull/84) слит в dev 2026-10-26; локальная [приёмка](../studio-promote-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены; шаги 8–9 сценария §2 выполняются в Studio |
-| 1 | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | Реализовано в ветке `feature/pipeline-render-checks`: локальная [приёмка](../pipeline-render-checks-acceptance.md); ожидает PR в dev; снимает запись `pipeline-8-9` сценария §2; этапы 10–11 — следующий пакет |
+| Выполнено | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | [PR #87](https://github.com/QahNaaRlN/project-17/pull/87) слит в dev 2026-10-26; локальная [приёмка](../pipeline-render-checks-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) (Go coverage 95.0%) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; реестр `pending.ts` сценария §2 пуст; этапы 10–11 — следующий пакет |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
 зелёный CI.
 До полного M4 также остаются каталог и вставка компонентов (решение Q-1
-пакета component.extract), advanced bindings, буфер обмена и wrap. Перед готовностью к эксперименту M6: недостающие этапы pipeline,
-нагрузочные NFR-001…007, безопасность и сценарий §2 без временных обходов.
+пакета component.extract), advanced bindings, буфер обмена и wrap. Перед готовностью к эксперименту M6: этапы pipeline 10–11,
+нагрузочные NFR-001…007 и безопасность.
 Внешние OIDC/production endpoints и Figma не считаются настроенными из-за локальной
 приёмки. Оптимизация CI — сопутствующая работа: сохранить исправления registry/CPU,
 затем измерить время и добавить Docker cache без ослабления проверок.
@@ -68,15 +68,15 @@ MVP и сквозная автоматическая приёмка ниже о�
 | 4. Сущность, привязки, Repeat | Реализован (PR #57, #58); IR-044 и порог < 1 с не подтверждены |
 | 5. Правка агентом через MCP | Реализован (PR #48); живой вызов требует ключа и модели |
 | 6. Preview и выбор узла | Реализован (PR #38, #50); NFR-005 (< 400 мс) не измерен |
-| 7. Проверка и согласование | Реализован, кроме этапов pipeline 8–9 (M6); в сценарии — обход `pipeline-8-9` |
+| 7. Проверка и согласование | Реализован, включая этапы pipeline 8–9 (PR #87): в сценарии `preview` и `axe` пройдены для staging |
 | 8. Публикация и `promote` | Реализован в API и Studio (PR #84); в сценарии — в Studio |
 | 9. Откат | Реализован (API и Studio, PR #54, #84), включая production; в сценарии — в Studio |
 | 10. Missing Capability | Реализован (PR #60…#62, #68, #71): ручной путь, доставка pack, факты PR/CI, preview/<ref>, автоматическое fulfillment и группы requiredBy; локальная приёмка шага 10 пройдена; в CI шаг проходит с сервером фактов GitHub вместо реального GitHub |
 
-Сценарий §2 проходит автоматически в CI; job `E2E scenario (§2)` обязателен для PR
-в `dev` и `main`. Остался один временный обход из
-[`pending.ts`](../../examples/react-store/e2e/scenario/pending.ts) — этапы pipeline 8–9.
-Критерий готовности 1 будет закрыт, когда снят и он; остальные критерии §3 пока не выполнены.
+Сценарий §2 проходит автоматически в CI без временных обходов: реестр
+[`pending.ts`](../../examples/react-store/e2e/scenario/pending.ts) пуст, job
+`E2E scenario (§2)` обязателен для PR в `dev` и `main`. Критерий готовности 1
+выполнен (2026-10-26, PR #87); остальные критерии §3 пока не выполнены.
 
 ### Реализованные пакеты и оставшиеся границы
 
@@ -287,6 +287,15 @@ PostgreSQL, River и Studio (`pnpm e2e:scenario`, стенд `scripts/e2e-stand.
 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены. После пяти зелёных прогонов подряд (PR #81…#84 и слияния)
 job `E2E scenario (§2)` 2026-10-26 включён обязательной проверкой для PR в `dev` и `main` (решение §11.1).
 
+Пакет M6 — [этапы pipeline 8–9](../pipeline-render-checks.md),
+STU-480…499: **реализован и слит в dev 2026-10-26 в [PR #87](https://github.com/QahNaaRlN/project-17/pull/87)**, merge `c607dec8d289fff3cb6c9663e97264d5beef6ced`.
+Асинхронные проверки `preview` и `axe` с состоянием `checking`, отдельный исполнитель
+`apps/check-runner` (Playwright, axe-core) с арендой проверок, диагностики рендера
+в HTML preview, гейт публикации `CHECKS_PENDING`/`CHECKS_FAILED`, результаты в ревью
+Studio. Первый прогон этапа 9 нашёл и закрыл два нарушения доступности (заглушка
+изображения, контраст витрины). [Локальная приёмка](../pipeline-render-checks-acceptance.md),
+[CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; покрытие Go — ровно на пороге 95%.
+
 Пакет M4 — [перенос в production и откат production в Studio](../studio-promote.md),
 STU-460…479: **реализован и слит в dev 2026-10-26 в [PR #84](https://github.com/QahNaaRlN/project-17/pull/84)**, merge `2cba1437cf3e25cb7b58cbb24ca37555e8e40626`.
 Целевые окружения `promotionTargets` в конфигурации Studio, предпросмотр
@@ -324,7 +333,7 @@ MCP-инструмент `create_component` и рендер `Composed` в вит
 
 ## 3. Критерии готовности MVP
 
-1. Сквозной сценарий §2 проходит автоматически в CI.
+1. Сквозной сценарий §2 проходит автоматически в CI — **выполнен** 2026-10-26 (PR #87).
 2. Нагрузочные тесты подтверждают NFR-001…007 при профиле [01 §5](01-requirements.md#5-профиль-нагрузки-mvp).
 3. Conformance-фикстуры IR проходят на Go и TS.
 4. Нет открытых уязвимостей уровня high/critical.
