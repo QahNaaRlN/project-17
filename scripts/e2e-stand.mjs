@@ -224,6 +224,8 @@ export async function startStand({
         authMode: "oidc",
         studioOrigin,
         appOrigin: stagingOrigin,
+        // STU-477: Studio promotes to and rolls back the production storefront.
+        promotionTargets: [{ environment: "production", appOrigin: stores.production.origin }],
       }),
     );
     start(

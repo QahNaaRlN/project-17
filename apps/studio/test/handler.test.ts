@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkConfig, createStudioHandler, type ServerConfig } from "../src/handler.js";
 import { documentId, changesetId } from "./fixture.js";
+import type { PromotionTarget } from "../src/types.js";
 const config: ServerConfig = {
   baseUrl: "http://127.0.0.1:18080",
   studioOrigin: "http://127.0.0.1:18085",
@@ -159,6 +160,125 @@ it("STU-167/170: publication proxy enforces environment and guarded rollback", a
   expect((await post(route, { payload, reason: "Test" })).status).toBe(403);
   fetcher.mockImplementation(async () => Response.json({ code: "FORBIDDEN" }, { status: 403 }));
   expect((await post(route, { payload, reason: "Test" })).status).toBe(403);
+});
+it("STU-460: promotion targets are validated and published in the Studio config", async () => {
+  const production = { environment: "production", appOrigin: "https://shop.example" };
+  expect(checkConfig({ ...config, promotionTargets: [production] }).promotionTargets).toEqual([
+    production,
+  ]);
+  for (const promotionTargets of [
+    [{ environment: "staging", appOrigin: "https://shop.example" }],
+    [production, production],
+    [{ environment: "bad name", appOrigin: "https://shop.example" }],
+    [{ environment: "production", appOrigin: "http://shop.example" }],
+    [{ environment: "production", appOrigin: "https://shop.example/path" }],
+    [{ environment: "production", appOrigin: "not a url" }],
+    [{ ...production, extra: true }],
+    [1, 2, 3, 4, 5].map((n) => ({ environment: "p" + n, appOrigin: "https://shop.example" })),
+    "production",
+  ])
+    expect(() =>
+      checkConfig({
+        ...config,
+        promotionTargets: promotionTargets as PromotionTarget[],
+      }),
+    ).toThrow("STUDIO_CONFIG_INVALID");
+  const { origin } = await setup(false, { promotionTargets: [production] });
+  expect(await (await fetch(origin + "/api/studio/config")).json()).toMatchObject({
+    environment: "staging",
+    promotionTargets: [production],
+  });
+  const plain = await setup();
+  expect(await (await fetch(plain.origin + "/api/studio/config")).json()).not.toHaveProperty(
+    "promotionTargets",
+  );
+});
+it("STU-461/467/474: promotion proxy allows history in targets and guards promote", async () => {
+  const production = { environment: "production", appOrigin: "https://shop.example" };
+  const { origin, post, fetcher } = await setup(false, { promotionTargets: [production] });
+  const root = "/api/studio/api/v1/publication-history";
+  const hash = "sha256:" + "b".repeat(64);
+  const preview = root + "/" + documentId + "/promote-preview";
+  for (const route of [
+    root + "?environment=production&limit=50",
+    root + "/" + documentId + "/rollback-preview?environment=production",
+    preview + "?environment=staging&toEnvironment=production",
+    preview +
+      "/diff?environment=staging&toEnvironment=production&objectId=" +
+      changesetId +
+      "&snapshot=" +
+      hash,
+  ])
+    expect((await fetch(origin + route)).status).toBe(200);
+  for (const route of [
+    root + "?environment=qa",
+    preview + "?environment=production&toEnvironment=production",
+    preview + "?environment=production&toEnvironment=staging",
+    preview + "?environment=staging",
+  ])
+    expect((await fetch(origin + route)).status).toBe(403);
+  expect(
+    (await fetch(origin + root + "?environment=staging&toEnvironment=production")).status,
+  ).toBe(400);
+  // Work, review and publication stay in the base environment.
+  expect(
+    (await fetch(origin + "/api/studio/api/v1/pages?environment=production")).status,
+  ).toBeGreaterThanOrEqual(400);
+  const route = "/api/studio/api/v1/commands/promote",
+    payload = {
+      publicationId: documentId,
+      toEnvironment: "production",
+      expectedPromoteSnapshot: hash,
+    };
+  fetcher.mockImplementation(async (input) =>
+    String(input).includes("publication-history")
+      ? Response.json({ publication: { environment: "staging" } })
+      : Response.json({ result: { id: changesetId } }),
+  );
+  expect((await post(route, { payload, reason: "Release" })).status).toBe(200);
+  expect(
+    fetcher.mock.calls.some(([input]) =>
+      String(input).endsWith("/api/v1/publication-history/" + documentId),
+    ),
+  ).toBe(true);
+  for (const bad of [
+    { payload, reason: " " },
+    { payload, reason: "x".repeat(2001) },
+    { payload },
+    { payload, reason: "Release", extra: 1 },
+    { payload: { ...payload, expectedPromoteSnapshot: undefined }, reason: "Release" },
+    { payload: { ...payload, publicationId: "bad" }, reason: "Release" },
+    { payload: { ...payload, toEnvironment: 1 }, reason: "Release" },
+    { payload: { ...payload, resetHead: false }, reason: "Release" },
+  ])
+    expect((await post(route, bad)).status).toBe(400);
+  expect(
+    (await post(route, { payload: { ...payload, toEnvironment: "qa" }, reason: "Release" })).status,
+  ).toBe(403);
+  expect(
+    (await post(route, { payload: { ...payload, toEnvironment: "staging" }, reason: "Release" }))
+      .status,
+  ).toBe(403);
+  fetcher.mockImplementation(async () =>
+    Response.json({ publication: { environment: "production" } }),
+  );
+  expect((await post(route, { payload, reason: "Release" })).status).toBe(403);
+  fetcher.mockImplementation(async () => Response.json({ publication: { environment: "qa" } }));
+  expect((await post(route, { payload, reason: "Release" })).status).toBe(403);
+  fetcher.mockImplementation(async () => Response.json({ code: "NOT_FOUND" }, { status: 404 }));
+  expect((await post(route, { payload, reason: "Release" })).status).toBe(404);
+  // Rollback of a production publication is allowed once production is a target.
+  fetcher.mockImplementation(async () =>
+    Response.json({ publication: { environment: "production" } }),
+  );
+  expect(
+    (
+      await post("/api/studio/api/v1/commands/rollback", {
+        payload: { publicationId: documentId, resetHead: false, expectedRollbackSnapshot: hash },
+        reason: "Back",
+      })
+    ).status,
+  ).toBe(200);
 });
 it("STU-124/125: Agent proxy scopes reads and writes and excludes provider/session secrets", async () => {
   const { origin, post, fetcher } = await setup();
@@ -549,7 +669,7 @@ it("STU-431/433/435: agent policy proxy forwards Query, dry run body and the ver
     404,
   );
 });
-async function setup(oidc = false) {
+async function setup(oidc = false, extra: Partial<ServerConfig> = {}) {
   const directory = await mkdtemp(join(tmpdir(), "studio-test-"));
   await writeFile(join(directory, "index.html"), "<h1>Studio</h1>");
   await writeFile(join(directory, "client.js"), "export const studio=true");
@@ -565,8 +685,8 @@ async function setup(oidc = false) {
   const { credential: _credential, ...humanConfig } = config;
   const handler = createStudioHandler(
     oidc
-      ? { ...humanConfig, studioOrigin: origin, authMode: "oidc" }
-      : { ...config, studioOrigin: origin },
+      ? { ...humanConfig, ...extra, studioOrigin: origin, authMode: "oidc" }
+      : { ...config, ...extra, studioOrigin: origin },
     directory,
     fetcher,
   );

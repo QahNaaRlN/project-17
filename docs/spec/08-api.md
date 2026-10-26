@@ -134,7 +134,7 @@ X-CMS-Project: store
 | `reopen-changeset` | `changesetId`, `expectedSeq?` | владелец CS; сбрасывает согласования |
 | `request-changes` | `changesetId`, `comment` | роль согласующего |
 | `publish` | `changesetId`, `environment`, `expectedSeq?` | `content.publish` (окружение) |
-| `promote` | `publicationId`, `toEnvironment` | `content.publish` (целевое окружение) |
+| `promote` | `publicationId`, `toEnvironment`, `expectedPromoteSnapshot?` | `content.publish` (целевое окружение); со снимком — актуальный предпросмотр и причина ([STU-466](../studio-promote.md)) |
 | `rollback` | `publicationId`, `resetHead?` | `content.publish` (окружение) |
 | `claim-schema-changeset` | `changesetId`, `expectedSeq` | человек с `schema.apply`; открытый кандидат сервиса |
 | `register-manifest` | manifest, `environment`, `codeIndexUploadId?` | `manifest.register` |
@@ -171,6 +171,8 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/diff?environment=` | Реализован: полный индекс сравнения standard CS, база/публикация → рабочие версии, snapshot; [STU-149…161](../studio-review-diff.md) |
 | `GET /api/v1/changesets/{id}/diff/{objectId}?environment=&baseline=&snapshot=&after=&limit=` | Реализован: детали объекта из того же снимка, безопасные значения и курсорная пагинация; [контракт](../studio-review-diff.md#52-детали-объекта) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
+| `GET /api/v1/publication-history/{id}/promote-preview?toEnvironment=` | Предпросмотр переноса: объекты «сейчас в цели → версия публикации», блокеры, диагностики, зависимости и snapshot; [STU-462](../studio-promote.md) |
+| `GET /api/v1/publication-history/{id}/promote-preview/diff?toEnvironment=&objectId=&snapshot=&limit=&cursor=` | Детали предпросмотра переноса из того же снимка; [STU-463](../studio-promote.md) |
 | `GET /api/v1/capability-requests?status=` | Запросы Missing Capability |
 | `GET /api/v1/events` (SSE) | Инвалидация состояния проекта и presence для документа/CS/окружения; [контракт](../studio-realtime.md) |
 
@@ -280,7 +282,7 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
-| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
+| 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `PROMOTE_SNAPSHOT_STALE`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
 | 413 | `LIMIT_EXCEEDED` |
 | 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |

@@ -18,8 +18,10 @@ import {
   publicationList,
   publicationCard,
   publicationPage,
+  promoteCard,
   type PublicationList,
   type PublicationCard,
+  type PromoteCard,
   type PublicationPage,
   type PublicationEntry,
 } from "./publication-history.js";
@@ -64,6 +66,16 @@ import {
 import { validateReview, problemDiagnostics, safeDiagnostics } from "./review.js";
 import type { Review, Publication } from "./types.js";
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+// STU-461: history is read in the base environment or a configured promotion target.
+function historyEnvironment(config: Config, environment?: string): string {
+  const env = environment ?? config.environment;
+  if (
+    env !== config.environment &&
+    !(config.promotionTargets ?? []).some((t) => t.environment === env)
+  )
+    throw new StudioError("STUDIO_ENVIRONMENT_FORBIDDEN");
+  return env;
+}
 function checkUpload(value: Upload, uncertain = false): Upload {
   if (
     !value ||
@@ -566,32 +578,95 @@ export function createApi(fetcher: typeof fetch = fetch, onSessionLost?: () => v
         throw new StudioError("SESSION_INVALID");
       return { config, changeset, work, history, review, ...active };
     },
-    async publications(cursor, signal) {
+    async publications(cursor, signal, environment) {
       const config = await api.config(signal);
+      const env = historyEnvironment(config, environment);
       const query = new URLSearchParams({
-        environment: config.environment,
+        environment: env,
         limit: "50",
         ...(cursor ? { cursor } : {}),
       });
       return publicationList(
         await request<PublicationList>("/api/v1/publication-history?" + query, signal),
-        config.environment,
+        env,
       );
     },
-    async publication(id, preview, signal) {
+    async publication(id, preview, signal, environment) {
       const config = await api.config(signal);
+      const env = historyEnvironment(config, environment);
       return publicationCard(
         await request<PublicationCard>(
           "/api/v1/publication-history/" +
             encodeURIComponent(id) +
             (preview ? "/rollback-preview" : "") +
             "?environment=" +
-            encodeURIComponent(config.environment),
+            encodeURIComponent(env),
           signal,
         ),
         id,
-        config.environment,
+        env,
       );
+    },
+    async promotePreview(id, environment, toEnvironment, signal) {
+      const config = await api.config(signal);
+      const env = historyEnvironment(config, environment);
+      if (!(config.promotionTargets ?? []).some((t) => t.environment === toEnvironment))
+        throw new StudioError("STUDIO_ENVIRONMENT_FORBIDDEN");
+      return promoteCard(
+        await request<PromoteCard>(
+          "/api/v1/publication-history/" +
+            encodeURIComponent(id) +
+            "/promote-preview?" +
+            new URLSearchParams({ environment: env, toEnvironment }),
+          signal,
+        ),
+        id,
+        env,
+        toEnvironment,
+      );
+    },
+    async promoteDiff(card, objectId, cursor, signal) {
+      const query = new URLSearchParams({
+        environment: card.publication.environment,
+        toEnvironment: card.toEnvironment,
+        objectId,
+        snapshot: card.snapshot,
+        limit: "100",
+        ...(cursor ? { cursor } : {}),
+      });
+      return publicationPage(
+        await request<PublicationPage>(
+          "/api/v1/publication-history/" + card.publication.id + "/promote-preview/diff?" + query,
+          signal,
+        ),
+        card.publication.id,
+        objectId,
+        card.snapshot,
+      );
+    },
+    async promote(attempt) {
+      const { reason, key } = attempt;
+      const payload = {
+        publicationId: attempt.publicationId,
+        toEnvironment: attempt.toEnvironment,
+        expectedPromoteSnapshot: attempt.expectedPromoteSnapshot,
+      };
+      const value = await request<{ result: PublicationEntry }>(
+        "/api/v1/commands/promote",
+        undefined,
+        { reason, payload },
+        key,
+      );
+      const p = value?.result;
+      if (
+        !p ||
+        !uuid.test(p.id) ||
+        p.kind !== "promote" ||
+        p.environment !== attempt.toEnvironment ||
+        p.sourcePublicationId !== attempt.publicationId
+      )
+        throw new StudioError("RESPONSE_INVALID", true);
+      return p;
     },
     async publicationDiff(card, objectId, preview, cursor, signal) {
       const query = new URLSearchParams({

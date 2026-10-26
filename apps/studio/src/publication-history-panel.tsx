@@ -4,7 +4,8 @@ import { useStore } from "zustand";
 import { Button, Dialog, Notice } from "./components.js";
 import { StudioError, type Api, type DiffValue } from "./types.js";
 import type { Editor } from "./editor.js";
-import type { RollbackAttempt } from "./publication-history.js";
+import type { PublicationEntry, RollbackAttempt } from "./publication-history.js";
+import { PromotePanel } from "./promote-panel.js";
 
 function diffText(v: DiffValue, ru: boolean): string {
   if (!v.present) return ru ? "Отсутствует" : "Absent";
@@ -19,6 +20,10 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
   const [id, setId] = useState(
     () => new URLSearchParams(window.location.hash.slice(1)).get("publication") ?? "",
   );
+  // STU-470: the base environment or a promotion target; kept in the section address.
+  const [chosenEnvironment, setEnvironment] = useState(
+    () => new URLSearchParams(window.location.hash.slice(1)).get("environment") ?? "",
+  );
   const [preview, setPreview] = useState(false),
     [object, setObject] = useState("");
   const [dialog, setDialog] = useState(false),
@@ -31,6 +36,15 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     queryFn: ({ signal }) => api.config(signal),
     retry: false,
   });
+  const targets = config.data?.promotionTargets ?? [];
+  const environment =
+    chosenEnvironment && targets.some((t) => t.environment === chosenEnvironment)
+      ? chosenEnvironment
+      : config.data?.environment;
+  const appOrigin = (env: string) =>
+    env === config.data?.environment
+      ? config.data.appOrigin
+      : targets.find((t) => t.environment === env)?.appOrigin;
   const attempt = useRef<RollbackAttempt | null>(null),
     generation = useRef(0);
   const sending = useRef(false);
@@ -44,16 +58,24 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     state.status === "uncertain" ||
     Object.entries(state.dirtyFields).some(([k, v]) => k !== "publication" && v);
   const list = useInfiniteQuery({
-    queryKey: ["publication-history"],
+    queryKey: ["publication-history", environment],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ signal, pageParam }) => api.publications!(pageParam, signal),
+    queryFn: ({ signal, pageParam }) => api.publications!(pageParam, signal, environment),
     getNextPageParam: (p) => p.nextCursor ?? undefined,
+    enabled: !!environment,
     retry: false,
   });
   const card = useQuery({
-    queryKey: ["publication-card", id, preview, state.historyRevision, state.remotePending],
-    queryFn: ({ signal }) => api.publication!(id, preview, signal),
-    enabled: !!id && stage === "idle",
+    queryKey: [
+      "publication-card",
+      id,
+      preview,
+      environment,
+      state.historyRevision,
+      state.remotePending,
+    ],
+    queryFn: ({ signal }) => api.publication!(id, preview, signal, environment),
+    enabled: !!id && !!environment && stage === "idle",
     retry: false,
     refetchInterval: dialog ? false : 30000,
     refetchOnWindowFocus: !dialog,
@@ -120,6 +142,40 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     },
     [],
   );
+  function selectEnvironment(next: string) {
+    if (ownDirty || locked || next === environment) return;
+    generation.current++;
+    setEnvironment(next);
+    setId("");
+    setPreview(false);
+    setObject("");
+    setDialog(false);
+    setError("");
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    hash.set("environment", next);
+    hash.set("publication", "");
+    window.history.replaceState({}, "", "/editor#" + hash);
+  }
+  // STU-473: after a promotion the target's new publication is opened.
+  async function promoted(result: PublicationEntry) {
+    generation.current++;
+    setReceipt(result.id);
+    focusPublication.current = result.id;
+    setEnvironment(result.environment);
+    setId(result.id);
+    setPreview(false);
+    setObject("");
+    setError("");
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    hash.set("environment", result.environment);
+    hash.set("publication", result.id);
+    window.history.replaceState({}, "", "/editor#" + hash);
+    await client.invalidateQueries({
+      predicate: (q) =>
+        ["publication-history", "publication-card", "promote-card"].includes(String(q.queryKey[0])),
+    });
+    editor.remoteChanged();
+  }
   function choose(next: string) {
     if (ownDirty || locked) return;
     generation.current++;
@@ -154,7 +210,7 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
     editor.formDirty("publication", true);
     try {
       if (!retry) {
-        const fresh = await api.publication!(id, true);
+        const fresh = await api.publication!(id, true, undefined, environment);
         if (fresh.snapshot !== visible!.snapshot || !fresh.canRollback) {
           setDialog(false);
           setReason("");
@@ -258,6 +314,24 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
           {ru ? "Обновить историю" : "Refresh history"}
         </Button>
       </div>
+      {targets.length > 0 && config.data && (
+        <div
+          className="work-card-actions"
+          role="group"
+          aria-label={ru ? "Окружение истории" : "History environment"}
+        >
+          {[config.data.environment, ...targets.map((t) => t.environment)].map((env) => (
+            <Button
+              key={env}
+              aria-pressed={env === environment}
+              disabled={ownDirty || locked}
+              onClick={() => selectEnvironment(env)}
+            >
+              {env}
+            </Button>
+          ))}
+        </div>
+      )}
       {list.isLoading && <p role="status">{ru ? "Загрузка…" : "Loading…"}</p>}
       {list.isError && (
         <Notice error>
@@ -312,14 +386,19 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
           )}
           {receipt === id && (
             <Notice>
-              {ru
-                ? "Публикация отменена. Черновики сохранены."
-                : "Publication rolled back. Drafts preserved."}
+              {visible?.publication.kind === "promote"
+                ? ru
+                  ? `Перенос выполнен: ${visible.publication.environment}. Очистка внешнего кэша выполняется отдельно.`
+                  : `Promoted to ${visible.publication.environment}. The external cache is purged separately.`
+                : ru
+                  ? "Публикация отменена. Черновики сохранены."
+                  : "Publication rolled back. Drafts preserved."}
             </Notice>
           )}
           {receipt === id &&
-            config.data &&
-            visible?.objects
+            visible &&
+            appOrigin(visible.publication.environment) &&
+            visible.objects
               .filter(
                 (o) =>
                   o.docKind === "page" &&
@@ -329,7 +408,7 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
               .map((o) => (
                 <a
                   key={o.id}
-                  href={config.data!.appOrigin + o.afterPath}
+                  href={appOrigin(visible.publication.environment) + o.afterPath!}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -475,6 +554,24 @@ export function PublicationHistory({ api, editor }: { api: Api; editor: Editor }
                       {ru ? "Отменить публикацию…" : "Roll back publication…"}
                     </Button>
                   )}
+                  {!preview &&
+                    api.promotePreview &&
+                    ["publish", "promote"].includes(visible.publication.kind) &&
+                    targets
+                      .filter((t) => t.environment !== visible.publication.environment)
+                      .map((t) => (
+                        <PromotePanel
+                          key={visible.publication.id + t.environment}
+                          api={api}
+                          editor={editor}
+                          card={visible}
+                          target={t.environment}
+                          disabled={ownDirty || card.isFetching}
+                          onOpenPublication={choose}
+                          onOpenEnvironment={selectEnvironment}
+                          onDone={promoted}
+                        />
+                      ))}
                 </>
               )}
             </>

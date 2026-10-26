@@ -11,18 +11,6 @@ export const pending = {
     plan: "M6. Укрепление: этапы pipeline 8–11 (docs/spec/14-mvp-plan.md)",
     workaround: "проверяются этапы 1–7 и 13",
   },
-  "studio-promote": {
-    step: 8,
-    check: "Перенос в production выполняется в Studio",
-    plan: "M4. Studio: promote в Studio (docs/spec/14-mvp-plan.md)",
-    workaround: "promote командой API от имени lead-designer",
-  },
-  "studio-production-rollback": {
-    step: 9,
-    check: "Откат production выполняется в Studio",
-    plan: "M4. Studio: Studio работает в одном окружении (STU-001); откат production — с promote в Studio",
-    workaround: "rollback командой API от имени lead-designer",
-  },
 } as const;
 
 export type Pending = keyof typeof pending;

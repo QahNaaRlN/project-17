@@ -8,6 +8,12 @@ export interface Config {
   appOrigin: string;
   /** Exact origins of PR preview deployments (STU-328). */
   previewAppOrigins?: string[];
+  /** Environments that publications can be promoted to, with their app origins (STU-460). */
+  promotionTargets?: PromotionTarget[];
+}
+export interface PromotionTarget {
+  environment: string;
+  appOrigin: string;
 }
 export interface Changeset {
   id: string;
@@ -157,12 +163,29 @@ export interface Api {
   publications?(
     cursor?: string,
     signal?: AbortSignal,
+    environment?: string,
   ): Promise<import("./publication-history.js").PublicationList>;
   publication?(
     id: string,
     preview: boolean,
     signal?: AbortSignal,
+    environment?: string,
   ): Promise<import("./publication-history.js").PublicationCard>;
+  promotePreview?(
+    id: string,
+    environment: string,
+    toEnvironment: string,
+    signal?: AbortSignal,
+  ): Promise<import("./publication-history.js").PromoteCard>;
+  promoteDiff?(
+    card: import("./publication-history.js").PromoteCard,
+    objectId: string,
+    cursor?: string,
+    signal?: AbortSignal,
+  ): Promise<import("./publication-history.js").PublicationPage>;
+  promote?(
+    attempt: import("./publication-history.js").PromoteAttempt,
+  ): Promise<import("./publication-history.js").PublicationEntry>;
   publicationDiff?(
     card: import("./publication-history.js").PublicationCard,
     objectId: string,
