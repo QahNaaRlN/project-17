@@ -19,8 +19,8 @@
 
 ### Текущее состояние и приоритет — 2026-10-26
 
-Интеграционная база: `dev`, merge `88b7181` после PR #81;
-[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройден. Выпуск из `main` ещё не отражает реализованный объём `dev`.
+Интеграционная база: `dev`, merge `2cba143` после PR #84;
+[CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройден. Выпуск из `main` ещё не отражает реализованный объём `dev`.
 Наличие отдельных пакетов не означает завершение M0…M6: итоговые критерии
 MVP и сквозная автоматическая приёмка ниже остаются обязательными.
 
@@ -30,9 +30,9 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M1. IR и manifest | Готов (PR #2…#3, #16…#28, #35…#36) | — |
 | M2. Объекты, CS, публикация | Готов (PR #6…#15, #29…#31) | Кэш ответов на origin и лимиты Delivery API перенесены в M6 |
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
-| M4. Studio | Частично (PR #39…#59, #67) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, `promote` в Studio, IR-044, NFR-приёмка |
+| M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044, NFR-приёмка |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81) | Этапы pipeline 8–11, нагрузочные тесты NFR-001…007, безопасность, эксперимент; job сценария §2 обязателен после пяти зелёных прогонов подряд |
+| M6. Укрепление | Начат (PR #81) | Этапы pipeline 8–11, нагрузочные тесты NFR-001…007, безопасность, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -44,8 +44,8 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Запросы недостающих компонентов](../studio-capability-component.md), STU-355…374 | [PR #73](https://github.com/QahNaaRlN/project-17/pull/73) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-component-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.2%); реальный GitHub не использовался |
 | Выполнено | [Запросы источников данных и токенов](../studio-capability-data-token.md), STU-375…394 | [PR #75](https://github.com/QahNaaRlN/project-17/pull/75) слит в dev 2026-10-21; локальная [приёмка](../studio-capability-data-token-acceptance.md) и CI итогового SHA пройдены (Go coverage 95.1%); реальный GitHub не использовался |
 | Выполнено | [Условные политики агента](../studio-agent-policy.md), STU-420…439 | [PR #78](https://github.com/QahNaaRlN/project-17/pull/78) слит в dev 2026-10-21; локальная [приёмка](../studio-agent-policy-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/39570897945) и [CI merge](https://github.com/QahNaaRlN/project-17/actions/runs/39572946996) пройдены; Go coverage 95.08% |
-| Выполнено | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | [PR #81](https://github.com/QahNaaRlN/project-17/pull/81) слит в dev 2026-10-26; локальная [приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699) (job `E2E scenario (§2)` 2 мин 46 с) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены; job станет обязательным после пяти зелёных прогонов подряд |
-| 1 | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | Реализовано в ветке `feature/studio-promote`: локальная [приёмка](../studio-promote-acceptance.md) — сценарий §2 с шагами 8–9 в Studio; ожидает PR в dev; снимает записи `studio-promote` и `studio-production-rollback` сценария §2 |
+| Выполнено | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | [PR #81](https://github.com/QahNaaRlN/project-17/pull/81) слит в dev 2026-10-26; локальная [приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699) (job `E2E scenario (§2)` 2 мин 46 с) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены; после пяти зелёных прогонов подряд job обязателен для PR в `dev` и `main` с 2026-10-26 |
+| Выполнено | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | [PR #84](https://github.com/QahNaaRlN/project-17/pull/84) слит в dev 2026-10-26; локальная [приёмка](../studio-promote-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены; шаги 8–9 сценария §2 выполняются в Studio |
 
 Порядок — выбранная последовательность планирования; утверждённые
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
@@ -68,14 +68,14 @@ MVP и сквозная автоматическая приёмка ниже о�
 | 5. Правка агентом через MCP | Реализован (PR #48); живой вызов требует ключа и модели |
 | 6. Preview и выбор узла | Реализован (PR #38, #50); NFR-005 (< 400 мс) не измерен |
 | 7. Проверка и согласование | Реализован, кроме этапов pipeline 8–9 (M6); в сценарии — обход `pipeline-8-9` |
-| 8. Публикация и `promote` | Реализован в API; `promote` в Studio нет, в сценарии — через API (`studio-promote`) |
-| 9. Откат | Реализован (API и Studio, PR #54); откат production в Studio нет, в сценарии — через API (`studio-production-rollback`) |
+| 8. Публикация и `promote` | Реализован в API и Studio (PR #84); в сценарии — в Studio |
+| 9. Откат | Реализован (API и Studio, PR #54, #84), включая production; в сценарии — в Studio |
 | 10. Missing Capability | Реализован (PR #60…#62, #68, #71): ручной путь, доставка pack, факты PR/CI, preview/<ref>, автоматическое fulfillment и группы requiredBy; локальная приёмка шага 10 пройдена; в CI шаг проходит с сервером фактов GitHub вместо реального GitHub |
 
-Сценарий §2 проходит автоматически в CI (PR #81) с тремя временными обходами из
-[`pending.ts`](../../examples/react-store/e2e/scenario/pending.ts): этапы pipeline 8–9,
-`promote` и откат production в Studio. Критерий готовности 1 будет закрыт, когда
-обходы сняты и job стал обязательным; остальные критерии §3 пока не выполнены.
+Сценарий §2 проходит автоматически в CI; job `E2E scenario (§2)` обязателен для PR
+в `dev` и `main`. Остался один временный обход из
+[`pending.ts`](../../examples/react-store/e2e/scenario/pending.ts) — этапы pipeline 8–9.
+Критерий готовности 1 будет закрыт, когда снят и он; остальные критерии §3 пока не выполнены.
 
 ### Реализованные пакеты и оставшиеся границы
 
@@ -283,7 +283,16 @@ PostgreSQL, River и Studio (`pnpm e2e:scenario`, стенд `scripts/e2e-stand.
 `onBehalfOf` в операциях CS, `cms bootstrap -max-mode`. Структура блока шага 2 и
 привязки шага 4 создаются командами API, пока в Studio нет палитры и вставки
 компонентов. [Локальная приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699)
-и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены. Job `E2E scenario (§2)` пока не обязателен (решение §11.1).
+и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены. После пяти зелёных прогонов подряд (PR #81…#84 и слияния)
+job `E2E scenario (§2)` 2026-10-26 включён обязательной проверкой для PR в `dev` и `main` (решение §11.1).
+
+Пакет M4 — [перенос в production и откат production в Studio](../studio-promote.md),
+STU-460…479: **реализован и слит в dev 2026-10-26 в [PR #84](https://github.com/QahNaaRlN/project-17/pull/84)**, merge `2cba1437cf3e25cb7b58cbb24ca37555e8e40626`.
+Целевые окружения `promotionTargets` в конфигурации Studio, предпросмотр
+переноса без записи (транзакция откатывается) со снимком и `409 PROMOTE_SNAPSHOT_STALE` в команде `promote`,
+выбор окружения в «Публикациях», перенос с причиной и откат production тем же экраном.
+Шаги 8–9 сценария §2 выполняются в Studio. [Локальная приёмка](../studio-promote-acceptance.md),
+[CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены.
 
 Пакет M4 — [сохранить поддерево как компонент](../studio-component-extract.md),
 STU-400…419: **реализован и слит в dev 2026-10-20 в [PR #67](https://github.com/QahNaaRlN/project-17/pull/67)**, merge `951a5deff58ae92996e0e2367689d126b14de715`.

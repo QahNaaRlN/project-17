@@ -56,8 +56,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  # STU-456: the MVP §2 scenario against the real CMS stand. Visible but not
-  # required until five consecutive green runs (decision §11.1).
+  # STU-456: the MVP §2 scenario against the real CMS stand. Required for PRs
+  # into dev and main after five consecutive green runs (decision §11.1).
   e2e-scenario:
     name: E2E scenario (§2)
     runs-on: ubuntu-latest

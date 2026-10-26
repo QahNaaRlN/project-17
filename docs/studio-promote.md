@@ -1,6 +1,6 @@
 # Studio: перенос в production и откат production
 
-Статус: **одобрена пользователем 2026-10-26; решения §11 приняты; реализована в ветке `feature/studio-promote`, см. [отчёт](studio-promote-acceptance.md)**.
+Статус: **одобрена пользователем 2026-10-26; решения §11 приняты; реализована и слита в dev 2026-10-26 в [PR #84](https://github.com/QahNaaRlN/project-17/pull/84), merge `2cba143`; см. [отчёт](studio-promote-acceptance.md)**.
 Дата: 2026-10-26. Требования: STU-460…479 (STU-440…459 заняты пакетом
 [сквозного сценария §2](e2e-scenario.md)).
 Основа: `origin/dev` на `f30b5a6` (после [PR #82](https://github.com/QahNaaRlN/project-17/pull/82)).
