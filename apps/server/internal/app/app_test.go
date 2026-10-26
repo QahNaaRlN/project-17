@@ -48,7 +48,7 @@ func TestConfigError(t *testing.T) {
 
 func TestDatabaseUnavailable(t *testing.T) {
 	env := map[string]string{"CMS_DATABASE_URL": "postgres://nobody@127.0.0.1:1/x?connect_timeout=1"}
-	for _, args := range [][]string{{"serve"}, {"migrate", "up"}, {"bootstrap", "-slug", "s1", "-name", "n"}} {
+	for _, args := range [][]string{{"serve"}, {"migrate", "up"}, {"bootstrap", "-slug", "s1", "-name", "n"}, {"check-runner-token", "-slug", "s1"}} {
 		if _, err := run(t, env, args...); err == nil {
 			t.Errorf("%v: ожидалась ошибка подключения", args)
 		}
@@ -89,6 +89,26 @@ func TestMigrateAndBootstrap(t *testing.T) {
 	}
 	if _, err := run(t, env, "bootstrap", "-slug", "store", "-name", "x"); err == nil {
 		t.Error("повторный bootstrap должен падать")
+	}
+	// STU-488: the runner token is printed alone; the cms-checks actor is reused.
+	for _, args := range [][]string{{"check-runner-token"}, {"check-runner-token", "-bogus"}} {
+		if _, err := run(t, env, args...); !errors.Is(err, app.ErrUsage) {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+	if _, err := run(t, env, "check-runner-token", "-slug", "missing"); err == nil {
+		t.Error("токен исполнителя для неизвестного проекта")
+	}
+	for i := 0; i < 2; i++ {
+		out, err := run(t, env, "check-runner-token", "-slug", "store", "-token-ttl", "1h")
+		if err != nil || !regexp.MustCompile(`^cms_svc_[A-Za-z0-9_-]{43}
+$`).MatchString(out) {
+			t.Fatalf("check-runner-token: %v %q", err, out)
+		}
+	}
+	var runners int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM actors WHERE display_name='cms-checks'`).Scan(&runners); err != nil || runners != 1 {
+		t.Fatal(runners, err)
 	}
 
 	// Срок действия токена по умолчанию — 90 дней.

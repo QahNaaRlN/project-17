@@ -139,24 +139,19 @@ func renderPages(ctx context.Context, q *store.Queries, project, env uuid.UUID, 
 // queueRenderChecks records stages 8–9 for the submitted content (STU-480…482) and
 // returns the state they impose: "checking", "failed" or "" (no asynchronous checks).
 func queueRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset, ev evaluation, versions []store.ChangesetWorkingVersionsRow) (string, []Check, error) {
-	var out []Check
-	add := func(env, stage, status string, blocking bool, details map[string]any) error {
-		raw := mustJSON(details)
-		out = append(out, Check{Stage: stage, Environment: env, Status: status, Blocking: blocking, Details: raw})
-		return q.InsertRenderCheck(ctx, store.InsertRenderCheckParams{ID: uuid.Must(uuid.NewV7()), ChangesetID: cs.ID, ContentHash: ev.hash,
-			Environment: env, Stage: stage, Status: status, Blocking: blocking, Details: raw})
-	}
 	if enabled, err := renderChecksEnabled(ctx, q, cs.ProjectID); err != nil || !enabled {
 		return "", nil, err
+	}
+	var out []Check
+	both := func(env, status string, blocking bool, details map[string]any) {
+		for _, stage := range renderStages {
+			out = append(out, Check{Stage: stage, Environment: env, Status: status, Blocking: blocking, Details: mustJSON(details)})
+		}
 	}
 	state := ""
 	for _, name := range ev.targets {
 		if ev.risk == RiskLow {
-			for _, stage := range renderStages {
-				if err := add(name, stage, "skipped", false, map[string]any{"reason": "RISK_LOW"}); err != nil {
-					return "", nil, err
-				}
-			}
+			both(name, "skipped", false, map[string]any{"reason": "RISK_LOW"})
 			continue
 		}
 		env, err := q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: cs.ProjectID, Name: name})
@@ -170,72 +165,67 @@ func queueRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset
 		switch {
 		case env.AppUrl == nil:
 			state = "failed"
-			for _, stage := range renderStages {
-				if err := add(name, stage, "failed", true, map[string]any{"reason": "CHECK_APP_URL_MISSING", "pages": pages}); err != nil {
-					return "", nil, err
-				}
-			}
+			both(name, "failed", true, map[string]any{"reason": "CHECK_APP_URL_MISSING", "pages": pages})
 		case len(pages) > maxRenderPages:
 			state = "failed"
-			if err := add(name, StagePreview, "failed", true, map[string]any{"reason": "CHECK_PAGES_LIMIT", "pages": pages[:maxRenderPages], "total": len(pages), "truncated": true}); err != nil {
-				return "", nil, err
-			}
-			if err := add(name, StageAxe, "skipped", true, map[string]any{"reason": "PREVIEW_FAILED"}); err != nil {
-				return "", nil, err
-			}
+			out = append(out,
+				Check{Stage: StagePreview, Environment: name, Status: "failed", Blocking: true,
+					Details: mustJSON(map[string]any{"reason": "CHECK_PAGES_LIMIT", "pages": pages[:maxRenderPages], "total": len(pages), "truncated": true})},
+				Check{Stage: StageAxe, Environment: name, Status: "skipped", Blocking: true, Details: mustJSON(map[string]any{"reason": "PREVIEW_FAILED"})})
 		case len(pages) == 0:
-			for _, stage := range renderStages {
-				if err := add(name, stage, "skipped", false, map[string]any{"reason": "NO_PAGES", "pages": pages}); err != nil {
-					return "", nil, err
-				}
-			}
+			both(name, "skipped", false, map[string]any{"reason": "NO_PAGES", "pages": pages})
 		default:
 			if state == "" {
 				state = "checking"
 			}
-			for _, stage := range renderStages {
-				if err := add(name, stage, "queued", true, map[string]any{"pages": pages}); err != nil {
-					return "", nil, err
-				}
-			}
+			both(name, "queued", true, map[string]any{"pages": pages})
+		}
+	}
+	for _, c := range out {
+		if err := q.InsertRenderCheck(ctx, store.InsertRenderCheckParams{ID: uuid.Must(uuid.NewV7()), ChangesetID: cs.ID, ContentHash: ev.hash,
+			Environment: c.Environment, Stage: c.Stage, Status: c.Status, Blocking: c.Blocking, Details: c.Details}); err != nil {
+			return "", nil, err
 		}
 	}
 	return state, out, nil
 }
 
 // advanceChecking moves a locked Change Set out of checking once its stage 8–9 checks
-// for the current content are decided (STU-483).
-func advanceChecking(ctx context.Context, q *store.Queries, cs store.Changeset) error {
+// for the current content are decided (STU-483); it returns the resulting state.
+func advanceChecking(ctx context.Context, q *store.Queries, cs store.Changeset) (string, error) {
 	if cs.State != "checking" {
-		return nil
+		return cs.State, nil
 	}
 	checks, err := ListChecks(ctx, q, cs)
 	if err != nil {
-		return err
+		return "", err
 	}
-	pending := false
+	state, pending := "", false
 	for _, c := range checks {
-		if c.Blocking && c.Status == "failed" {
-			// The remaining checks of failed content would not change the outcome.
-			if err := q.SkipOpenRenderChecks(ctx, store.SkipOpenRenderChecksParams{ChangesetID: cs.ID, Reason: "CHANGESET_FAILED"}); err != nil {
-				return err
-			}
-			return q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: "failed"})
-		}
 		pending = pending || c.Status == "queued" || c.Status == "running"
+		if c.Blocking && c.Status == "failed" {
+			state = "failed"
+		}
 	}
-	if pending {
-		return nil
+	switch {
+	case state == "failed":
+		// The remaining checks of failed content would not change the outcome.
+		err = q.SkipOpenRenderChecks(ctx, store.SkipOpenRenderChecksParams{ChangesetID: cs.ID, Reason: "CHANGESET_FAILED"})
+	case pending:
+		return cs.State, nil
+	default:
+		var review ReviewDetail
+		if review, err = GetReview(ctx, q, cs.ProjectID, cs.ID); err == nil {
+			state = "in_review"
+			if review.Approvals >= review.RequiredApprovals && len(review.MissingRequiredRoles) == 0 {
+				state = "approved"
+			}
+		}
 	}
-	review, err := GetReview(ctx, q, cs.ProjectID, cs.ID)
-	if err != nil {
-		return err
+	if err == nil {
+		err = q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: state})
 	}
-	state := "in_review"
-	if review.Approvals >= review.RequiredApprovals && len(review.MissingRequiredRoles) == 0 {
-		state = "approved"
-	}
-	return q.SetChangesetState(ctx, store.SetChangesetStateParams{ID: cs.ID, State: state})
+	return state, err
 }
 
 // RequireRenderChecks — STU-484: publishing into an environment needs its stage 8–9
@@ -310,9 +300,8 @@ func handleClaimCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, _ struct
 	var details struct {
 		Pages []RenderPage `json:"pages"`
 	}
-	if err := json.Unmarshal(row.Details, &details); err != nil {
-		return ClaimedCheck{}, err
-	}
+	// The server wrote the queued details itself (queueRenderChecks).
+	_ = json.Unmarshal(row.Details, &details)
 	if env.AppUrl == nil {
 		// set-environment-app-url never clears an address that submission saw (STU-481).
 		return ClaimedCheck{}, checkProblem(http.StatusConflict, "CHECK_APP_URL_MISSING", "У окружения нет адреса приложения")
@@ -372,14 +361,11 @@ func handleCompleteCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, p com
 	if err := q.FinishRenderCheck(ctx, store.FinishRenderCheckParams{ID: check.ID, Status: p.Status, Details: p.Details}); err != nil {
 		return CompletedCheck{}, err
 	}
-	if err := advanceChecking(ctx, q, cs); err != nil {
-		return CompletedCheck{}, err
-	}
-	after, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: cs.ID, ProjectID: actor.ProjectID})
+	state, err := advanceChecking(ctx, q, cs)
 	if err != nil {
 		return CompletedCheck{}, err
 	}
-	return CompletedCheck{CheckID: check.ID, Status: p.Status, ChangesetState: after.State}, nil
+	return CompletedCheck{CheckID: check.ID, Status: p.Status, ChangesetState: state}, nil
 }
 
 // RenderLeaseArgs — STU-487: the periodic job that returns expired leases to the queue.
@@ -426,7 +412,7 @@ func ExpireRenderLeases(ctx context.Context, pool *pgxpool.Pool) error {
 				_ = json.Unmarshal(check.Details, &details)
 				details["reason"] = "CHECK_RUNNER_TIMEOUT"
 				if err = q.FinishRenderCheck(ctx, store.FinishRenderCheckParams{ID: check.ID, Status: "failed", Details: mustJSON(details)}); err == nil {
-					err = advanceChecking(ctx, q, cs)
+					_, err = advanceChecking(ctx, q, cs)
 				}
 			}
 			if err != nil {
