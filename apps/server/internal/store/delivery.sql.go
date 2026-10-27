@@ -152,6 +152,32 @@ func (q *Queries) GetEnvironmentPreviewKey(ctx context.Context, arg GetEnvironme
 	return i, err
 }
 
+const getPublishedLiteralRoute = `-- name: GetPublishedLiteralRoute :one
+SELECT r.path, r.object_id, pp.version_id
+FROM routes r
+JOIN published_pointers pp ON pp.environment_id = r.environment_id AND pp.object_id = r.object_id
+WHERE r.environment_id = $1 AND r.path = $2 AND strpos(r.path, ':') = 0
+`
+
+type GetPublishedLiteralRouteParams struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	Path          string    `json:"path"`
+}
+
+type GetPublishedLiteralRouteRow struct {
+	Path      string    `json:"path"`
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+// A literal route equal to the request path is the strongest match (Match): primary key.
+func (q *Queries) GetPublishedLiteralRoute(ctx context.Context, arg GetPublishedLiteralRouteParams) (GetPublishedLiteralRouteRow, error) {
+	row := q.db.QueryRow(ctx, getPublishedLiteralRoute, arg.EnvironmentID, arg.Path)
+	var i GetPublishedLiteralRouteRow
+	err := row.Scan(&i.Path, &i.ObjectID, &i.VersionID)
+	return i, err
+}
+
 const listDeliveryKeys = `-- name: ListDeliveryKeys :many
 SELECT k.id, k.name, k.created_by, k.created_at, k.revoked_at, e.name AS environment_name
 FROM delivery_keys k JOIN environments e ON e.id = k.environment_id
@@ -231,6 +257,41 @@ func (q *Queries) ListDraftRoutes(ctx context.Context, arg ListDraftRoutesParams
 	var items []ListDraftRoutesRow
 	for rows.Next() {
 		var i ListDraftRoutesRow
+		if err := rows.Scan(&i.Path, &i.ObjectID, &i.VersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublishedPatternRoutes = `-- name: ListPublishedPatternRoutes :many
+SELECT r.path, r.object_id, pp.version_id
+FROM routes r
+JOIN published_pointers pp ON pp.environment_id = r.environment_id AND pp.object_id = r.object_id
+WHERE r.environment_id = $1 AND strpos(r.path, ':') > 0
+ORDER BY r.path
+`
+
+type ListPublishedPatternRoutesRow struct {
+	Path      string    `json:"path"`
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+// Parameterised routes of the environment (index routes_patterns).
+func (q *Queries) ListPublishedPatternRoutes(ctx context.Context, environmentID uuid.UUID) ([]ListPublishedPatternRoutesRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedPatternRoutes, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedPatternRoutesRow
+	for rows.Next() {
+		var i ListPublishedPatternRoutesRow
 		if err := rows.Scan(&i.Path, &i.ObjectID, &i.VersionID); err != nil {
 			return nil, err
 		}
