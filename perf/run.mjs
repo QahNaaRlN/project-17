@@ -87,6 +87,8 @@ function k6(mode, base, extra = {}) {
     "--name",
     "cms-perf-k6-" + mode,
     ...network,
+    // The seed file is 0600: k6 reads it as the runner's user (Linux bind mounts keep uids).
+    ...(process.getuid ? ["--user", `${process.getuid()}:${process.getgid()}`] : []),
     "-v",
     `${join(repo, "perf")}:/perf`,
   ];
