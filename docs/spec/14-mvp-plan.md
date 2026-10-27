@@ -49,7 +49,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | [PR #87](https://github.com/QahNaaRlN/project-17/pull/87) слит в dev 2026-10-26; локальная [приёмка](../pipeline-render-checks-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) (Go coverage 95.0%) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; реестр `pending.ts` сценария §2 пуст; этапы 10–11 — следующий пакет |
 | 1 | [Безопасность MVP: сканеры, журнал событий, сверка SEC](../security-hardening.md), STU-500…519 | Выполнено (PR #90): [сверка](../security-review.md) — сканеры чистые, SEC-001…008 выполнены; job `Security` обязателен для PR в `dev` и `main`; критерий готовности 4 выполнен |
 | 2 | [Кэш Delivery на origin (Redis) и лимиты запросов](../delivery-cache-limits.md), STU-520…539 | Выполнено ([PR #93](https://github.com/QahNaaRlN/project-17/pull/93), слит в dev 2026-10-27, merge `9f9a825`): [приёмка](../delivery-cache-limits-acceptance.md), CI итогового SHA пройден (Go coverage 95.0%); сценарий §2 в CI идёт с Redis; измерение NFR-002 — следующий пакет |
-| 3 | Нагрузочные тесты NFR-001…007 по профилю 01 §5 | Нет спецификации; критерий готовности 2 |
+| 3 | [Нагрузочные тесты NFR-001…007 по профилю 01 §5](../load-tests.md), STU-540…559 | Спецификация на одобрении; критерий готовности 2 |
 | 4 | Этапы pipeline 10–11: visual regression и Lighthouse | Нет спецификации; нужно решение о хранилище артефактов |
 | 5 | Наблюдаемость OPS-020…023 | Нет спецификации; включена в M6 решением 2026-10-27 |
 | 6 | Спецификация по итогам реализации и ADR отступлений | Нет спецификации; критерий готовности 5 |
