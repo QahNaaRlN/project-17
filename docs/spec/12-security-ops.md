@@ -168,6 +168,10 @@ services:
     image: darthsim/imgproxy
 ```
 
+Реализованный compose (`deploy/compose/docker-compose.yml`) содержит PostgreSQL,
+Redis 7 без персистентности (кэш Delivery и лимиты, `CMS_REDIS_URL`), миграцию и
+`cms serve`; MinIO, imgproxy и Studio подключаются отдельно.
+
 ### 5.2. Production
 
 | Компонент | Размещение |

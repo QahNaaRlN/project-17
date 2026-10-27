@@ -12,10 +12,10 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
-// purges — ключи задач purge в очереди, по порядку постановки.
+// purges — ключи задач инвалидации (затем purge CDN) в очереди, по порядку постановки.
 func purges(t *testing.T, e *cmstest.Env) [][]string {
 	t.Helper()
-	rows, err := e.Pool.Query(context.Background(), "SELECT args FROM river_job WHERE kind = 'cdn_purge' ORDER BY id")
+	rows, err := e.Pool.Query(context.Background(), "SELECT args FROM river_job WHERE kind = 'delivery_cache_invalidate' ORDER BY id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func purges(t *testing.T, e *cmstest.Env) [][]string {
 		if err := rows.Scan(&raw); err != nil {
 			t.Fatal(err)
 		}
-		var args jobs.PurgeArgs
+		var args jobs.InvalidateArgs
 		_ = json.Unmarshal(raw, &args)
 		out = append(out, args.Keys)
 	}

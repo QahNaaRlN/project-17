@@ -1,5 +1,5 @@
-# Локальное окружение (12-security-ops.md §5.1). Redis и MinIO добавляются вместе с функциями,
-# которые их используют (кэш Delivery API, ассеты).
+# Локальное окружение (12-security-ops.md §5.1). Redis — кэш Delivery API и лимиты запросов
+# (docs/delivery-cache-limits.md); MinIO добавляется вместе с ассетами.
 #
 #   docker compose -f deploy/compose/docker-compose.yml up --build
 #   docker compose -f deploy/compose/docker-compose.yml run --rm cms bootstrap -slug store -name "Магазин"
@@ -22,6 +22,16 @@ services:
       timeout: 3s
       retries: 30
 
+  redis:
+    # Только производные данные (ST-001): без персистентности.
+    image: mirror.gcr.io/library/redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   migrate:
     build: ../../apps/server
     command: ["migrate", "up"]
@@ -38,11 +48,14 @@ services:
     environment:
       <<: *cms-env
       CMS_HTTP_ADDR: ":8080"
+      CMS_REDIS_URL: redis://redis:6379/0
     ports:
       - "8080:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres-data:

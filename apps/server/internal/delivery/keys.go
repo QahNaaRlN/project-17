@@ -127,6 +127,8 @@ type Access struct {
 	// BaseEnvironment — standard environment of a PR preview (STU-315). A PR
 	// deployment is configured for its base and reads drafts with this token.
 	BaseEnvironment string
+	// Subject — whose request budget this is (STU-531): a delivery key or a preview token's actor.
+	Subject string
 }
 
 // ErrUnauthenticated — ключ не передан, не найден или отозван.
@@ -145,5 +147,6 @@ func Authenticate(ctx context.Context, q *store.Queries, authorization string) (
 	if err != nil {
 		return Access{}, err
 	}
-	return Access{ProjectID: row.ProjectID, ProjectSlug: row.ProjectSlug, EnvironmentID: row.EnvironmentID, Environment: row.EnvironmentName}, nil
+	return Access{ProjectID: row.ProjectID, ProjectSlug: row.ProjectSlug, EnvironmentID: row.EnvironmentID, Environment: row.EnvironmentName,
+		Subject: "key:" + row.ID.String()}, nil
 }

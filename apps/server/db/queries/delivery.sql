@@ -16,7 +16,7 @@ WHERE k.id = $1 AND k.project_id = $2 AND k.revoked_at IS NULL AND e.id = k.envi
 RETURNING k.id, k.name, k.created_by, k.created_at, k.revoked_at, e.name AS environment_name;
 
 -- name: AuthenticateDeliveryKey :one
-SELECT k.project_id, k.environment_id, p.slug AS project_slug, e.name AS environment_name
+SELECT k.id, k.project_id, k.environment_id, p.slug AS project_slug, e.name AS environment_name
 FROM delivery_keys k
 JOIN projects p ON p.id = k.project_id
 JOIN environments e ON e.id = k.environment_id

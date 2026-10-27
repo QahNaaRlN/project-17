@@ -57,6 +57,7 @@
 
 - Каждый тест работает в собственной базе и не зависит от порядка запуска. В Go это обеспечивает `internal/testsupport/pgtest`: миграции применяются один раз к базе-шаблону, каждый тест получает копию (`CREATE DATABASE … TEMPLATE`), которая удаляется по завершении теста.
 - PostgreSQL для тестов: `CMS_TEST_DATABASE_URL` или, если переменная не задана, контейнер testcontainers (нужен Docker). CI проверяет вариант с контейнером; еженедельный `Mutation` — с сервисом PostgreSQL GitHub Actions.
+- Redis для тестов кэша Delivery и лимитов (`internal/testsupport/redistest`): `CMS_TEST_REDIS_URL` или контейнер `redis:7-alpine`, один на пакет; каждый тест очищает базу. Ориентир NFR-002 — `go test -run '^$' -bench BenchmarkDeliveryPageCacheHit ./internal/httpapi`.
 - Внешние сервисы, которые нельзя поднять в контейнере, подменяются на границе модуля (интерфейс в Go, адаптер в TS), а не внутри бизнес-логики.
 
 ### 3.5. Сквозные
@@ -136,7 +137,7 @@ CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 |---|---|---|
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
 | `CI` → `Security` | каждый PR, пуш в `main` и `dev` | `pnpm audit` с исключениями (`scripts/security-audit.mjs`, `security/exceptions.json`), `govulncheck` тулчейном модуля, Trivy для образа сервера; high/critical не исключаются ([STU-500](security-hardening.md)); обязательная проверка для PR в `dev` и `main` |
-| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
+| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL и Redis как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 
 ## 7. Чек-лист ревьюера

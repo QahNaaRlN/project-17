@@ -13,7 +13,7 @@ import (
 )
 
 const authenticateDeliveryKey = `-- name: AuthenticateDeliveryKey :one
-SELECT k.project_id, k.environment_id, p.slug AS project_slug, e.name AS environment_name
+SELECT k.id, k.project_id, k.environment_id, p.slug AS project_slug, e.name AS environment_name
 FROM delivery_keys k
 JOIN projects p ON p.id = k.project_id
 JOIN environments e ON e.id = k.environment_id
@@ -21,6 +21,7 @@ WHERE k.token_hash = $1 AND k.revoked_at IS NULL
 `
 
 type AuthenticateDeliveryKeyRow struct {
+	ID              uuid.UUID `json:"id"`
 	ProjectID       uuid.UUID `json:"projectId"`
 	EnvironmentID   uuid.UUID `json:"environmentId"`
 	ProjectSlug     string    `json:"projectSlug"`
@@ -31,6 +32,7 @@ func (q *Queries) AuthenticateDeliveryKey(ctx context.Context, tokenHash []byte)
 	row := q.db.QueryRow(ctx, authenticateDeliveryKey, tokenHash)
 	var i AuthenticateDeliveryKeyRow
 	err := row.Scan(
+		&i.ID,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.ProjectSlug,
