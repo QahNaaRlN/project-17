@@ -240,7 +240,9 @@ async function main() {
   }
   // NFR-005 counts only under load: a background run that stopped early invalidates it.
   if (background.exitCode !== null) {
-    log(`background load stopped early (exit ${background.exitCode}): NFR-005 was not measured under load`);
+    log(
+      `background load stopped early (exit ${background.exitCode}): NFR-005 was not measured under load`,
+    );
     scenario = 1;
   }
   background.kill();
