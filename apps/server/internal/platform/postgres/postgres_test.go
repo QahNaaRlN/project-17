@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -23,6 +24,32 @@ func TestConnectFails(t *testing.T) {
 	}
 	if _, err := postgres.Connect(ctx, "postgres://nobody@127.0.0.1:1/x?connect_timeout=1"); err == nil {
 		t.Error("ожидалась ошибка подключения")
+	}
+}
+
+func TestConnectPoolSize(t *testing.T) {
+	ctx := context.Background()
+	url := pgtest.URL(t)
+	pool, err := postgres.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if got, want := pool.Config().MaxConns, int32(max(postgres.MinPoolConns, 4*runtime.NumCPU())); got != want {
+		t.Errorf("MaxConns = %d, want %d", got, want)
+	}
+
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	explicit, err := postgres.Connect(ctx, url+sep+"pool_max_conns=3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer explicit.Close()
+	if got := explicit.Config().MaxConns; got != 3 {
+		t.Errorf("MaxConns с pool_max_conns=3 = %d", got)
 	}
 }
 
