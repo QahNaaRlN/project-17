@@ -238,6 +238,11 @@ async function main() {
   } catch {
     scenario = 1;
   }
+  // NFR-005 counts only under load: a background run that stopped early invalidates it.
+  if (background.exitCode !== null) {
+    log(`background load stopped early (exit ${background.exitCode}): NFR-005 was not measured under load`);
+    scenario = 1;
+  }
   background.kill();
   docker(["rm", "-f", "cms-perf-k6-background"]);
 
