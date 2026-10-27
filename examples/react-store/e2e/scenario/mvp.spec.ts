@@ -40,7 +40,11 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   bob = await signIn(stand, browser, "bob", [stand.roles.lead, stand.roles.admin]);
   erin = await signIn(stand, browser, "erin", [stand.roles.editor]);
   for (const person of [alice, bob, erin])
-    await person.context.tracing.start({ screenshots: true, snapshots: true });
+    // Screenshots stream frames like video: the load bench keeps only DOM snapshots.
+    await person.context.tracing.start({
+      screenshots: process.env.E2E_VIDEO !== "off",
+      snapshots: true,
+    });
 });
 
 test.afterAll(async () => {

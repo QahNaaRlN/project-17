@@ -350,6 +350,7 @@ async function main() {
       E2E_SKIP_BUILD: "true",
       E2E_DIR: scenarioDir,
       E2E_NFR005_MAX_MS: "400",
+      E2E_VIDEO: "off",
     },
   });
   children.push(stand);
