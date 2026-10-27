@@ -195,6 +195,19 @@ func TestRenderChecksStorageFailures(t *testing.T) {
 		e.Break("environments", "")
 		cmstest.ExpectDBError(t, e.Do(runner, "claim-check", map[string]any{}, nil))
 	})
+	t.Run("checks table", func(t *testing.T) {
+		e, runner := renderSetup(t)
+		cs, _ := routedPage(e, "/table")
+		if _, err := submit(e, cs, 1); err != nil {
+			t.Fatal(err)
+		}
+		c := claim(t, e, runner)
+		state := changesetState(t, e, cs)
+		e.Break("checks", "")
+		_, err := complete(e, runner, c, "passed")
+		cmstest.ExpectDBError(t, err)
+		cmstest.ExpectDBError(t, workflow.RequireRenderChecks(ctx, e.Q, state, "staging"))
+	})
 	t.Run("complete", func(t *testing.T) {
 		e, runner := renderSetup(t)
 		cs, _ := routedPage(e, "/complete")

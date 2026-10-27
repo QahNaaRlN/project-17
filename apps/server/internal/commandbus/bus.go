@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
+	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -147,8 +149,43 @@ type Response struct {
 	Replayed bool
 }
 
-// Dispatch исполняет команду от имени actor.
+// audited — успешные команды над ролями и политиками в журнале SEC-005 (STU-507, 508).
+var audited = map[string]string{
+	"create-role":                    "role.created",
+	"bind-human-role":                "role.bound",
+	"unbind-human-role":              "role.unbound",
+	"set-approval-policy":            "policy.changed",
+	"set-agent-policy":               "policy.changed",
+	"set-agent-config":               "policy.changed",
+	"set-environment-app-url":        "policy.changed",
+	"set-capability-github-config":   "policy.changed",
+	"set-capability-delivery-target": "policy.changed",
+}
+
+// Dispatch исполняет команду от имени actor. Отказы доступа любого актора пишутся в
+// журнал SEC-005 (STU-505), для агентов — и исчерпание квоты (STU-426).
 func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Response, error) {
+	resp, err := b.dispatch(ctx, actor, req)
+	var ce *Error
+	if err != nil && errors.As(err, &ce) && (ce.Status == 401 || ce.Status == 403 || actor.Kind == auth.ActorAgent && ce.Status == 429) {
+		data := map[string]any{"code": ce.Code, "command": req.Name}
+		if actor.Kind == auth.ActorAgent {
+			// STU-426: the refusal's right, rule and condition, never page data.
+			data["params"] = ce.Params
+		}
+		var project, id *uuid.UUID
+		if actor.ProjectID != uuid.Nil {
+			project = &actor.ProjectID
+		}
+		if actor.ID != uuid.Nil {
+			id = &actor.ID
+		}
+		_ = securityevents.Record(context.WithoutCancel(ctx), b.pool, securityevents.Event{ProjectID: project, ActorID: id, Type: "access.denied", Data: data})
+	}
+	return resp, err
+}
+
+func (b *Bus) dispatch(ctx context.Context, actor auth.Actor, req Request) (Response, error) {
 	h, ok := b.handlers[req.Name]
 	if !ok {
 		return Response{}, NewError(http.StatusNotFound, "NOT_FOUND", "Команда не найдена",
@@ -234,6 +271,12 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 			return fmt.Errorf("commandbus: marshal result: %w", err)
 		}
 		resp = Response{Status: http.StatusOK, Body: body}
+		if typ := audited[req.Name]; typ != "" {
+			if err := securityevents.Record(ctx, tx, securityevents.Event{ProjectID: &actor.ProjectID, ActorID: &actor.ID, Type: typ,
+				Data: map[string]any{"command": req.Name, "payloadSha256": hex.EncodeToString(hash), "reason": req.Reason}}); err != nil {
+				return err
+			}
+		}
 		if err := q.SaveIdempotencyKey(ctx, store.SaveIdempotencyKeyParams{
 			ActorID: actor.ID, Key: req.IdempotencyKey, Command: req.Name,
 			RequestHash: hash, Status: int32(resp.Status), Response: body,
@@ -251,12 +294,6 @@ func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Resp
 		return err
 	})
 	if err != nil {
-		var ce *Error
-		if actor.Kind == auth.ActorAgent && errors.As(err, &ce) && (ce.Status == 403 || ce.Status == 429) {
-			// STU-426: the refusal's right, rule and condition, never page data.
-			data, _ := json.Marshal(map[string]any{"code": ce.Code, "command": req.Name, "params": ce.Params})
-			_, _ = b.pool.Exec(context.WithoutCancel(ctx), `INSERT INTO security_events(id,project_id,actor_id,type,data) VALUES($1,$2,$3,'access.denied',$4)`, uuid.New(), actor.ProjectID, actor.ID, data)
-		}
 		return Response{}, err
 	}
 	return resp, nil

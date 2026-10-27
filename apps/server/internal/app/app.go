@@ -45,6 +45,8 @@ const usage = `Использование: cms <команда> [флаги]
                               миграции схемы БД
   bootstrap -slug S -name N   создать проект, окружения, роль admin и сервисный токен
   check-runner-token -slug S  токен исполнителя проверок этапов 8–9 (только checks.run)
+  anonymize-user -issuer I -subject S
+                              обезличить пользователя OIDC (SEC-008)
   version                     версия сборки
 
 Конфигурация — переменные окружения CMS_* (см. apps/server/README.md).
@@ -89,6 +91,8 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout 
 		return bootstrap(ctx, cfg, args[1:], stdout)
 	case "check-runner-token":
 		return checkRunnerToken(ctx, cfg, args[1:], stdout)
+	case "anonymize-user":
+		return anonymizeUser(ctx, cfg, args[1:], stdout)
 	}
 	fmt.Fprint(stdout, usage)
 	return ErrUsage
@@ -251,6 +255,34 @@ func checkRunnerToken(ctx context.Context, cfg config.Config, args []string, std
 		return err
 	}
 	fmt.Fprintln(stdout, res.Token)
+	return nil
+}
+
+// anonymizeUser — SEC-008, STU-510: the operator command; people are not project
+// members, and no instance-wide role exists (decision 11.3).
+func anonymizeUser(ctx context.Context, cfg config.Config, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("anonymize-user", flag.ContinueOnError)
+	fs.SetOutput(stdout)
+	issuer := fs.String("issuer", "", "OIDC issuer пользователя")
+	subject := fs.String("subject", "", "OIDC subject пользователя")
+	if err := fs.Parse(args); err != nil || *issuer == "" || *subject == "" {
+		fs.Usage()
+		return ErrUsage
+	}
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	id, changed, err := identity.Anonymize(ctx, pool, *issuer, *subject)
+	if err != nil {
+		return err
+	}
+	if changed {
+		fmt.Fprintf(stdout, "Пользователь %s обезличен; сессии, токены и роли отозваны.\n", id)
+	} else {
+		fmt.Fprintf(stdout, "Пользователь %s уже обезличен.\n", id)
+	}
 	return nil
 }
 

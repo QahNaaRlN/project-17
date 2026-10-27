@@ -17,6 +17,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
+	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -230,7 +231,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, slug, name string, token
 			return err
 		}
 		res = BootstrapResult{ProjectID: project.ID, ActorID: actor.ID, Token: secret, ExpiresAt: token.ExpiresAt}
-		return nil
+		return tokenCreated(ctx, tx, project.ID, actor.ID, token)
 	})
 	return res, err
 }
@@ -276,7 +277,14 @@ func CheckRunnerToken(ctx context.Context, pool *pgxpool.Pool, slug string, toke
 			return err
 		}
 		res = BootstrapResult{ProjectID: project.ID, ActorID: actorID, Token: secret, ExpiresAt: token.ExpiresAt}
-		return nil
+		return tokenCreated(ctx, tx, project.ID, actorID, token)
 	})
 	return res, err
+}
+
+// tokenCreated — STU-507: a token issued by the operator in the SEC-005 journal; the
+// token ID, its actor, scopes and expiry, never the secret.
+func tokenCreated(ctx context.Context, tx pgx.Tx, project, actor uuid.UUID, token store.ApiToken) error {
+	return securityevents.Record(ctx, tx, securityevents.Event{ProjectID: &project, ActorID: &actor, Type: "token.created",
+		Data: map[string]any{"tokenId": token.ID, "scopes": token.Scopes, "expiresAt": token.ExpiresAt}})
 }

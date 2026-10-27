@@ -29,6 +29,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
@@ -77,7 +78,9 @@ func NewRouter(d Deps) http.Handler {
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(auditRefusals(d))
 		r.Use(authenticate(d))
+		r.Get("/security-events", securityEventsHandler(d))
 		agentRoutes(r, d)
 		r.Get("/events", eventsHandler(d))
 		workspaceRoutes(r, d)
@@ -329,6 +332,10 @@ type commandEnvelope struct {
 
 func commandHandler(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if note, ok := r.Context().Value(refusalKey{}).(*refusalNote); ok {
+			// The Command Bus records refusals of commands it receives itself.
+			note.dispatched = true
+		}
 		limit := int64(MaxCommandBody)
 		if chi.URLParam(r, "name") == "upload-code-index" {
 			limit = 2 * MaxCommandBody
@@ -398,6 +405,9 @@ func authenticate(d Deps) func(http.Handler) http.Handler {
 				}
 				actor = info.Actor
 			}
+			if note, ok := r.Context().Value(refusalKey{}).(*refusalNote); ok && actor.ID != uuid.Nil {
+				note.actor = actor
+			}
 			if errors.Is(err, identity.ErrAccess) || errors.Is(err, identity.ErrCSRF) || errors.Is(err, identity.ErrChanged) {
 				writeError(w, r, d.Log, commandbus.NewError(403, err.Error(), "Доступ не подтверждён", "Проверьте доступ к проекту и сессию"))
 				return
@@ -449,6 +459,44 @@ func recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 				}
 			}()
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+type refusalKey struct{}
+
+// refusalNote carries what auditRefusals needs from inner handlers: the identified
+// actor, even when access was then refused, and whether the bus took the command.
+type refusalNote struct {
+	actor      auth.Actor
+	dispatched bool
+}
+
+// auditRefusals — STU-505: 401 and 403 of the Query API in the SEC-005 journal; the
+// Command Bus records refusals of commands itself. Route patterns, codes and the
+// method only, never query values or bodies.
+func auditRefusals(d Deps) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			note := &refusalNote{}
+			sw := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			next.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), refusalKey{}, note)))
+			status := sw.Status()
+			if status != http.StatusUnauthorized && status != http.StatusForbidden || note.dispatched {
+				return
+			}
+			ctx := context.WithoutCancel(r.Context())
+			var project, id *uuid.UUID
+			if note.actor.ID != uuid.Nil {
+				id = &note.actor.ID
+			}
+			if note.actor.ProjectID != uuid.Nil {
+				project = &note.actor.ProjectID
+			} else if p, err := store.New(d.Pool).GetProjectBySlug(ctx, r.Header.Get("X-CMS-Project")); err == nil {
+				project = &p.ID
+			}
+			_ = securityevents.Record(ctx, d.Pool, securityevents.Event{ProjectID: project, ActorID: id, Type: "access.denied",
+				Data: map[string]any{"method": r.Method, "route": r.URL.Path, "status": status}})
 		})
 	}
 }

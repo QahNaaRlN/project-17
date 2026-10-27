@@ -759,10 +759,10 @@ type SchemaVersion struct {
 }
 
 type SecurityEvent struct {
-	ID        uuid.UUID `json:"id"`
-	ProjectID uuid.UUID `json:"projectId"`
-	ActorID   uuid.UUID `json:"actorId"`
-	Type      string    `json:"type"`
-	Data      []byte    `json:"data"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        uuid.UUID  `json:"id"`
+	ProjectID *uuid.UUID `json:"projectId"`
+	ActorID   *uuid.UUID `json:"actorId"`
+	Type      string     `json:"type"`
+	Data      []byte     `json:"data"`
+	CreatedAt time.Time  `json:"createdAt"`
 }

@@ -5,7 +5,7 @@
 // Delivery APIs, MCP and the CLI.
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { test, expect, type Browser, type FrameLocator } from "@playwright/test";
 import { startStand, repo, type Stand } from "../../../../scripts/e2e-stand.mjs";
@@ -863,4 +863,20 @@ test("§2: a page with a nameless button fails the accessibility stage", async (
   await expect(
     command(stand, bob, "approve-changeset", { changesetId: cs.id, expectedSeq: seq }),
   ).rejects.toMatchObject({ status: 409 });
+});
+
+// SEC-005/OPS-022, STU-515: the stand's logs carry no tokens, preview JWTs or cookies.
+test("§2: stand logs carry no secrets", async () => {
+  const patterns = [
+    /cms_(?:svc|pub)_[A-Za-z0-9_-]{20,}/,
+    /cms_preview=[A-Za-z0-9._-]{20,}/,
+    /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
+    /Bearer\s+[A-Za-z0-9._-]{20,}/,
+  ];
+  const logs = readdirSync(directory).filter((f) => f.endsWith(".log"));
+  expect(logs.length).toBeGreaterThan(3);
+  for (const file of logs) {
+    const text = readFileSync(join(directory, file), "utf8");
+    for (const pattern of patterns) expect(pattern.test(text), `${file}: ${pattern}`).toBe(false);
+  }
 });

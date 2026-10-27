@@ -130,6 +130,8 @@ cms/
 | SEC-007 | Зависимости сканируются в CI (`govulncheck`, `pnpm audit`); образы — сканером уязвимостей. |
 | SEC-008 | Персональные данные в CMS минимальны (учётные записи); удаление пользователя анонимизирует `display_name`/`email` в акторе, сохраняя операции. |
 
+Реализация ([STU-500…519](../security-hardening.md), [сверка](../security-review.md)): задача CI `Security` (`govulncheck`, `pnpm audit` с файлом исключений `security/exceptions.json`, Trivy для образа; high/critical без исключений); журнал `security_events` — отказы `401`/`403` Command и Query API любых акторов, входы и выходы, выпуск токенов, роли и смены политик, события без проекта допустимы; чтение `GET /api/v1/security-events` для `project.admin`; анонимизация — команда оператора `cms anonymize-user -issuer -subject`.
+
 ## 4. Наблюдаемость
 
 | ID | Требование |

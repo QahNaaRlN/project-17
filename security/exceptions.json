@@ -1,0 +1,4 @@
+{
+  "$comment": "STU-501: accepted findings below high only, each with a reason, an owner and an expiry within 90 days. High and critical findings are never excepted.",
+  "exceptions": []
+}
