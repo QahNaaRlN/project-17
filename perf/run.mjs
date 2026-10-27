@@ -4,7 +4,8 @@
 // 2. `cms migrate up`, генератор данных профиля 01 §5 (`loadseed`).
 // 3. `cms serve` и кэширующий прокси nginx; k6 (`perf/k6/load.js`, LOAD_MODE=measure).
 // 4. NFR-005: сценарий §2 (`pnpm e2e:scenario`) под фоновой нагрузкой k6 со строгим
-//    порогом 400 мс (решение §11.5).
+//    порогом 400 мс (решение §11.5). Во время сценария — загрузка CPU по процессам
+//    (cpu.jsonl, cpu-summary.json) и CPU-профили его CMS (profiles/*.pprof).
 // Результаты — perf/results/: сводка k6, журналы, окружение; секреты — только *.private.*.
 // LOAD_DURATION, LOAD_WARMUP, LOAD_RPS, LOAD_PROJECTS, LOAD_ENTITIES, LOAD_DOCUMENTS
 // уменьшают прогон для отладки; такой прогон не подтверждает NFR (STU-555).
@@ -14,16 +15,20 @@ import {
   copyFileSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { cpus, totalmem, platform, release } from "node:os";
 import { join, resolve } from "node:path";
+import { Buffer } from "node:buffer";
+import { clearInterval, setInterval } from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
 import { repo, ready } from "../scripts/e2e-stand.mjs";
 
 const env = process.env;
+const { fetch } = globalThis;
 const results = resolve(env.LOAD_RESULTS ?? join(repo, "perf", "results"));
 rmSync(results, { recursive: true, force: true });
 mkdirSync(results, { recursive: true });
@@ -37,7 +42,14 @@ const hostNetwork = platform() === "linux";
 const dockerHost = hostNetwork ? "127.0.0.1" : "host.docker.internal";
 const K6_IMAGE = "grafana/k6:1.0.0";
 const NGINX_IMAGE = "mirror.gcr.io/library/nginx:1.27-alpine";
-const ports = { api: 18290, proxy: 18291, postgres: 55432, redis: 56379, scenario: 18190 };
+const ports = {
+  api: 18290,
+  proxy: 18291,
+  pprof: 18292,
+  postgres: 55432,
+  redis: 56379,
+  scenario: 18190,
+};
 const containers = [];
 const children = [];
 
@@ -101,6 +113,103 @@ function k6(mode, base, extra = {}) {
     "/perf/k6/load.js",
   );
   return start("docker", args, {}, `k6-${mode}.log`);
+}
+
+// CPU of the machine and of each process name while §2 runs (Linux /proc): shows whether
+// NFR-005 waits for the processor. Writes cpu.jsonl, returns the summary.
+function sampleCpu(file, seconds = 5) {
+  if (platform() !== "linux") return async () => null;
+  const tick = 100; // USER_HZ on Linux
+  const machine = () =>
+    readFileSync("/proc/stat", "utf8").split("\n")[0].trim().split(/\s+/).slice(1).map(Number);
+  const processes = () => {
+    const m = new Map();
+    for (const pid of readdirSync("/proc")) {
+      if (!/^\d+$/.test(pid)) continue;
+      try {
+        const s = readFileSync(`/proc/${pid}/stat`, "utf8");
+        const close = s.lastIndexOf(")");
+        const f = s.slice(close + 2).split(" ");
+        m.set(pid, { comm: s.slice(s.indexOf("(") + 1, close), ticks: +f[11] + +f[12] });
+      } catch {
+        // the process exited between readdir and read
+      }
+    }
+    return m;
+  };
+  const samples = [];
+  let last = { at: Date.now(), cpu: machine(), procs: processes() };
+  const timer = setInterval(() => {
+    const now = { at: Date.now(), cpu: machine(), procs: processes() };
+    const d = now.cpu.map((v, i) => v - last.cpu[i]);
+    const sum = d.reduce((a, b) => a + b, 0) || 1;
+    const elapsed = (now.at - last.at) / 1000;
+    const cores = {};
+    for (const [pid, p] of now.procs) {
+      const used = (p.ticks - (last.procs.get(pid)?.ticks ?? p.ticks)) / tick / elapsed;
+      if (used > 0) cores[p.comm] = (cores[p.comm] ?? 0) + used;
+    }
+    const sample = {
+      t: new Date(now.at).toISOString(),
+      busy: +(1 - (d[3] + d[4]) / sum).toFixed(3),
+      iowait: +(d[4] / sum).toFixed(3),
+      steal: +((d[7] ?? 0) / sum).toFixed(3),
+      load1: +readFileSync("/proc/loadavg", "utf8").split(" ")[0],
+      cores: Object.fromEntries(
+        Object.entries(cores)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 12)
+          .map(([k, v]) => [k, +v.toFixed(2)]),
+      ),
+    };
+    samples.push(sample);
+    writeFileSync(file, JSON.stringify(sample) + "\n", { flag: "a" });
+    last = now;
+  }, seconds * 1000);
+  return async () => {
+    clearInterval(timer);
+    if (!samples.length) return null;
+    const busy = samples.map((s) => s.busy).sort((a, b) => a - b);
+    const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const byName = {};
+    for (const s of samples)
+      for (const [k, v] of Object.entries(s.cores)) byName[k] = (byName[k] ?? 0) + v;
+    return {
+      cpus: cpus().length,
+      samples: samples.length,
+      busyMean: +mean(busy).toFixed(3),
+      busyP95: busy[Math.floor(busy.length * 0.95)],
+      saturatedShare: +(busy.filter((b) => b > 0.9).length / busy.length).toFixed(3),
+      iowaitMean: +mean(samples.map((s) => s.iowait)).toFixed(3),
+      stealMean: +mean(samples.map((s) => s.steal)).toFixed(3),
+      load1Max: Math.max(...samples.map((s) => s.load1)),
+      meanCores: Object.fromEntries(
+        Object.entries(byName)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 12)
+          .map(([k, v]) => [k, +(v / samples.length).toFixed(2)]),
+      ),
+    };
+  };
+}
+
+// Back-to-back CPU profiles of the §2 stand's CMS until `done` (CMS_E2E_PPROF_ADDR, e2e build).
+async function profileCms(dir, done) {
+  let n = 0;
+  while (!done()) {
+    const started = new Date().toISOString().replace(/[:.]/g, "-");
+    try {
+      const r = await fetch(`http://127.0.0.1:${ports.pprof}/debug/pprof/profile?seconds=20`);
+      if (!r.ok) throw Error(`pprof ${r.status}`);
+      writeFileSync(
+        join(dir, `cms-cpu-${String(++n).padStart(3, "0")}-${started}.pprof`),
+        Buffer.from(await r.arrayBuffer()),
+      );
+    } catch {
+      await delay(1000); // the stand's CMS is not up yet or has stopped
+    }
+  }
+  return n;
 }
 
 const exited = (child) => new Promise((done) => child.on("exit", (code) => done(code ?? 1)));
@@ -225,21 +334,30 @@ async function main() {
   mkdirSync(scenarioDir, { recursive: true });
   copyFileSync(cms, join(scenarioDir, "cms" + exe));
   const background = k6("background", ports.scenario, { LOAD_WARMUP: "0s" });
-  let scenario = 0;
-  try {
-    run(process.execPath, [join(repo, "scripts/e2e-scenario.mjs")], {
-      env: {
-        ...env,
-        CMS_DATABASE_URL: database,
-        CMS_REDIS_URL: redis,
-        E2E_SKIP_BUILD: "true",
-        E2E_DIR: scenarioDir,
-        E2E_NFR005_MAX_MS: "400",
-      },
-    });
-  } catch {
-    scenario = 1;
-  }
+  const profiles = join(results, "profiles");
+  mkdirSync(profiles, { recursive: true });
+  const stopCpu = sampleCpu(join(results, "cpu.jsonl"));
+  // Async, unlike run(): the CPU sampler and the profiler work while §2 runs.
+  const stand = spawn(process.execPath, [join(repo, "scripts/e2e-scenario.mjs")], {
+    cwd: repo,
+    stdio: "inherit",
+    windowsHide: true,
+    env: {
+      ...env,
+      CMS_DATABASE_URL: database,
+      CMS_REDIS_URL: redis,
+      CMS_E2E_PPROF_ADDR: `127.0.0.1:${ports.pprof}`,
+      E2E_SKIP_BUILD: "true",
+      E2E_DIR: scenarioDir,
+      E2E_NFR005_MAX_MS: "400",
+    },
+  });
+  children.push(stand);
+  const profiled = profileCms(profiles, () => stand.exitCode !== null);
+  let scenario = (await exited(stand)) === 0 ? 0 : 1;
+  const cpu = await stopCpu();
+  log(`CMS CPU profiles during §2: ${await profiled}; CPU: ${JSON.stringify(cpu)}`);
+  writeFileSync(join(results, "cpu-summary.json"), JSON.stringify(cpu, null, 2));
   // NFR-005 counts only under load: a background run that stopped early invalidates it.
   if (background.exitCode !== null) {
     log(
