@@ -31,6 +31,10 @@ SELECT * FROM schema_versions WHERE project_id = $1 AND schema_name = $2 ORDER B
 -- name: LockManifestEnvironment :one
 SELECT * FROM environments WHERE project_id = $1 AND name = $2 FOR UPDATE;
 
+-- name: ShareManifestEnvironment :one
+-- Edits of different Change Sets share the environment; FOR UPDATE commands wait for them.
+SELECT * FROM environments WHERE project_id = $1 AND name = $2 FOR SHARE;
+
 -- name: SetActiveManifest :execrows
 UPDATE environments SET active_manifest_id = $3
 WHERE project_id = $1 AND id = $2;

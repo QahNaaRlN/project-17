@@ -11,3 +11,7 @@ playwright-report/
 test-results/
 
 .cms/
+
+# Нагрузочные тесты (perf/run.mjs): результаты и секреты прогона
+perf/results/
+perf/.bin/

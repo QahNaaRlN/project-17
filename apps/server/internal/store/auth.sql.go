@@ -209,9 +209,12 @@ func (q *Queries) GetTokenPrincipal(ctx context.Context, tokenHash []byte) (GetT
 }
 
 const touchToken = `-- name: TouchToken :exec
-UPDATE api_tokens SET last_used_at = now() WHERE id = $1
+UPDATE api_tokens SET last_used_at = now()
+WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
 `
 
+// At most once a minute per token: a write and a WAL flush on every request limited
+// edits under load (docs/load-tests.md); a minute is precise enough for audit.
 func (q *Queries) TouchToken(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, touchToken, id)
 	return err

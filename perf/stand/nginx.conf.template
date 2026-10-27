@@ -1,0 +1,20 @@
+# STU-541, решение §11.3: эталонный кэширующий прокси на месте CDN. Учитывает
+# Cache-Control origin (s-maxage, stale-while-revalidate); ключ включает Authorization,
+# потому что ключ доставки определяет проект и окружение ответа.
+proxy_cache_path /var/cache/nginx/delivery levels=1:2 keys_zone=delivery:64m max_size=2g inactive=10m use_temp_path=off;
+
+server {
+  listen ${LISTEN};
+  location /delivery/ {
+    proxy_pass http://${UPSTREAM};
+    proxy_cache delivery;
+    # Fallback when an answer carries no cache lifetime; origin answers set s-maxage=300.
+    proxy_cache_valid 200 5m;
+    proxy_cache_key "$request_uri|$http_authorization";
+    proxy_cache_lock on;
+    proxy_cache_use_stale updating error timeout;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    add_header X-Cache-Status $upstream_cache_status always;
+  }
+}

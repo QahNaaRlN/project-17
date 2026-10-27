@@ -21,7 +21,7 @@
 | Интеграционные | Сервер с настоящими PostgreSQL, Redis, MinIO | testcontainers | `apps/server/...` | каждый PR (после появления сервера) |
 | Контрактные | OpenAPI ↔ обработчики; MCP-инструменты ↔ команды | генерация клиентов, схемы | `apps/server`, `packages/mcp` | каждый PR (после появления API) |
 | Сквозные (E2E) | Сценарий MVP ([14-mvp-plan.md §2](spec/14-mvp-plan.md#2-сквозной-сценарий-приёмки)) против настоящего стенда; пакетные сценарии Studio/витрины против фикстуры CMS | Playwright | `examples/react-store/e2e/scenario/`; `examples/react-store/e2e/` | каждый PR в `dev`, `main` |
-| Нагрузочные | NFR-001…007 | k6 | `perf/` | перед релизом |
+| Нагрузочные | NFR-001…007 | k6 | `perf/` (`pnpm load`) | workflow `Load`: вручную, еженедельно, по метке `load` на PR |
 | Мутационные | Качество самих тестов | Stryker (TS); Gremlins (Go) | пакеты | раз в неделю, перед релизом, вручную |
 
 ## 3. Правила по видам тестов
@@ -138,6 +138,7 @@ CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
 | `CI` → `Security` | каждый PR, пуш в `main` и `dev` | `pnpm audit` с исключениями (`scripts/security-audit.mjs`, `security/exceptions.json`), `govulncheck` тулчейном модуля, Trivy для образа сервера; high/critical не исключаются ([STU-500](security-hardening.md)); обязательная проверка для PR в `dev` и `main` |
 | `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL и Redis как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
+| `Load` | еженедельно (среда), вручную, метка `load` на PR | `pnpm load`: профиль 01 §5, k6 и сценарий §2 под нагрузкой, пороги NFR-001…007 ([спецификация](load-tests.md), [отчёт](load-test-report.md)); артефакт `load-results`; не обязательная проверка |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 
 ## 7. Чек-лист ревьюера

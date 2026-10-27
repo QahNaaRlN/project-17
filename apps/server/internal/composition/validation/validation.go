@@ -57,11 +57,27 @@ func LockProjectEnvironments(ctx context.Context, q *store.Queries, project uuid
 		return err
 	}
 	for _, e := range envs {
-		if _, err := q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: project, Name: e.Name}); err != nil {
+		if _, err := lockEnvironment(ctx, q, project, e.Name); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+type sharedKey struct{}
+
+// Shared marks the context of an edit (apply-operations): every environment lock in it is
+// FOR SHARE instead of FOR UPDATE. Edits of different Change Sets of a project then run
+// concurrently, while publication, manifest and policy commands (FOR UPDATE) still wait
+// for them and hold new edits back. The rows and their order stay the same, so the lock
+// order environment -> CS -> object is kept (load tests, docs/load-tests.md).
+func Shared(ctx context.Context) context.Context { return context.WithValue(ctx, sharedKey{}, true) }
+
+func lockEnvironment(ctx context.Context, q *store.Queries, project uuid.UUID, name string) (store.Environment, error) {
+	if shared, _ := ctx.Value(sharedKey{}).(bool); shared {
+		return q.ShareManifestEnvironment(ctx, store.ShareManifestEnvironmentParams{ProjectID: project, Name: name})
+	}
+	return q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: project, Name: name})
 }
 
 // Load locks the environment first: manifest and published pointers cannot change during
@@ -79,7 +95,7 @@ func load(ctx context.Context, q *store.Queries, project uuid.UUID, environment 
 	var env store.Environment
 	var err error
 	if lock {
-		env, err = q.LockManifestEnvironment(ctx, store.LockManifestEnvironmentParams{ProjectID: project, Name: environment})
+		env, err = lockEnvironment(ctx, q, project, environment)
 	} else {
 		env, err = q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: project, Name: environment})
 	}

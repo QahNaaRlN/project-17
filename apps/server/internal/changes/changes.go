@@ -496,6 +496,7 @@ func handleApply(ctx context.Context, tx pgx.Tx, actor auth.Actor, p applyPayloa
 		}
 	}
 	q := store.New(tx)
+	ctx = validation.Shared(ctx)
 	if err := validation.LockProjectEnvironments(ctx, q, actor.ProjectID); err != nil {
 		return ApplyResult{}, err
 	}

@@ -603,3 +603,39 @@ func (q *Queries) SetActiveManifest(ctx context.Context, arg SetActiveManifestPa
 	}
 	return result.RowsAffected(), nil
 }
+
+const shareManifestEnvironment = `-- name: ShareManifestEnvironment :one
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND name = $2 FOR SHARE
+`
+
+type ShareManifestEnvironmentParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Name      string    `json:"name"`
+}
+
+// Edits of different Change Sets share the environment; FOR UPDATE commands wait for them.
+func (q *Queries) ShareManifestEnvironment(ctx context.Context, arg ShareManifestEnvironmentParams) (Environment, error) {
+	row := q.db.QueryRow(ctx, shareManifestEnvironment, arg.ProjectID, arg.Name)
+	var i Environment
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Kind,
+		&i.ActiveManifestID,
+		&i.AppUrl,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.PreviewKey,
+		&i.SourceBaseEnvironmentID,
+		&i.SourceConfigID,
+		&i.SourceRepositoryID,
+		&i.SourcePullNumber,
+		&i.RegistrationSeq,
+		&i.LastRegisteredAt,
+		&i.ArchivedAt,
+		&i.ArchivedName,
+		&i.ArchiveReason,
+	)
+	return i, err
+}

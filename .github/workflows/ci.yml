@@ -39,6 +39,9 @@ jobs:
             exit 1
           }
       - run: pnpm format:check
+      # STU-557: load scenarios are checked without load; the run itself is the Load workflow.
+      - name: Load scenarios (k6 inspect)
+        run: docker run --rm -v "$PWD/perf:/perf" grafana/k6:1.0.0 inspect /perf/k6/load.js > /dev/null
       - run: pnpm lint
       - run: pnpm typecheck
       # The check runner tests (STU-490/491) and the storefront scenarios need Chromium.

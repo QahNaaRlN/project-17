@@ -491,6 +491,7 @@ test("§2: MVP acceptance scenario", async () => {
       state.instance,
     );
     // NFR-005: a design change reaches the preview; measured, fails only at 2x (§6).
+    // Under the load of `pnpm load` the strict 400 ms applies (load tests, decision §11.5).
     await page.locator('[role="treeitem"][title="n_root"]').click();
     const target = frame.locator("[data-cms-node='n_root']").first();
     const padding = () => target.evaluate((el) => getComputedStyle(el).paddingTop);
@@ -507,7 +508,7 @@ test("§2: MVP acceptance scenario", async () => {
     expect(
       metrics.p95("nfr005PatchMs"),
       JSON.stringify(metrics.samples.nfr005PatchMs),
-    ).toBeLessThanOrEqual(800);
+    ).toBeLessThanOrEqual(Number(process.env.E2E_NFR005_MAX_MS ?? 800));
     await snap(alice, 6);
   });
 

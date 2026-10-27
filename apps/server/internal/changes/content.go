@@ -348,7 +348,8 @@ func GetContent(ctx context.Context, q *store.Queries, project, id uuid.UUID, en
 		return Content{}, notFound("Контент", id)
 	}
 	if v.Kind == "entity" && !v.Deleted && !historical {
-		c, err := validation.Load(ctx, q, project, env, cs)
+		// A read: no environment lock, so Delivery and Query API never wait for edits (load tests).
+		c, err := validation.LoadSnapshot(ctx, q, project, env, cs)
 		if err != nil {
 			return Content{}, err
 		}
