@@ -32,7 +32,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044, NFR-приёмка |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81, #87, #90) | Кэш Delivery и лимиты, этапы pipeline 10–11, нагрузочные тесты NFR-001…007, наблюдаемость, ADR, эксперимент |
+| M6. Укрепление | Начат (PR #81, #87, #90, #93) | Этапы pipeline 10–11, нагрузочные тесты NFR-001…007, наблюдаемость, ADR, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -48,7 +48,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | [PR #84](https://github.com/QahNaaRlN/project-17/pull/84) слит в dev 2026-10-26; локальная [приёмка](../studio-promote-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены; шаги 8–9 сценария §2 выполняются в Studio |
 | Выполнено | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | [PR #87](https://github.com/QahNaaRlN/project-17/pull/87) слит в dev 2026-10-26; локальная [приёмка](../pipeline-render-checks-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) (Go coverage 95.0%) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; реестр `pending.ts` сценария §2 пуст; этапы 10–11 — следующий пакет |
 | 1 | [Безопасность MVP: сканеры, журнал событий, сверка SEC](../security-hardening.md), STU-500…519 | Выполнено (PR #90): [сверка](../security-review.md) — сканеры чистые, SEC-001…008 выполнены; job `Security` обязателен для PR в `dev` и `main`; критерий готовности 4 выполнен |
-| 2 | [Кэш Delivery на origin (Redis) и лимиты запросов](../delivery-cache-limits.md), STU-520…539 | Реализовано в ветке `feature/delivery-cache-limits`: [приёмка](../delivery-cache-limits-acceptance.md); ожидает PR в dev; предпосылка NFR-002 и нагрузочных тестов |
+| 2 | [Кэш Delivery на origin (Redis) и лимиты запросов](../delivery-cache-limits.md), STU-520…539 | Выполнено ([PR #93](https://github.com/QahNaaRlN/project-17/pull/93), слит в dev 2026-10-27, merge `9f9a825`): [приёмка](../delivery-cache-limits-acceptance.md), CI итогового SHA пройден (Go coverage 95.0%); сценарий §2 в CI идёт с Redis; измерение NFR-002 — следующий пакет |
 | 3 | Нагрузочные тесты NFR-001…007 по профилю 01 §5 | Нет спецификации; критерий готовности 2 |
 | 4 | Этапы pipeline 10–11: visual regression и Lighthouse | Нет спецификации; нужно решение о хранилище артефактов |
 | 5 | Наблюдаемость OPS-020…023 | Нет спецификации; включена в M6 решением 2026-10-27 |

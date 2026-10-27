@@ -1,7 +1,10 @@
 # Кэш Delivery на origin и лимиты запросов: реализация и проверка
 
 Дата: 2026-10-27. Ветка: `feature/delivery-cache-limits` от `dev` `a089a81`
-(после [PR #92](https://github.com/QahNaaRlN/project-17/pull/92)).
+(после [PR #92](https://github.com/QahNaaRlN/project-17/pull/92)); слита в dev
+2026-10-27 в [PR #93](https://github.com/QahNaaRlN/project-17/pull/93), merge `9f9a825`;
+[CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40474178432)
+пройден, Go coverage 95.0%.
 [Спецификация STU-520…539](delivery-cache-limits.md) одобрена пользователем
 2026-10-27 вместе с решениями §11.
 
