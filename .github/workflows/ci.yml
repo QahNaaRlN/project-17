@@ -71,8 +71,15 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 20
+      # STU-521: the scenario runs with the Delivery origin cache and Redis-backed limits.
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       CMS_DATABASE_URL: postgres://postgres:local@127.0.0.1:5432/e2e?sslmode=disable
+      CMS_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@v5
       # The runner context is not available in job-level env.

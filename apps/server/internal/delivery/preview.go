@@ -147,7 +147,8 @@ func AuthenticatePreview(ctx context.Context, q *store.Queries, authorization st
 		return Access{}, ErrUnauthenticated
 	}
 	return Access{ProjectID: env.ProjectID, ProjectSlug: c.Project, EnvironmentID: env.ID, Environment: env.Name,
-		Draft: true, ChangesetID: c.Changeset, ExpiresAt: time.Unix(c.Expires, 0), PreviewKeyHash: previewFingerprint(env.PreviewKey), BaseEnvironment: env.SourceBaseName}, nil
+		Draft: true, ChangesetID: c.Changeset, ExpiresAt: time.Unix(c.Expires, 0), PreviewKeyHash: previewFingerprint(env.PreviewKey), BaseEnvironment: env.SourceBaseName,
+		Subject: "preview:" + c.Subject.String()}, nil
 }
 
 func previewFingerprint(key []byte) string {

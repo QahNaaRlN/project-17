@@ -297,8 +297,10 @@ func movePointer(ctx context.Context, q *store.Queries, envID, publicationID uui
 	})
 }
 
-// enqueuePurge ставит в outbox purge CDN по объектам публикации и таблице маршрутов окружения
-// (06 §7.1 п. 6, PUB-021): задача появится, только если транзакция публикации зафиксирована.
+// enqueuePurge ставит в outbox инвалидацию кэша Delivery и затем purge CDN по объектам
+// публикации и таблице маршрутов окружения (06 §7.1 п. 6, PUB-021, STU-526): задача появится,
+// только если транзакция публикации зафиксирована. Тег routes меняется всегда — на этом
+// держится защита кэша /page от гонки с публикацией (deliverycache).
 func enqueuePurge(ctx context.Context, tx pgx.Tx, project, env string, items []Item, manifestChanged ...bool) error {
 	keys := []string{jobs.SurrogateKey(project, env, "routes")}
 	if len(manifestChanged) > 0 && manifestChanged[0] {
@@ -307,7 +309,7 @@ func enqueuePurge(ctx context.Context, tx pgx.Tx, project, env string, items []I
 	for _, it := range items {
 		keys = append(keys, jobs.SurrogateKey(project, env, it.ObjectID.String()))
 	}
-	return jobs.Enqueue(ctx, tx, jobs.PurgeArgs{Keys: keys})
+	return jobs.Enqueue(ctx, tx, jobs.InvalidateArgs{Keys: keys})
 }
 
 // syncRoute приводит маршрут объекта в окружении к пути опубликованной версии.

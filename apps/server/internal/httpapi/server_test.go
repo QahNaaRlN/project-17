@@ -47,7 +47,7 @@ type env struct {
 
 type panicPayload struct{}
 
-func setup(t *testing.T) env {
+func setup(t *testing.T, opts ...func(*httpapi.Deps)) env {
 	t.Helper()
 	pool := pgtest.NewDB(t)
 	res, err := projects.Bootstrap(context.Background(), pool, "store", "Магазин", time.Hour)
@@ -91,9 +91,11 @@ func setup(t *testing.T) env {
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
 	})
 	logs := &bytes.Buffer{}
-	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
-		Pool: pool, Bus: bus, Log: slog.New(slog.NewJSONHandler(logs, nil)), Version: "test", CapabilityDelivery: capDelivery,
-	}))
+	deps := httpapi.Deps{Pool: pool, Bus: bus, Log: slog.New(slog.NewJSONHandler(logs, nil)), Version: "test", CapabilityDelivery: capDelivery}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	srv := httptest.NewServer(httpapi.NewRouter(deps))
 	t.Cleanup(srv.Close)
 	return env{srv, pool, res.Token, logs}
 }

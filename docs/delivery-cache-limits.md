@@ -1,6 +1,6 @@
 # Кэш Delivery API на origin и лимиты запросов
 
-Статус: **одобрена пользователем 2026-10-27; решения §11 приняты; код не начат**.
+Статус: **одобрена пользователем 2026-10-27; решения §11 приняты; реализована в ветке `feature/delivery-cache-limits`, см. [приёмку](delivery-cache-limits-acceptance.md)**.
 Дата: 2026-10-27. Требования: STU-520…539 (STU-500…519 заняты пакетом
 [безопасности MVP](security-hardening.md)).
 Основа: `origin/dev` на `0abf615` (после [PR #91](https://github.com/QahNaaRlN/project-17/pull/91)).

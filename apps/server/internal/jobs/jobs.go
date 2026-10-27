@@ -1,7 +1,7 @@
 // Package jobs — фоновые задачи на очереди River (docs/spec/12-security-ops.md §1.1, D-16).
 //
 // Задачи ставятся в транзакции команды (outbox, OPS-010): если команда откатилась, задачи нет.
-// Первая задача — инвалидация CDN по Surrogate-Key после публикации (PUB-021, SDK-022).
+// Первая задача — инвалидация кэша Delivery и CDN по Surrogate-Key после публикации (PUB-021, SDK-022, STU-526).
 package jobs
 
 import (
@@ -93,6 +93,38 @@ func (w *PurgeWorker) Work(ctx context.Context, job *river.Job[PurgeArgs]) error
 	return w.Purger.Purge(ctx, job.Args.Keys)
 }
 
+// InvalidateArgs — задача инвалидации кэша Delivery на origin (STU-526). Публикация ставит
+// её в outbox; после смены версий тегов она ставит purge CDN с теми же ключами, чтобы CDN
+// не перезапросил старый ответ из Redis.
+type InvalidateArgs struct {
+	Keys []string `json:"keys"`
+}
+
+// Kind — имя задачи в очереди.
+func (InvalidateArgs) Kind() string { return "delivery_cache_invalidate" }
+
+// Invalidator меняет версии тегов кэша Delivery; nil-реализация ничего не делает.
+type Invalidator interface {
+	Invalidate(ctx context.Context, keys []string) error
+}
+
+// InvalidateWorker исполняет задачи инвалидации.
+type InvalidateWorker struct {
+	river.WorkerDefaults[InvalidateArgs]
+	Cache Invalidator
+}
+
+// Work инвалидирует кэш и ставит purge CDN; ошибка Redis — повтор задачи River.
+func (w *InvalidateWorker) Work(ctx context.Context, job *river.Job[InvalidateArgs]) error {
+	if w.Cache != nil {
+		if err := w.Cache.Invalidate(ctx, job.Args.Keys); err != nil {
+			return err
+		}
+	}
+	_, err := river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, PurgeArgs{Keys: job.Args.Keys}, nil)
+	return err
+}
+
 // Client — клиент очереди.
 type Client = river.Client[pgx.Tx]
 
@@ -102,9 +134,12 @@ func NewInserter(pool *pgxpool.Pool) (*Client, error) {
 }
 
 // NewProcessor — клиент, который ставит и исполняет задачи; запускается Start.
-func NewProcessor(pool *pgxpool.Pool, purger Purger, log *slog.Logger, register ...func(*river.Workers) error) (*Client, error) {
+func NewProcessor(pool *pgxpool.Pool, purger Purger, cache Invalidator, log *slog.Logger, register ...func(*river.Workers) error) (*Client, error) {
 	workers := river.NewWorkers()
 	if err := river.AddWorkerSafely(workers, &PurgeWorker{Purger: purger}); err != nil {
+		return nil, err
+	}
+	if err := river.AddWorkerSafely(workers, &InvalidateWorker{Cache: cache}); err != nil {
 		return nil, err
 	}
 	for _, add := range register {

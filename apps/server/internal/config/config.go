@@ -9,7 +9,10 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/previeworigins"
+	"github.com/qahnaarln/project-17/apps/server/internal/ratelimit"
+	"github.com/qahnaarln/project-17/apps/server/internal/redisstore"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,6 +37,8 @@ type Config struct {
 	S3Secure           bool
 	Images             imagedelivery.Config
 	PreviewOrigins     previeworigins.List // CMS_PREVIEW_APP_ORIGINS — точные origin preview-приложений (STU-328)
+	RedisURL           string              // CMS_REDIS_URL — кэш Delivery и лимиты; пусто — без Redis (STU-520)
+	RateLimits         ratelimit.Limits    // CMS_RATE_* — лимиты в секунду, 0 выключает (STU-531)
 }
 
 // FromEnv читает конфигурацию; getenv — обычно os.Getenv.
@@ -51,6 +56,8 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		S3SecretKey:     getenv("CMS_S3_SECRET_KEY"),
 		S3Bucket:        getenv("CMS_S3_BUCKET"),
 		S3Secure:        getenv("CMS_S3_SECURE") != "false",
+		RedisURL:        getenv("CMS_REDIS_URL"),
+		RateLimits:      ratelimit.Defaults(),
 	}
 	var errs []error
 	var webhookErr error
@@ -91,6 +98,25 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	}
 	if err := cfg.LogLevel.UnmarshalText([]byte(valueOr(getenv("CMS_LOG_LEVEL"), "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("CMS_LOG_LEVEL: %w", err))
+	}
+	if cfg.RedisURL != "" {
+		if _, err := redisstore.ParseURL(cfg.RedisURL); err != nil {
+			errs = append(errs, fmt.Errorf("CMS_REDIS_URL: %w", err))
+		}
+	}
+	for name, limit := range map[string]*int{
+		"CMS_RATE_HUMAN_COMMANDS": &cfg.RateLimits.HumanCommands, "CMS_RATE_HUMAN_REQUESTS": &cfg.RateLimits.HumanRequests,
+		"CMS_RATE_SERVICE_COMMANDS": &cfg.RateLimits.ServiceCommands, "CMS_RATE_AGENT_COMMANDS": &cfg.RateLimits.AgentCommands,
+		"CMS_RATE_DELIVERY": &cfg.RateLimits.Delivery, "CMS_RATE_PREVIEW": &cfg.RateLimits.Preview,
+	} {
+		if raw := getenv(name); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 {
+				errs = append(errs, fmt.Errorf("%s: целое число запросов в секунду ≥ 0, получено %q", name, raw))
+				continue
+			}
+			*limit = n
+		}
 	}
 	if raw := getenv("CMS_SHUTDOWN_TIMEOUT"); raw != "" {
 		d, err := time.ParseDuration(raw)

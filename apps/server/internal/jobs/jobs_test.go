@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -75,7 +77,7 @@ func TestQueueRunsPurgeAfterCommit(t *testing.T) {
 	pool := pgtest.NewDB(t)
 	purged := recordPurger{keys: make(chan []string, 1)}
 	var logs bytes.Buffer
-	queue, err := jobs.NewProcessor(pool, purged, slog.New(slog.NewTextHandler(&logs, nil)))
+	queue, err := jobs.NewProcessor(pool, purged, nil, slog.New(slog.NewTextHandler(&logs, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,5 +120,55 @@ func TestLogPurgerAndWorker(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "cdn purge") {
 		t.Errorf("журнал: %s", logs.String())
+	}
+}
+
+type recordInvalidator struct {
+	keys chan []string
+	err  error
+}
+
+func (i recordInvalidator) Invalidate(_ context.Context, keys []string) error {
+	if i.err != nil {
+		return i.err
+	}
+	i.keys <- keys
+	return nil
+}
+
+// STU-526: the publication's job invalidates the origin cache first, then queues the CDN purge.
+func TestInvalidationRunsBeforePurge(t *testing.T) {
+	ctx := context.Background()
+	pool := pgtest.NewDB(t)
+	purged := recordPurger{keys: make(chan []string, 1)}
+	invalidated := recordInvalidator{keys: make(chan []string, 1)}
+	queue, err := jobs.NewProcessor(pool, purged, invalidated, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = queue.Stop(ctx) })
+	tx, _ := pool.Begin(ctx)
+	if err := jobs.Enqueue(jobs.WithClient(queue)(ctx), tx, jobs.InvalidateArgs{Keys: []string{"store:staging:routes"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if keys := <-invalidated.keys; len(keys) != 1 || keys[0] != "store:staging:routes" {
+		t.Fatal(keys)
+	}
+	if keys := <-purged.keys; len(keys) != 1 || keys[0] != "store:staging:routes" {
+		t.Fatal(keys)
+	}
+	if (jobs.InvalidateArgs{}).Kind() != "delivery_cache_invalidate" {
+		t.Fatal("kind")
+	}
+	// A Redis failure fails the job (River retries) before any purge is queued.
+	w := &jobs.InvalidateWorker{Cache: recordInvalidator{err: errors.New("redis down")}}
+	if err := w.Work(ctx, &river.Job[jobs.InvalidateArgs]{Args: jobs.InvalidateArgs{Keys: []string{"k"}}}); err == nil {
+		t.Fatal("error expected")
 	}
 }

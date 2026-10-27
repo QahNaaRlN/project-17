@@ -22,6 +22,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/config"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/deliverycache"
 	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
@@ -30,7 +31,9 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/ratelimit"
 	"github.com/qahnaarln/project-17/apps/server/internal/realtime"
+	"github.com/qahnaarln/project-17/apps/server/internal/redisstore"
 	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
@@ -124,6 +127,14 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	if cfg.CDNPurgeURL != "" {
 		purger = jobs.HTTPPurger{URL: cfg.CDNPurgeURL, Token: cfg.CDNPurgeToken}
 	}
+	var redis *redisstore.Client
+	if cfg.RedisURL != "" {
+		if redis, err = redisstore.Open(cfg.RedisURL, log); err != nil {
+			return err
+		}
+		defer redis.Close()
+	}
+	cache := deliverycache.New(redis)
 	bus := commandbus.New(pool)
 	capabilityDelivery := &capabilities.DeliveryService{Pool: pool, Catalog: cfg.CapabilityWebhooks, Log: log}
 	if err := capabilityDelivery.ValidateCatalog(ctx); err != nil {
@@ -140,7 +151,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	capabilityFulfillment := &capabilities.FulfillmentService{Pool: pool, Github: capabilityGithub, Comparer: capabilitygithub.NewClient()}
 	agentService := &agents.Service{Pool: pool, Provider: agents.OpenRouter{Key: cfg.OpenRouterKey}, DefaultModel: cfg.OpenRouterModel}
 	agentService.Register(bus)
-	queue, err := jobs.NewProcessor(pool, purger, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) }, func(w *river.Workers) error {
+	queue, err := jobs.NewProcessor(pool, purger, cache, log, func(w *river.Workers) error { return river.AddWorkerSafely(w, &assets.Worker{Service: assetService}) }, func(w *river.Workers) error { return river.AddWorkerSafely(w, &agents.Worker{Service: agentService}) }, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.DeliveryWorker{Service: capabilityDelivery})
 	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, deliveryRecovery) }, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.GithubWorker{Service: capabilityGithub})
@@ -204,7 +215,8 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return err
 	}
 	srv := &http.Server{
-		Handler:           httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService, CapabilityGithub: capabilityGithub, CapabilityDelivery: capabilityDelivery}),
+		Handler: httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService, CapabilityGithub: capabilityGithub, CapabilityDelivery: capabilityDelivery,
+			Cache: cache, Limiter: ratelimit.New(redis), Limits: cfg.RateLimits}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

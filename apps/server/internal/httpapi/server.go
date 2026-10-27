@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,11 +25,13 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
+	"github.com/qahnaarln/project-17/apps/server/internal/deliverycache"
 	"github.com/qahnaarln/project-17/apps/server/internal/identity"
 	"github.com/qahnaarln/project-17/apps/server/internal/imagedelivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/manifestregistry"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/publishing"
+	"github.com/qahnaarln/project-17/apps/server/internal/ratelimit"
 	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -48,6 +51,9 @@ type Deps struct {
 	Version            string
 	Assets             *assets.Service
 	Images             *imagedelivery.Service
+	Cache              *deliverycache.Cache // nil — без кэша Delivery (STU-520)
+	Limiter            *ratelimit.Limiter   // nil — без лимитов
+	Limits             ratelimit.Limits
 }
 
 // NewRouter собирает маршруты сервера.
@@ -80,6 +86,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auditRefusals(d))
 		r.Use(authenticate(d))
+		r.Use(limitRequests(d))
 		r.Get("/security-events", securityEventsHandler(d))
 		agentRoutes(r, d)
 		r.Get("/events", eventsHandler(d))
@@ -433,6 +440,36 @@ func authenticate(d Deps) func(http.Handler) http.Handler {
 	}
 }
 
+// limitRequests применяет лимиты 08 §7 к аутентифицированным запросам /api/v1 (STU-531, 534):
+// людям — на все запросы и на команды, сервисам и агентским сессиям — на команды.
+func limitRequests(d Deps) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			actor := actorFrom(r.Context())
+			command := r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/commands/")
+			subject := "actor:" + actor.ID.String()
+			switch {
+			case actor.Kind == auth.ActorHuman:
+				if limited(w, r, d, subject, "requests", d.Limits.HumanRequests) || command && limited(w, r, d, subject, "commands", d.Limits.HumanCommands) {
+					return
+				}
+			case actor.Kind == auth.ActorAgent && command:
+				if actor.AgentSessionID != nil {
+					subject = "agent-session:" + actor.AgentSessionID.String()
+				}
+				if limited(w, r, d, subject, "commands", d.Limits.AgentCommands) {
+					return
+				}
+			case actor.Kind == auth.ActorService && command:
+				if limited(w, r, d, subject, "commands", d.Limits.ServiceCommands) {
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -482,7 +519,9 @@ func auditRefusals(d Deps) func(http.Handler) http.Handler {
 			sw := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), refusalKey{}, note)))
 			status := sw.Status()
-			if status != http.StatusUnauthorized && status != http.StatusForbidden || note.dispatched {
+			// Отказ по лимиту пишется для агентов и сервисов (STU-532); людей ограничивает Studio.
+			throttled := status == http.StatusTooManyRequests && (note.actor.Kind == auth.ActorAgent || note.actor.Kind == auth.ActorService)
+			if status != http.StatusUnauthorized && status != http.StatusForbidden && !throttled || note.dispatched {
 				return
 			}
 			ctx := context.WithoutCancel(r.Context())

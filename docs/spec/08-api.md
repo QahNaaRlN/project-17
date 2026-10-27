@@ -239,7 +239,8 @@ Authorization: Bearer cms_pub_…
 - Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` вида `{project}:{env}:{objectId}`; `/page` и `/routes` зависят также от `{project}:{env}:routes`. Ключи включают проект и окружение, чтобы purge одного окружения не задевал другие; после публикации эти ключи сбрасываются задачей `cdn_purge` (06 §7.3.1). На совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
 - Чтение сущностей и метаданных ассетов подключено; загрузка и обработка файлов описаны в [пакете загрузки](../asset-upload-processing.md).
 - Выдача изображений CNT-050–052 подключена через подписанную модель и gateway; [контракт и конфигурация](../asset-delivery-images.md). Raw PDF/видео не выдаются этим endpoint.
-- Пока не реализованы: локали и fallback (API-032), кэш ответов на origin (Redis, NFR-002) и лимиты запросов — [спецификация пакета M6](../delivery-cache-limits.md) одобрена, реализация идёт.
+- Кэш published-ответов на origin (Redis) и лимиты запросов — [пакет M6](../delivery-cache-limits.md): `/page`, `/document`, `/routes`, `/entity`, `/asset` с ключом доставки отдаются из Redis с теми же телом, `ETag` и заголовками; заголовок `X-CMS-Cache: hit|miss|bypass`; черновые ответы и `/asset/{id}/image` не кэшируются. Публикация, откат и `promote` делают ответы свежими задачей `delivery_cache_invalidate` до purge CDN.
+- Пока не реализованы: локали и fallback (API-032).
 
 ### 5.3. Черновой режим
 
@@ -299,6 +300,15 @@ Authorization: Preview eyJhbGciOi…
 | Сервисный токен | 20 команд/с |
 | Агентская сессия | 5 команд/с, квота операций на сессию (по умолчанию 2 000) |
 | Delivery API (origin) | 500 запросов/с на ключ доставки |
+
+**Реализация ([пакет M6](../delivery-cache-limits.md), STU-530…535).** Фиксированное окно
+1 с; превышение — `429 RATE_LIMITED` с `Retry-After` и `no-store`. Люди считаются по
+всем запросам `/api/v1` и по командам, сервисные токены и агентские сессии — по командам,
+preview-токены — 200 запросов/с на субъект токена. Значения задаются переменными
+`CMS_RATE_HUMAN_COMMANDS`, `CMS_RATE_HUMAN_REQUESTS`, `CMS_RATE_SERVICE_COMMANDS`,
+`CMS_RATE_AGENT_COMMANDS`, `CMS_RATE_DELIVERY`, `CMS_RATE_PREVIEW` (0 выключает лимит).
+Отказы агентам и сервисам пишутся в журнал безопасности как `access.denied`; при
+недоступном Redis лимиты не применяются. `/healthz`, `/readyz` и `/auth/*` не ограничены.
 
 ### Подключённое чтение сущностей и метаданных ассетов
 
