@@ -32,7 +32,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044, NFR-приёмка |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81, #87) | Этапы pipeline 10–11, нагрузочные тесты NFR-001…007, безопасность, эксперимент |
+| M6. Укрепление | Начат (PR #81, #87, #90) | Кэш Delivery и лимиты, этапы pipeline 10–11, нагрузочные тесты NFR-001…007, наблюдаемость, ADR, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -47,7 +47,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | Выполнено | [Сквозной сценарий §2 в CI](../e2e-scenario.md), STU-440…459 | [PR #81](https://github.com/QahNaaRlN/project-17/pull/81) слит в dev 2026-10-26; локальная [приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699) (job `E2E scenario (§2)` 2 мин 46 с) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены; после пяти зелёных прогонов подряд job обязателен для PR в `dev` и `main` с 2026-10-26 |
 | Выполнено | [Перенос в production и откат production в Studio](../studio-promote.md), STU-460…479 | [PR #84](https://github.com/QahNaaRlN/project-17/pull/84) слит в dev 2026-10-26; локальная [приёмка](../studio-promote-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40311593042) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40313597429) пройдены; шаги 8–9 сценария §2 выполняются в Studio |
 | Выполнено | [Этапы pipeline 8–9: сборка preview и axe](../pipeline-render-checks.md), STU-480…499 | [PR #87](https://github.com/QahNaaRlN/project-17/pull/87) слит в dev 2026-10-26; локальная [приёмка](../pipeline-render-checks-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40380254098) (Go coverage 95.0%) и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40384179897) пройдены; реестр `pending.ts` сценария §2 пуст; этапы 10–11 — следующий пакет |
-| 1 | [Безопасность MVP: сканеры, журнал событий, сверка SEC](../security-hardening.md), STU-500…519 | Реализовано в ветке `feature/security-hardening`: [сверка](../security-review.md) — сканеры чистые, SEC-001…008 выполнены; ожидает PR в dev; критерий готовности 4 |
+| 1 | [Безопасность MVP: сканеры, журнал событий, сверка SEC](../security-hardening.md), STU-500…519 | Выполнено (PR #90): [сверка](../security-review.md) — сканеры чистые, SEC-001…008 выполнены; job `Security` обязателен для PR в `dev` и `main`; критерий готовности 4 выполнен |
 | 2 | Кэш Delivery на origin (Redis) и лимиты запросов | Нет спецификации; предпосылка NFR-002 и нагрузочных тестов |
 | 3 | Нагрузочные тесты NFR-001…007 по профилю 01 §5 | Нет спецификации; критерий готовности 2 |
 | 4 | Этапы pipeline 10–11: visual regression и Lighthouse | Нет спецификации; нужно решение о хранилище артефактов |
@@ -83,7 +83,8 @@ MVP и сквозная автоматическая приёмка ниже о�
 Сценарий §2 проходит автоматически в CI без временных обходов: реестр
 [`pending.ts`](../../examples/react-store/e2e/scenario/pending.ts) пуст, job
 `E2E scenario (§2)` обязателен для PR в `dev` и `main`. Критерий готовности 1
-выполнен (2026-10-26, PR #87); остальные критерии §3 пока не выполнены.
+выполнен (2026-10-26, PR #87). Критерий 4 выполнен (2026-10-27, PR #90): job
+`Security` зелёный и обязателен. Остальные критерии §3 пока не выполнены.
 
 ### Реализованные пакеты и оставшиеся границы
 

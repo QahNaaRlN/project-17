@@ -135,7 +135,7 @@ CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 | Workflow | Триггер | Что делает |
 |---|---|---|
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
-| `CI` → `Security` | каждый PR, пуш в `main` и `dev` | `pnpm audit` с исключениями (`scripts/security-audit.mjs`, `security/exceptions.json`), `govulncheck` тулчейном модуля, Trivy для образа сервера; high/critical не исключаются ([STU-500](security-hardening.md)) |
+| `CI` → `Security` | каждый PR, пуш в `main` и `dev` | `pnpm audit` с исключениями (`scripts/security-audit.mjs`, `security/exceptions.json`), `govulncheck` тулчейном модуля, Trivy для образа сервера; high/critical не исключаются ([STU-500](security-hardening.md)); обязательная проверка для PR в `dev` и `main` |
 | `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 

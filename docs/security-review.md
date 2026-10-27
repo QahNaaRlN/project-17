@@ -1,9 +1,9 @@
 # Сверка безопасности MVP
 
 Дата: 2026-10-27. Пакет: [безопасность MVP](security-hardening.md), STU-500…519.
-Ветка: `feature/security-hardening` от `dev` `0f80028`. Критерий готовности MVP 4
-([план §3](spec/14-mvp-plan.md#3-критерии-готовности-mvp)) считается выполненным,
-когда задача `Security` зелёная в CI.
+PR #90 (`feature/security-hardening` от `dev` `0f80028`), слит в `dev` `4b3bdce`.
+Критерий готовности MVP 4 ([план §3](spec/14-mvp-plan.md#3-критерии-готовности-mvp))
+выполнен: задача `Security` зелёная в CI и обязательна для PR в `dev` и `main`.
 
 ## 1. Сканеры
 
