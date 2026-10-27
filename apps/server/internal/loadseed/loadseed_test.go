@@ -10,6 +10,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/delivery"
 	"github.com/qahnaarln/project-17/apps/server/internal/loadseed"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -85,6 +86,23 @@ func TestRun(t *testing.T) {
 		}
 		if _, err := auth.Authenticate(ctx, q, "Bearer "+p.AdminToken); err != nil {
 			t.Fatal(err)
+		}
+		// The recorded check basis is earned: the full check of every environment finds nothing.
+		for _, name := range []string{"staging", "production"} {
+			recorded, err := validation.LoadSnapshot(ctx, q, access.ProjectID, name, nil)
+			if err != nil || recorded.Environment.ValidationBasis == nil {
+				t.Fatal("basis", name, err)
+			}
+			if _, err := pool.Exec(ctx, `UPDATE environments SET validation_basis = NULL WHERE id = $1`, recorded.Environment.ID); err != nil {
+				t.Fatal(err)
+			}
+			full, err := validation.LoadSnapshot(ctx, q, access.ProjectID, name, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if problems, err := full.CheckPublication(ctx, nil); err != nil || validation.HasErrors(problems) {
+				t.Fatal(name, problems, err)
+			}
 		}
 	}
 	editor, err := auth.Authenticate(ctx, q, "Bearer "+res.Editors[0])

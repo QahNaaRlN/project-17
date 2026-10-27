@@ -201,7 +201,7 @@ func (q *Queries) RequeueRenderCheck(ctx context.Context, id uuid.UUID) error {
 }
 
 const setEnvironmentAppURL = `-- name: SetEnvironmentAppURL :one
-UPDATE environments SET app_url = $3 WHERE project_id = $1 AND name = $2 AND kind = 'standard' RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason
+UPDATE environments SET app_url = $3 WHERE project_id = $1 AND name = $2 AND kind = 'standard' RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis
 `
 
 type SetEnvironmentAppURLParams struct {
@@ -232,6 +232,7 @@ func (q *Queries) SetEnvironmentAppURL(ctx context.Context, arg SetEnvironmentAp
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }

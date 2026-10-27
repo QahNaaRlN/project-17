@@ -538,6 +538,7 @@ type Environment struct {
 	ArchivedAt              *time.Time `json:"archivedAt"`
 	ArchivedName            *string    `json:"archivedName"`
 	ArchiveReason           *string    `json:"archiveReason"`
+	ValidationBasis         []byte     `json:"validationBasis"`
 }
 
 type HumanSession struct {
@@ -765,4 +766,9 @@ type SecurityEvent struct {
 	Type      string     `json:"type"`
 	Data      []byte     `json:"data"`
 	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type VersionReference struct {
+	VersionID uuid.UUID `json:"versionId"`
+	TargetID  uuid.UUID `json:"targetId"`
 }

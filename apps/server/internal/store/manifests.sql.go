@@ -185,7 +185,7 @@ func (q *Queries) GetManifestByID(ctx context.Context, arg GetManifestByIDParams
 }
 
 const getManifestEnvironment = `-- name: GetManifestEnvironment :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND name = $2
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND name = $2
 `
 
 type GetManifestEnvironmentParams struct {
@@ -215,6 +215,7 @@ func (q *Queries) GetManifestEnvironment(ctx context.Context, arg GetManifestEnv
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
@@ -378,7 +379,7 @@ func (q *Queries) ListPreviewSchemaSnapshots(ctx context.Context, arg ListPrevie
 }
 
 const lockManifestEnvironment = `-- name: LockManifestEnvironment :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND name = $2 FOR UPDATE
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND name = $2 FOR UPDATE
 `
 
 type LockManifestEnvironmentParams struct {
@@ -408,6 +409,7 @@ func (q *Queries) LockManifestEnvironment(ctx context.Context, arg LockManifestE
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
@@ -605,7 +607,7 @@ func (q *Queries) SetActiveManifest(ctx context.Context, arg SetActiveManifestPa
 }
 
 const shareManifestEnvironment = `-- name: ShareManifestEnvironment :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND name = $2 FOR SHARE
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND name = $2 FOR SHARE
 `
 
 type ShareManifestEnvironmentParams struct {
@@ -636,6 +638,7 @@ func (q *Queries) ShareManifestEnvironment(ctx context.Context, arg ShareManifes
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }

@@ -3,6 +3,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/google/uuid"
@@ -12,15 +13,19 @@ import (
 
 // ZoneRequirements includes edited documents and affected published live consumers.
 func ZoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string) (zonepolicy.Result, error) {
-	return zoneRequirements(ctx, q, project, cs, targets, Load)
+	return CrossChecked(func(all bool) (zonepolicy.Result, error) {
+		return zoneRequirements(ctx, q, project, cs, targets, Load, all)
+	})
 }
 
 // ZoneRequirementsSnapshot keeps review queries read-only and consistent with their snapshot.
 func ZoneRequirementsSnapshot(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string) (zonepolicy.Result, error) {
-	return zoneRequirements(ctx, q, project, cs, targets, LoadSnapshot)
+	return CrossChecked(func(all bool) (zonepolicy.Result, error) {
+		return zoneRequirements(ctx, q, project, cs, targets, LoadSnapshot, all)
+	})
 }
 
-func zoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string, loadContext func(context.Context, *store.Queries, uuid.UUID, string, *uuid.UUID) (*Context, error)) (zonepolicy.Result, error) {
+func zoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UUID, targets []string, loadContext func(context.Context, *store.Queries, uuid.UUID, string, *uuid.UUID) (*Context, error), all bool) (zonepolicy.Result, error) {
 	versions, err := q.ChangesetWorkingVersions(ctx, cs)
 	if err != nil {
 		return zonepolicy.Result{}, err
@@ -86,7 +91,8 @@ func zoneRequirements(ctx context.Context, q *store.Queries, project, cs uuid.UU
 			return merged, err
 		}
 		c.Overrides = docs
-		rows, err := q.ValidationPublishedVersions(ctx, store.ValidationPublishedVersionsParams{ProjectID: project, ID: c.Environment.ID})
+		// The edited documents and the published consumers of changed live components.
+		rows, err := PublishedDependents(ctx, q, project, c.Environment.ID, slices.Collect(maps.Keys(docs)), slices.Collect(maps.Keys(changed)), all)
 		if err != nil {
 			return merged, err
 		}

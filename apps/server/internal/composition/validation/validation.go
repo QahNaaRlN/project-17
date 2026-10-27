@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 
 	"github.com/google/uuid"
@@ -41,12 +42,16 @@ type Context struct {
 	Candidate    *store.ValidationCandidateRow
 	app          any
 	project      map[string]any
+	settings     []byte
 	// Overrides is the prospective publication, including promotion's exact versions.
 	Overrides     map[uuid.UUID]Document
 	PreserveHead  bool // promotion moves published pointers only
 	PublishedOnly bool // rollback preview must not depend on the unchanged head
 	Draft         bool
 	UseHead       bool
+	// Changed lists objects whose pointers the operation already moved (rollback checks
+	// the environment after the move); the incremental check treats them as the batch.
+	Changed []uuid.UUID
 }
 
 // LockProjectEnvironments keeps the environment -> CS -> object lock order for workflow
@@ -110,6 +115,7 @@ func load(ctx context.Context, q *store.Queries, project uuid.UUID, environment 
 	if err != nil {
 		return nil, err
 	}
+	c.settings = settings
 	c.project, err = decode(settings)
 	if err != nil {
 		return nil, err
@@ -413,7 +419,23 @@ func problem(code, pointer, node string, params map[string]any) ir.Result {
 
 // CheckPublication validates the prospective environment, including existing consumers
 // of live components; replacements in the batch take precedence over current pointers.
+// When the environment passed a full check under the current basis, only the batch and
+// its dependents are checked (docs/incremental-validation.md).
 func (c *Context) CheckPublication(ctx context.Context, docs []Document) (map[string][]ir.Diagnostic, error) {
+	if c.incremental() {
+		out, affected, err := c.checkAffected(ctx, docs)
+		if !errors.Is(err, errTooMany) {
+			if err == nil && os.Getenv(CrossCheckEnv) == "1" {
+				err = c.crossCheck(ctx, docs, out, affected)
+			}
+			return out, err
+		}
+	}
+	return c.checkAll(ctx, docs)
+}
+
+// checkAll validates every published document of the environment.
+func (c *Context) checkAll(ctx context.Context, docs []Document) (map[string][]ir.Diagnostic, error) {
 	c.Draft = false
 	c.Overrides = map[uuid.UUID]Document{}
 	rows, err := c.q.ValidationPublishedVersions(ctx, store.ValidationPublishedVersionsParams{ProjectID: c.ProjectID, ID: c.Environment.ID})

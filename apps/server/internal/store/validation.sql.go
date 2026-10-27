@@ -11,6 +11,64 @@ import (
 	"github.com/google/uuid"
 )
 
+const contentHeadsBySchema = `-- name: ContentHeadsBySchema :many
+SELECT o.id, o.schema_name, v.body, v.deleted FROM objects o
+JOIN object_versions v ON v.id = o.head_version_id
+WHERE o.project_id = $1 AND o.kind = 'entity' AND o.schema_name = ANY($2::text[])
+ORDER BY o.id
+`
+
+type ContentHeadsBySchemaParams struct {
+	ProjectID uuid.UUID `json:"projectId"`
+	Schemas   []string  `json:"schemas"`
+}
+
+type ContentHeadsBySchemaRow struct {
+	ID         uuid.UUID `json:"id"`
+	SchemaName *string   `json:"schemaName"`
+	Body       []byte    `json:"body"`
+	Deleted    bool      `json:"deleted"`
+}
+
+func (q *Queries) ContentHeadsBySchema(ctx context.Context, arg ContentHeadsBySchemaParams) ([]ContentHeadsBySchemaRow, error) {
+	rows, err := q.db.Query(ctx, contentHeadsBySchema, arg.ProjectID, arg.Schemas)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContentHeadsBySchemaRow
+	for rows.Next() {
+		var i ContentHeadsBySchemaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SchemaName,
+			&i.Body,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setEnvironmentValidationBasis = `-- name: SetEnvironmentValidationBasis :exec
+UPDATE environments SET validation_basis = $2 WHERE id = $1
+`
+
+type SetEnvironmentValidationBasisParams struct {
+	ID              uuid.UUID `json:"id"`
+	ValidationBasis []byte    `json:"validationBasis"`
+}
+
+func (q *Queries) SetEnvironmentValidationBasis(ctx context.Context, arg SetEnvironmentValidationBasisParams) error {
+	_, err := q.db.Exec(ctx, setEnvironmentValidationBasis, arg.ID, arg.ValidationBasis)
+	return err
+}
+
 const validationCandidate = `-- name: ValidationCandidate :one
 SELECT b.changeset_id, b.project_id, b.environment_id, b.manifest_id, b.base_manifest_id, m.hash, m.body, cs.kind FROM changeset_manifest_candidates b
 JOIN manifests m ON m.id = b.manifest_id AND m.project_id = b.project_id
@@ -100,6 +158,54 @@ func (q *Queries) ValidationComponent(ctx context.Context, arg ValidationCompone
 	return i, err
 }
 
+const validationDependents = `-- name: ValidationDependents :many
+WITH RECURSIVE affected(object_id, depth, component) AS (
+  SELECT t, 0, true FROM unnest($2::uuid[]) t
+  UNION
+  SELECT v.object_id, a.depth + 1, COALESCE(o.doc_kind = 'component', false)
+  FROM affected a
+  JOIN version_references r ON r.target_id = a.object_id
+  JOIN object_versions v ON v.id = r.version_id AND v.state = 'committed'
+  JOIN objects o ON o.id = v.object_id AND o.project_id = $3
+  WHERE a.component AND a.depth < 128
+    AND (o.doc_kind = 'component' OR EXISTS (SELECT 1 FROM published_pointers pp
+      WHERE pp.environment_id = $1 AND pp.version_id = v.id))
+)
+SELECT DISTINCT a.object_id::uuid AS object_id FROM affected a
+JOIN published_pointers pp ON pp.environment_id = $1 AND pp.object_id = a.object_id
+WHERE a.depth > 0
+LIMIT 10001
+`
+
+type ValidationDependentsParams struct {
+	EnvironmentID uuid.UUID   `json:"environmentId"`
+	Objects       []uuid.UUID `json:"objects"`
+	ProjectID     uuid.UUID   `json:"projectId"`
+}
+
+// Objects of the environment whose check depends on the given ones (STU-563): published
+// versions that reference them, and through components — every committed component version,
+// since pinned versions are validated inside their consumers. Only components propagate.
+func (q *Queries) ValidationDependents(ctx context.Context, arg ValidationDependentsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, validationDependents, arg.EnvironmentID, arg.Objects, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var object_id uuid.UUID
+		if err := rows.Scan(&object_id); err != nil {
+			return nil, err
+		}
+		items = append(items, object_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const validationPage = `-- name: ValidationPage :one
 SELECT v.path FROM objects o
 JOIN object_versions v ON v.object_id = o.id AND v.project_id = o.project_id
@@ -135,6 +241,85 @@ func (q *Queries) ValidationPage(ctx context.Context, arg ValidationPageParams) 
 	return path, err
 }
 
+const validationPublishedDeleted = `-- name: ValidationPublishedDeleted :many
+SELECT pp.object_id, pp.version_id FROM published_pointers pp
+JOIN object_versions v ON v.id = pp.version_id
+WHERE pp.environment_id = $1 AND v.deleted
+ORDER BY pp.object_id
+`
+
+type ValidationPublishedDeletedRow struct {
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+}
+
+func (q *Queries) ValidationPublishedDeleted(ctx context.Context, environmentID uuid.UUID) ([]ValidationPublishedDeletedRow, error) {
+	rows, err := q.db.Query(ctx, validationPublishedDeleted, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ValidationPublishedDeletedRow
+	for rows.Next() {
+		var i ValidationPublishedDeletedRow
+		if err := rows.Scan(&i.ObjectID, &i.VersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const validationPublishedEntities = `-- name: ValidationPublishedEntities :many
+SELECT o.id AS object_id, o.schema_name, v.body, v.deleted
+FROM published_pointers pp JOIN objects o ON o.id = pp.object_id
+JOIN object_versions v ON v.id = pp.version_id
+WHERE pp.environment_id = $1 AND o.project_id = $2
+AND o.kind = 'entity' AND o.schema_name = ANY($3::text[])
+ORDER BY o.id
+`
+
+type ValidationPublishedEntitiesParams struct {
+	EnvironmentID uuid.UUID `json:"environmentId"`
+	ProjectID     uuid.UUID `json:"projectId"`
+	Schemas       []string  `json:"schemas"`
+}
+
+type ValidationPublishedEntitiesRow struct {
+	ObjectID   uuid.UUID `json:"objectId"`
+	SchemaName *string   `json:"schemaName"`
+	Body       []byte    `json:"body"`
+	Deleted    bool      `json:"deleted"`
+}
+
+func (q *Queries) ValidationPublishedEntities(ctx context.Context, arg ValidationPublishedEntitiesParams) ([]ValidationPublishedEntitiesRow, error) {
+	rows, err := q.db.Query(ctx, validationPublishedEntities, arg.EnvironmentID, arg.ProjectID, arg.Schemas)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ValidationPublishedEntitiesRow
+	for rows.Next() {
+		var i ValidationPublishedEntitiesRow
+		if err := rows.Scan(
+			&i.ObjectID,
+			&i.SchemaName,
+			&i.Body,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const validationPublishedVersions = `-- name: ValidationPublishedVersions :many
 SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified, v.deleted
 FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
@@ -167,6 +352,58 @@ func (q *Queries) ValidationPublishedVersions(ctx context.Context, arg Validatio
 	var items []ValidationPublishedVersionsRow
 	for rows.Next() {
 		var i ValidationPublishedVersionsRow
+		if err := rows.Scan(
+			&i.ObjectID,
+			&i.VersionID,
+			&i.Body,
+			&i.Path,
+			&i.Certified,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const validationPublishedVersionsByID = `-- name: ValidationPublishedVersionsByID :many
+SELECT o.id AS object_id, v.id AS version_id, v.body, v.path, v.certified, v.deleted
+FROM published_pointers pp JOIN environments e ON e.id = pp.environment_id
+JOIN objects o ON o.id = pp.object_id
+JOIN object_versions v ON v.id = pp.version_id AND v.object_id = o.id
+WHERE e.project_id = $1 AND e.id = $2 AND o.project_id = e.project_id
+AND pp.object_id = ANY($3::uuid[])
+ORDER BY o.id
+`
+
+type ValidationPublishedVersionsByIDParams struct {
+	ProjectID     uuid.UUID   `json:"projectId"`
+	EnvironmentID uuid.UUID   `json:"environmentId"`
+	Objects       []uuid.UUID `json:"objects"`
+}
+
+type ValidationPublishedVersionsByIDRow struct {
+	ObjectID  uuid.UUID `json:"objectId"`
+	VersionID uuid.UUID `json:"versionId"`
+	Body      []byte    `json:"body"`
+	Path      *string   `json:"path"`
+	Certified bool      `json:"certified"`
+	Deleted   bool      `json:"deleted"`
+}
+
+func (q *Queries) ValidationPublishedVersionsByID(ctx context.Context, arg ValidationPublishedVersionsByIDParams) ([]ValidationPublishedVersionsByIDRow, error) {
+	rows, err := q.db.Query(ctx, validationPublishedVersionsByID, arg.ProjectID, arg.EnvironmentID, arg.Objects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ValidationPublishedVersionsByIDRow
+	for rows.Next() {
+		var i ValidationPublishedVersionsByIDRow
 		if err := rows.Scan(
 			&i.ObjectID,
 			&i.VersionID,

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -327,15 +326,7 @@ func (c *Context) HeadConstraints(ctx context.Context, docs []Document) (map[str
 				continue
 			}
 			for _, otherID := range ids[x.schema][:len(ids[x.schema])-1] {
-				other := all[otherID]
-				collision := reflect.DeepEqual(x.data[key], other.data[key])
-				if f["localized"] == true {
-					collision = false
-					for l, value := range object(x.data[key]) {
-						collision = collision || (value != nil && reflect.DeepEqual(value, object(other.data[key])[l]))
-					}
-				}
-				if collision {
+				if collides(f, x.data[key], all[otherID].data[key]) {
 					out[id.String()] = append(out[id.String()], problem("CONTENT_UNIQUE", ir.Pointer(key), "", map[string]any{"object": otherID}).Diagnostics...)
 				}
 			}

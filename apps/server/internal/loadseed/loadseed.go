@@ -22,6 +22,7 @@ import (
 
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/manifest"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/projects"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
@@ -96,17 +97,24 @@ func text(r *rand.Rand, n int) string {
 func Document(r *rand.Rand) map[string]any {
 	n := 20 + int(280*r.Float64()*r.Float64())
 	nodes := map[string]any{}
+	local := map[string]any{}
 	children := []string{}
+	// Content props take text through bindings to local content, not literals (PROP_CONTENT_LITERAL).
+	bind := func(node, words string) map[string]any {
+		key := "t_" + strings.TrimPrefix(node, "n_")
+		local[key] = map[string]any{"type": "text", "value": map[string]any{"ru": words}}
+		return map[string]any{"text": "$local." + key}
+	}
 	for len(nodes) < n-1 {
 		section := fmt.Sprintf("n_s%d", len(children))
 		heading, para := section+"_h", section+"_t"
-		nodes[heading] = map[string]any{"id": heading, "type": "Heading", "props": map[string]any{"level": 2, "text": text(r, 4)}}
-		nodes[para] = map[string]any{"id": para, "type": "Text", "props": map[string]any{"text": text(r, 30)}}
+		nodes[heading] = map[string]any{"id": heading, "type": "Heading", "props": map[string]any{"level": 2}, "bindings": bind(heading, text(r, 4))}
+		nodes[para] = map[string]any{"id": para, "type": "Text", "bindings": bind(para, text(r, 30))}
 		nodes[section] = map[string]any{"id": section, "type": "Stack", "props": map[string]any{"direction": "vertical"}, "children": []string{heading, para}}
 		children = append(children, section)
 	}
 	nodes["n_root"] = map[string]any{"id": "n_root", "type": "Stack", "props": map[string]any{"direction": "vertical"}, "children": children}
-	return map[string]any{"irVersion": "1.0", "kind": "page", "root": "n_root", "nodes": nodes}
+	return map[string]any{"irVersion": "1.0", "kind": "page", "root": "n_root", "nodes": nodes, "localContent": local}
 }
 
 // Entity — тело сущности Article.
@@ -158,6 +166,26 @@ func seedProject(ctx context.Context, pool *pgxpool.Pool, cfg Config, p int) (Pr
 		}
 		if err := copyContent(ctx, tx, cfg, p, boot.ProjectID, boot.ActorID, staging.ID, publication); err != nil {
 			return err
+		}
+		// NFR-006/007 publish without reviewers, as the e2e and integration stands do.
+		if _, err := tx.Exec(ctx, `UPDATE projects SET settings = jsonb_set(settings, '{approvals}', '{"low":0,"medium":0,"high":0}') WHERE id = $1`, boot.ProjectID); err != nil {
+			return err
+		}
+		// The seed is valid by construction (TestRun checks it in full): record the check
+		// basis of every environment so publications check only their batch and its
+		// dependents, as after a full check (docs/incremental-validation.md).
+		envs, err := q.ListEnvironments(ctx, boot.ProjectID)
+		if err != nil {
+			return err
+		}
+		for _, env := range envs {
+			check, err := validation.LoadSnapshot(ctx, q, boot.ProjectID, env.Name, nil)
+			if err != nil {
+				return err
+			}
+			if err := check.RecordBasis(ctx); err != nil {
+				return err
+			}
 		}
 		secret, hash := auth.NewToken(auth.DeliveryKeyPrefix)
 		if _, err := q.CreateDeliveryKey(ctx, store.CreateDeliveryKeyParams{ID: uuid.Must(uuid.NewV7()), ProjectID: boot.ProjectID,
