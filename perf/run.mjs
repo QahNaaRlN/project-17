@@ -114,8 +114,23 @@ async function main() {
     const server = join(repo, "apps/server");
     run("go", ["build", "-tags", "e2e", "-o", cms, "./cmd/cms"], { cwd: server });
     run("go", ["build", "-o", seedBin, "./cmd/loadseed"], { cwd: server });
-    for (const app of ["@cms/studio", "@cms/store-example", "@cms/check-runner"])
-      run("pnpm", ["--filter", app, "build"], { shell: platform() === "win32" });
+    // turbo builds the workspace packages the apps depend on first (as the E2E job does).
+    run(
+      "pnpm",
+      [
+        "exec",
+        "turbo",
+        "run",
+        "build",
+        "--filter",
+        "@cms/studio",
+        "--filter",
+        "@cms/store-example",
+        "--filter",
+        "@cms/check-runner",
+      ],
+      { shell: platform() === "win32" },
+    );
   }
 
   // 2. Databases: tuned PostgreSQL for the profile size, Redis without persistence.
