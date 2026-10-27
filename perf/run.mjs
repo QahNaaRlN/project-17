@@ -141,6 +141,8 @@ async function main() {
     container("cms-perf-postgres", [
       "-p",
       `${ports.postgres}:5432`,
+      // Docker's default 64 MB /dev/shm breaks parallel queries (SQLSTATE 53100).
+      "--shm-size=1g",
       "-e",
       "POSTGRES_PASSWORD=load",
       "-e",
