@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"net/http"
 	"slices"
 	"time"
@@ -311,7 +314,11 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 	targets = slices.Clone(targets)
 	slices.Sort(targets)
 	targets = slices.Compact(targets)
+	started := time.Now()
 	check, binding, err := environmentCheck(ctx, q, projectID, changesetID, targets, versions)
+	if err == nil {
+		StageDuration(ctx, check.Stage, check.Status, time.Since(started))
+	}
 	if err != nil {
 		return evaluation{}, err
 	}
@@ -337,7 +344,11 @@ func evaluate(ctx context.Context, q *store.Queries, projectID, changesetID uuid
 		return evaluation{}, err
 	}
 	checks := []Check{check}
+	started = time.Now()
 	policy, err := policyCheck(ctx, q, projectID, changesetID, opActors)
+	if err == nil {
+		StageDuration(ctx, policy.Stage, policy.Status, time.Since(started))
+	}
 	if err != nil {
 		return evaluation{}, err
 	}
@@ -872,4 +883,14 @@ func RequireSchemaApprovals(ctx context.Context, q *store.Queries, cs store.Chan
 		return commandbus.NewError(http.StatusConflict, "APPROVAL_ROLES_MISSING", "Нужны действующие согласования", "Согласующие должны сохранять content.publish")
 	}
 	return nil
+}
+
+// stageDuration — STU-597: synchronous stages time their check, asynchronous ones the
+// way from queueing to completion.
+var stageDuration, _ = telemetry.Meter().Float64Histogram("cms.pipeline.stage.duration",
+	metric.WithUnit("s"), metric.WithDescription("Pipeline stage duration by stage and status"))
+
+// StageDuration records one stage result.
+func StageDuration(ctx context.Context, stage, status string, d time.Duration) {
+	stageDuration.Record(ctx, d.Seconds(), metric.WithAttributes(attribute.String("cms.stage", stage), attribute.String("cms.status", status)))
 }

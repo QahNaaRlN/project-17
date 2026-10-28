@@ -523,6 +523,31 @@ it("STU-575/584: check artifacts pass through as PNG or a sandboxed HTML downloa
   for (const bad of [base + "A.png", base + "a.png?x=1", base.replace(check, "bad") + "a.png"])
     expect((await fetch(origin + bad)).status).not.toBe(200);
 });
+it("STU-606: proxied calls start a CMS trace; a server failure logs only its trace id", async () => {
+  const { origin, fetcher } = await setup();
+  await fetch(origin + `/api/studio/api/v1/changesets/${changesetId}/review`);
+  const sent = fetcher.mock.calls.at(-1)![1]!.headers as Record<string, string>;
+  expect(sent.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({ code: "INTERNAL", traceId: "a".repeat(32), detail: "secret" }, { status: 500 }),
+  );
+  expect((await fetch(origin + `/api/studio/api/v1/changesets/${changesetId}/review`)).status).toBe(
+    500,
+  );
+  expect(JSON.parse(String(warn.mock.calls[0]![0]))).toEqual({
+    msg: "cms request failed",
+    status: 500,
+    code: "INTERNAL",
+    traceId: "a".repeat(32),
+  });
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({ code: "NOT_FOUND", traceId: "b".repeat(32) }, { status: 404 }),
+  );
+  await fetch(origin + `/api/studio/api/v1/changesets/${changesetId}/review`);
+  expect(warn).toHaveBeenCalledTimes(1);
+  warn.mockRestore();
+});
 it("STU-071: adapter forwards only narrow validation diagnostics from rejected commands", async () => {
   const { post, fetcher } = await setup();
   fetcher.mockResolvedValueOnce(
@@ -787,6 +812,7 @@ it("STU-001: config и bundle не раскрывают credential; CSP огра
   expect(fetcher.mock.calls[0]![1]!.headers).toEqual({
     Authorization: "Bearer " + config.credential,
     "X-CMS-Project": "store",
+    traceparent: expect.stringMatching(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/),
   });
 });
 it("Host/Origin/Fetch Metadata и пути не дают управлять чужим проектом", async () => {

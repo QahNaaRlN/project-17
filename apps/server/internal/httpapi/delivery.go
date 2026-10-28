@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +46,7 @@ func deliveryRoutes(d Deps) func(chi.Router) {
 	return func(r chi.Router) {
 		r.Use(authenticateDelivery(d))
 		r.Get("/asset/{id}/image", imageModelHandler(d))
+		r.Post("/telemetry", telemetryHandler(d))
 		r.Get("/page", func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Query().Get("path")
 			if !strings.HasPrefix(path, "/") || len(path) > MaxDeliveryPath {
@@ -154,6 +158,7 @@ func deliver(w http.ResponseWriter, r *http.Request, d Deps, v any, err error, s
 func cached(w http.ResponseWriter, r *http.Request, d Deps, kind, key, locale string, pre []string, load func() (any, []string, error)) {
 	a := accessFrom(r.Context())
 	if a.Draft || d.Cache == nil {
+		cacheResult(r, kind, "bypass")
 		v, keys, err := load()
 		deliver(w, r, d, v, err, keys...)
 		return
@@ -162,12 +167,14 @@ func cached(w http.ResponseWriter, r *http.Request, d Deps, kind, key, locale st
 	entryKey := deliverycache.Key(a.ProjectSlug, a.Environment, kind, key, locale)
 	if e := d.Cache.Get(ctx, entryKey); e != nil {
 		w.Header().Set("X-CMS-Cache", "hit")
+		cacheResult(r, kind, "hit")
 		writePublished(w, r, e.Body, e.ETag, e.SurrogateKeys)
 		return
 	}
 	versions, ok := d.Cache.Versions(ctx, pre)
 	v, keys, err := load()
 	if err != nil {
+		cacheResult(r, kind, "error")
 		deliver(w, r, d, nil, err)
 		return
 	}
@@ -181,6 +188,7 @@ func cached(w http.ResponseWriter, r *http.Request, d Deps, kind, key, locale st
 		status = "miss"
 	}
 	w.Header().Set("X-CMS-Cache", status)
+	cacheResult(r, kind, status)
 	writePublished(w, r, body, etag, keys)
 }
 
@@ -295,4 +303,12 @@ func checkChangeset(r *http.Request, a delivery.Access) error {
 			"Параметр changesetId должен совпадать с Change Set preview-токена")
 	}
 	return nil
+}
+
+// cacheRequests — STU-599: Delivery cache outcomes by kind; the hit ratio is computed downstream.
+var cacheRequests, _ = telemetry.Meter().Int64Counter("cms.delivery.cache.requests",
+	metric.WithDescription("Delivery origin cache outcomes"))
+
+func cacheResult(r *http.Request, kind, result string) {
+	cacheRequests.Add(r.Context(), 1, metric.WithAttributes(attribute.String("cms.delivery.kind", kind), attribute.String("cms.cache.result", result)))
 }

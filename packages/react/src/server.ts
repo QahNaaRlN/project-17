@@ -69,6 +69,18 @@ export async function loadPage(
       })),
     );
   await loadPlanImages(cms, plan, options.read);
+  // OPS-023: published renders report their diagnostics; preview drafts do not.
+  if (!options.read?.preview)
+    cms.report?.(
+      plan.diagnostics.map((d) => ({
+        code: d.code,
+        source: d.code.startsWith("CMS_SOURCE_")
+          ? ("source" as const)
+          : d.code.startsWith("CMS_ACTION_")
+            ? ("action" as const)
+            : ("render" as const),
+      })),
+    );
   return plan;
 }
 

@@ -35,6 +35,8 @@ function cms(): CmsClient {
     getRoutes: vi.fn(),
     getImage: vi.fn(),
     clearCache: vi.fn(),
+    report: vi.fn(),
+    flushTelemetry: vi.fn(),
   };
 }
 it("MF-010/SDK-014/033: loadPage загружает данные до SSR и передаёт режим preview без секретов", async () => {
@@ -149,6 +151,10 @@ it.each([null, new Error("private-token-value")])(
     const plan = await loadPage(client, "/a");
     expect(plan!.diagnostics[0]!.code).toBe("CMS_COMPONENT_MISSING");
     expect(JSON.stringify(plan)).not.toContain("private-token-value");
+    // OPS-023: a published render reports its diagnostics for telemetry.
+    expect(client.report).toHaveBeenCalledWith([
+      { code: "CMS_COMPONENT_MISSING", source: "render" },
+    ]);
   },
 );
 it("does not fetch pinned/invalid refs and ignores non-composed nodes", async () => {
@@ -227,4 +233,24 @@ it("bounds component fetch fanout", async () => {
   expect(plan!.roots).toEqual([]);
   expect(plan!.css).toBe("");
   expect(plan!.diagnostics[0]!.code).toBe("CMS_COMPONENT_LOAD_LIMIT");
+});
+
+it("OPS-023: sources and actions are classified; preview renders report nothing", async () => {
+  const client = cms();
+  const response = page();
+  response.diagnostics = [
+    { code: "CMS_SOURCE_TIMEOUT", nodeId: "root", severity: "warning", pointer: "", message: "" },
+    { code: "CMS_ACTION_FAILED", nodeId: "root", severity: "warning", pointer: "", message: "" },
+  ];
+  vi.mocked(client.getPage).mockResolvedValue(response);
+  await loadPage(client, "/a");
+  expect(vi.mocked(client.report).mock.calls[0]![0]).toEqual(
+    expect.arrayContaining([
+      { code: "CMS_SOURCE_TIMEOUT", source: "source" },
+      { code: "CMS_ACTION_FAILED", source: "action" },
+    ]),
+  );
+  const preview = cms();
+  await loadPage(preview, "/a", { read: { preview: { token: "cms_preview_token_value_123" } } });
+  expect(preview.report).not.toHaveBeenCalled();
 });

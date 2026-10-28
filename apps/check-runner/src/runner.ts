@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import type { Browser, Page } from "playwright";
 import { runLighthouse, runVisual } from "./stages.js";
@@ -77,6 +77,8 @@ export function createClient(config: RunnerConfig) {
       headers: {
         Authorization: "Bearer " + config.token,
         "X-CMS-Project": config.project,
+        // STU-606: the CMS continues this trace; an error names it in the runner log.
+        traceparent: `00-${randomBytes(16).toString("hex")}-${randomBytes(8).toString("hex")}-01`,
         ...init.headers,
       },
       signal: AbortSignal.timeout(30_000),
@@ -84,8 +86,13 @@ export function createClient(config: RunnerConfig) {
     const body = (await response.json().catch(() => null)) as {
       result?: T;
       code?: string;
+      traceId?: string;
     } | null;
-    if (!response.ok) throw new Error(`${name}: ${response.status} ${body?.code ?? "UNKNOWN"}`);
+    if (!response.ok)
+      throw new Error(
+        `${name}: ${response.status} ${body?.code ?? "UNKNOWN"}` +
+          (/^[a-f0-9]{32}$/.test(String(body?.traceId)) ? ` trace ${body!.traceId}` : ""),
+      );
     return body?.result;
   };
   const call = async <T>(name: string, payload: unknown): Promise<T> =>

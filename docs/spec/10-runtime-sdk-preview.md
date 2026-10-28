@@ -48,7 +48,10 @@ const cms = createCmsClient({
   project: "store",
   environment: process.env.CMS_ENV!,             // staging | production
   deliveryKey: process.env.CMS_DELIVERY_KEY!,
+  // OPS-023: sampled runtime diagnostics go to …/telemetry (10 % by default; false — off).
+  telemetry: { sampleRate: 0.1 },
 });
+// Before the process exits: await cms.flushTelemetry();
 
 export default async function Route({ params }: { params: { path: string[] } }) {
   const preview = await getPreviewState();          // из cookie, установленной /api/cms/preview

@@ -231,6 +231,7 @@ Authorization: Bearer cms_pub_…
 | Запрос | Описание |
 |---|---|
 | `GET /delivery/v1/{project}/{env}/routes` | Таблица маршрутов (для генерации маршрутизатора / sitemap) |
+| `POST /delivery/v1/{project}/{env}/telemetry` | Диагностика runtime с сервера приложения (OPS-023): только ключ доставки (preview-токен — `403`); `{diagnostics: [{code, count, source?}]}`, ≤ 50 записей и 16 KiB, `count` 1…10 000, `source` — `render`/`source`/`action`; ответ `204`; 10 запросов/с на ключ; сервер только увеличивает счётчик `cms.runtime.diagnostics`, неизвестный код — `OTHER` ([STU-603, 604](../observability.md)) |
 | `GET /delivery/v1/{project}/{env}/entities/{id}?locale=` | Опубликованная сущность |
 | `GET /delivery/v1/{project}/{env}/entities?schema=&filter[field]=&sort=&cursor=` | Простые выборки опубликованных сущностей (REST для простых ресурсов) |
 | `GET /delivery/v1/{project}/{env}/document/{id}` | Документ по ID (компоненты, фрагменты) |
@@ -269,6 +270,8 @@ Authorization: Preview eyJhbGciOi…
 - Таблица маршрутов черновика — маршруты head, переопределённые рабочими версиями Change Set (в том числе снятые маршруты и новые страницы).
 
 ## 6. Ошибки
+
+Ошибки problem+json содержат `traceId` (32 hex) трассы OpenTelemetry рядом с `requestId`; входящий `traceparent` продолжается только для аутентифицированных клиентов `/api/v1` и `/mcp`, Delivery всегда начинает новую трассу ([STU-591, 595](../observability.md)).
 
 Формат — RFC 9457 (`application/problem+json`):
 

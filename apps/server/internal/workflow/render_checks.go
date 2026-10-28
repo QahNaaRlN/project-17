@@ -430,6 +430,7 @@ func handleCompleteCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, p com
 	if err := q.FinishRenderCheck(ctx, store.FinishRenderCheckParams{ID: check.ID, Status: p.Status, Details: p.Details}); err != nil {
 		return CompletedCheck{}, err
 	}
+	StageDuration(ctx, check.Stage, p.Status, time.Since(check.CreatedAt))
 	state, err := advanceChecking(ctx, q, cs)
 	if err != nil {
 		return CompletedCheck{}, err

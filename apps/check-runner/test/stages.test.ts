@@ -185,4 +185,17 @@ it("STU-573, 585: the client uploads under the lease and extends it", async () =
   expect(JSON.parse(String(calls[1]!.init.body))).toEqual({
     payload: { checkId: "c", leaseId: "l" },
   });
+  expect((calls[1]!.init.headers as Record<string, string>).traceparent).toMatch(
+    /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/,
+  );
+  const failing = createClient({
+    apiUrl: "http://cms.test",
+    token: "t",
+    project: "store",
+    fetch: async () =>
+      Response.json({ code: "INTERNAL", traceId: "c".repeat(32) }, { status: 500 }),
+  });
+  await expect(failing.extend(leased)).rejects.toThrow(
+    "extend-check-lease: 500 INTERNAL trace " + "c".repeat(32),
+  );
 });
