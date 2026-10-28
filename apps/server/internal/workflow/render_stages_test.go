@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -316,7 +317,7 @@ func strictPage(e *cmstest.Env, path string, extra int) uuid.UUID {
 	ops := []any{map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "path": path, "root": map[string]any{
 		"id": "n_root", "type": "Native", "zone": map[string]any{"id": "strict", "requiredApprovalRole": role.Name, "mode": "STRICT"}}}}}
 	for i := range extra {
-		ops = append(ops, map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "path": path + "/" + string(rune('a'+i)),
+		ops = append(ops, map[string]any{"type": "document.create", "payload": map[string]any{"kind": "page", "path": fmt.Sprintf("%s/p%d", path, i),
 			"root": map[string]any{"id": "n_root", "type": "Box"}}})
 	}
 	e.Must(e.Admin, "apply-operations", map[string]any{"changesetId": c.ID, "expectedSeq": 0, "operations": ops}, nil)
@@ -390,5 +391,126 @@ func TestLighthouseStagePolicy(t *testing.T) {
 	}
 	if lh, _ := stage(t, reviewChecks(t, e, other), workflow.StageLighthouse); lh.Status != "queued" {
 		t.Fatalf("%+v", lh)
+	}
+}
+
+// failingArtifacts fails every object operation.
+type failingArtifacts struct{ memoryArtifacts }
+
+func (f *failingArtifacts) Open(context.Context, string) (io.ReadCloser, int64, error) {
+	return nil, 0, errors.New("storage down")
+}
+func (f *failingArtifacts) Remove(context.Context, string) error { return errors.New("storage down") }
+
+// STU-573, 575, 583, 585: limits, storage and database failures of stage 10–11 artifacts.
+func TestStageArtifactFaults(t *testing.T) {
+	ctx := context.Background()
+	s := &memoryArtifacts{objects: map[string][]byte{}}
+	e, runner := stagesSetup(t, s)
+	cs, doc := routedPage(e, "/faults")
+	if _, err := submit(e, cs, 1); err != nil {
+		t.Fatal(err)
+	}
+	preview := claim(t, e, runner)
+	if err := workflow.PutArtifact(ctx, e.Pool, s, runner, preview.ID, preview.LeaseID, "a.png", "image/png", nil); cmstest.Code(err) != "VALIDATION_FAILED" {
+		t.Fatal(err)
+	}
+	if _, err := complete(e, runner, preview, "passed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := complete(e, runner, claim(t, e, runner), "passed"); err != nil {
+		t.Fatal(err)
+	}
+	visual := claim(t, e, runner)
+	e.Exec(`INSERT INTO check_artifacts (check_id, name, content_type, size, sha256)
+	  SELECT $1, 'f' || i || '.png', 'image/png', 1, '\x00' FROM generate_series(1, 400) i`, visual.ID)
+	if err := workflow.PutArtifact(ctx, e.Pool, s, runner, visual.ID, visual.LeaseID, "more.png", "image/png", []byte("x")); cmstest.Code(err) != "CHECK_ARTIFACTS_LIMIT" {
+		t.Fatal(err)
+	}
+	e.Exec(`DELETE FROM check_artifacts WHERE check_id = $1`, visual.ID)
+	if err := workflow.PutArtifact(ctx, e.Pool, s, runner, visual.ID, visual.LeaseID, "a.png", "image/png", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	details := map[string]any{"pages": []any{map[string]any{"objectId": doc, "path": "/faults", "report": "a.png"}}}
+	if _, err := completeWith(e, runner, visual, "passed", details); err != nil {
+		t.Fatal(err)
+	}
+	// A lost object answers a storage error; a failing store stops the retention batch.
+	broken := &failingArtifacts{}
+	if _, err := workflow.OpenArtifact(ctx, e.Q, broken, e.Admin.ProjectID, cs, visual.ID, "a.png"); err == nil || cmstest.Code(err) != "" {
+		t.Fatal(err)
+	}
+	e.Exec(`UPDATE checks SET finished_at = now() - interval '100 days' WHERE id = $1`, visual.ID)
+	e.Exec(`UPDATE changesets SET state = 'abandoned' WHERE id = $1`, cs)
+	if err := workflow.ExpireArtifacts(ctx, e.Pool, broken, time.Now()); err == nil {
+		t.Fatal("retention ignored a storage failure")
+	}
+	w := &workflow.ArtifactRetentionWorker{Pool: e.Pool, Store: s}
+	if (workflow.ArtifactRetentionArgs{}).Kind() != "check_artifact_retention" || w.Work(ctx, nil) != nil || len(s.objects) != 0 {
+		t.Fatal(s.objects)
+	}
+
+	for name, brk := range map[string]func(*cmstest.Env){
+		"checks":    func(e *cmstest.Env) { e.Break("checks", "") },
+		"artifacts": func(e *cmstest.Env) { e.Break("check_artifacts", "") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, runner := stagesSetup(t, s)
+			cs, _ := routedPage(e, "/db")
+			if _, err := submit(e, cs, 1); err != nil {
+				t.Fatal(err)
+			}
+			passRender(t, e, runner)
+			c := claim(t, e, runner)
+			brk(e)
+			cmstest.ExpectDBError(t, workflow.PutArtifact(ctx, e.Pool, s, runner, c.ID, c.LeaseID, "a.png", "image/png", []byte("x")))
+			if name == "checks" {
+				cmstest.ExpectDBError(t, e.Do(runner, "extend-check-lease", map[string]any{"checkId": c.ID, "leaseId": c.LeaseID}, nil))
+			}
+			_, err := workflow.OpenArtifact(ctx, e.Q, s, e.Admin.ProjectID, cs, c.ID, "a.png")
+			cmstest.ExpectDBError(t, err)
+			cmstest.ExpectDBError(t, workflow.ExpireArtifacts(ctx, e.Pool, s, time.Now()))
+		})
+	}
+	for name, brk := range map[string]func(*cmstest.Env){
+		"read":     func(e *cmstest.Env) { e.Break("projects", "") },
+		"write":    func(e *cmstest.Env) { e.Break("projects", "UPDATE") },
+		"settings": func(e *cmstest.Env) { e.Exec("UPDATE projects SET settings = '[]'") },
+	} {
+		t.Run("policy-"+name, func(t *testing.T) {
+			e, _ := stagesSetup(t, nil)
+			brk(e)
+			cmstest.ExpectDBError(t, e.Do(e.Admin, "set-check-policy", map[string]any{"lighthouse": map[string]any{}}, nil))
+		})
+	}
+	t.Run("submit-settings", func(t *testing.T) {
+		e, _ := stagesSetup(t, nil)
+		cs, _ := routedPage(e, "/settings")
+		e.Exec("UPDATE projects SET settings = '[]'")
+		cmstest.ExpectDBError(t, func() error { _, err := submit(e, cs, 1); return err }())
+	})
+}
+
+// STU-579, 582: more than 50 pages fail stage 8 and skip stages 10–11; a missing address
+// skips stage 11 of a high-risk change.
+func TestStageSkipsForFailedRender(t *testing.T) {
+	e, _ := stagesSetup(t, &memoryArtifacts{objects: map[string][]byte{}})
+	cs := strictPage(e, "/many", 50)
+	r, err := submit(e, cs, 51)
+	if err != nil || r.Changeset.State != "failed" {
+		t.Fatal(r, err)
+	}
+	for _, name := range []string{workflow.StageVisual, workflow.StageLighthouse} {
+		if _, d := stage(t, r.Checks, name); d["reason"] != "PREVIEW_FAILED" {
+			t.Fatal(name, d)
+		}
+	}
+	e.Exec("UPDATE environments SET app_url = NULL WHERE project_id = $1", e.Admin.ProjectID)
+	other := strictPage(e, "/noapp", 0)
+	if r, err = submit(e, other, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, d := stage(t, r.Checks, workflow.StageLighthouse); d["reason"] != "CHECK_APP_URL_MISSING" {
+		t.Fatal(d)
 	}
 }

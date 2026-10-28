@@ -910,7 +910,7 @@ test("§2: stages 10–11 compare screenshots and score the changed page", async
             bindings: Object.fromEntries(
               ["title", "subtitle", "description", "ctaLabel"].map((k) => [
                 k,
-                "$local.t_strict_" + k,
+                "$local.t_strict_" + k.toLowerCase(),
               ]),
             ),
           },
@@ -920,7 +920,7 @@ test("§2: stages 10–11 compare screenshots and score the changed page", async
         type: "localContent.set",
         target: state.page,
         payload: {
-          key: "t_strict_" + k,
+          key: "t_strict_" + k.toLowerCase(),
           type: "text",
           value: { ru: "Строгий блок: " + k, en: "Strict block: " + k },
         },
