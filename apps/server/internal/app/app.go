@@ -101,6 +101,9 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout 
 	return ErrUsage
 }
 
+// e2eArtifacts is set only by the e2e build (e2e_artifacts.go).
+var e2eArtifacts func() workflow.ArtifactStore
+
 func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(string)) error {
 	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -109,11 +112,16 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	defer pool.Close()
 
 	assetService := &assets.Service{Pool: pool}
+	// The same bucket keeps check artifacts (07 §5); without it stage 10 is skipped (STU-572).
+	var artifacts workflow.ArtifactStore
 	if cfg.S3Endpoint != "" {
-		assetService.Storage, err = assets.NewS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Secure)
+		s3, err := assets.NewS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Secure)
 		if err != nil {
 			return err
 		}
+		assetService.Storage, artifacts = s3, s3
+	} else if e2eArtifacts != nil {
+		artifacts = e2eArtifacts()
 	}
 	var purger jobs.Purger = jobs.LogPurger{Log: log}
 	var images *imagedelivery.Service
@@ -159,7 +167,9 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return river.AddWorkerSafely(w, &capabilities.PreviewExpiryWorker{Pool: pool})
 	}, func(w *river.Workers) error {
 		return river.AddWorkerSafely(w, &capabilities.FulfillmentWorker{Service: capabilityFulfillment})
-	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, &workflow.RenderLeaseWorker{Pool: pool}) })
+	}, func(w *river.Workers) error { return river.AddWorkerSafely(w, &workflow.RenderLeaseWorker{Pool: pool}) }, func(w *river.Workers) error {
+		return river.AddWorkerSafely(w, &workflow.ArtifactRetentionWorker{Pool: pool, Store: artifacts})
+	})
 	if err != nil {
 		return err
 	}
@@ -171,6 +181,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) { return capabilities.PreviewExpiryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-preview-expiry", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) { return capabilities.DeliveryRecoveryArgs{}, nil }, &river.PeriodicJobOpts{ID: "capability-delivery-recovery", RunOnStart: true}))
 	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) { return workflow.RenderLeaseArgs{}, nil }, &river.PeriodicJobOpts{ID: "render-check-leases", RunOnStart: true}))
+	queue.PeriodicJobs().Add(river.NewPeriodicJob(river.PeriodicInterval(24*time.Hour), func() (river.JobArgs, *river.InsertOpts) { return workflow.ArtifactRetentionArgs{}, nil }, &river.PeriodicJobOpts{ID: "check-artifact-retention", RunOnStart: true}))
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
@@ -181,6 +192,9 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 
 	realtime.Register(bus)
 	bus.WithContext(jobs.WithClient(queue))
+	if artifacts != nil {
+		bus.WithContext(workflow.WithArtifacts(artifacts))
+	}
 	projects.RegisterWith(bus, projects.Preview{Source: capabilityGithub.PreviewSource, Origins: cfg.PreviewOrigins})
 	identity.Register(bus)
 	changes.Register(bus)
@@ -216,7 +230,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 	}
 	srv := &http.Server{
 		Handler: httpapi.NewRouter(httpapi.Deps{Pool: pool, Bus: bus, Log: log, Version: Version, Assets: assetService, Images: images, Identity: identities, Agents: agentService, CapabilityGithub: capabilityGithub, CapabilityDelivery: capabilityDelivery,
-			Cache: cache, Limiter: ratelimit.New(redis), Limits: cfg.RateLimits}),
+			Cache: cache, Limiter: ratelimit.New(redis), Limits: cfg.RateLimits, Artifacts: artifacts}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)

@@ -84,10 +84,10 @@ func TestRenderChecksLeaseCompleteAndPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Changeset.State != "checking" || len(r.Checks) != 4 {
+	if r.Changeset.State != "checking" || len(r.Checks) != 6 {
 		t.Fatalf("%+v", r)
 	}
-	for _, c := range r.Checks[2:] {
+	for _, c := range r.Checks[2:4] {
 		if c.Environment != "staging" || c.Status != "queued" || !c.Blocking {
 			t.Fatalf("%+v", c)
 		}
@@ -133,7 +133,7 @@ func TestRenderChecksLeaseCompleteAndPublish(t *testing.T) {
 		t.Fatalf("%+v", empty)
 	}
 	detail, err := workflow.GetReview(context.Background(), e.Q, e.Admin.ProjectID, cs)
-	if err != nil || len(detail.Checks) != 4 {
+	if err != nil || len(detail.Checks) != 6 {
 		t.Fatal(detail, err)
 	}
 	reviewer := e.Human("Reviewer", auth.ContentPublish, auth.DesignRead, auth.ContentRead)

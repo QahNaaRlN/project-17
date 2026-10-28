@@ -9,6 +9,10 @@ import {
   policyViolations,
   renderCheckPages,
   renderCheckReason,
+  visualPages,
+  lighthousePages,
+  lighthouseThresholds,
+  artifactUrl,
 } from "../src/review.js";
 import { fixture, changesetId, documentId } from "./fixture.js";
 import { StudioError, type Review } from "../src/types.js";
@@ -166,4 +170,101 @@ it("STU-494: render check details become safe text per page", () => {
         changesetId,
       ),
     ).toThrow(StudioError);
+});
+it("STU-584: stage 10–11 details are parsed into safe pages, changed pages first", () => {
+  const details = {
+    pages: [
+      {
+        path: "/same",
+        widths: [
+          {
+            width: 375,
+            baseline: "published",
+            changedRatio: 0,
+            artifacts: { after: "00-same-375-after.png" },
+          },
+        ],
+      },
+      {
+        path: "/shop",
+        widths: [
+          {
+            width: 375,
+            baseline: "published",
+            changedRatio: 0.25,
+            artifacts: {
+              before: "01-shop-375-before.png",
+              after: "01-shop-375-after.png",
+              diff: "../x",
+            },
+          },
+          { width: 768, error: "timeout" },
+          { width: 999, baseline: "published" },
+        ],
+      },
+      {
+        path: "/new",
+        widths: [{ width: 1440, baseline: "none", artifacts: { after: "02-new-1440-after.png" } }],
+      },
+      { path: 1, widths: [] },
+    ],
+  };
+  const pages = visualPages(details);
+  expect(pages.map((p) => p.path)).toEqual(["/shop", "/same", "/new"]);
+  expect(pages[0]!.widths).toEqual([
+    {
+      width: 375,
+      baseline: "published",
+      changedRatio: 0.25,
+      error: false,
+      artifacts: { before: "01-shop-375-before.png", after: "01-shop-375-after.png" },
+    },
+    { width: 768, baseline: "none", changedRatio: null, error: true, artifacts: {} },
+  ]);
+  expect(visualPages(null)).toEqual([]);
+  const lighthouse = {
+    pages: [
+      {
+        path: "/shop",
+        scores: { performance: 0.42, accessibility: 2 },
+        report: "00-shop-lighthouse.html",
+      },
+      { path: "/broken", reason: "PREVIEW_FAILED", report: "<x>" },
+      { path: "/slow", error: "timeout" },
+    ],
+    thresholds: {
+      performance: { min: 0.5, blocking: false },
+      accessibility: { min: 0.9, blocking: true },
+    },
+  };
+  expect(lighthousePages(lighthouse)).toEqual([
+    {
+      path: "/shop",
+      scores: { performance: 0.42 },
+      report: "00-shop-lighthouse.html",
+      reason: null,
+      error: false,
+    },
+    { path: "/broken", scores: {}, report: null, reason: "PREVIEW_FAILED", error: false },
+    { path: "/slow", scores: {}, report: null, reason: null, error: true },
+  ]);
+  expect(lighthousePages({})).toEqual([]);
+  expect(lighthouseThresholds(lighthouse)).toEqual(lighthouse.thresholds);
+  expect(lighthouseThresholds({ thresholds: { performance: { min: 5 } } })).toEqual({});
+  const check = "0193a5d6-7a8b-7c9d-8e0f-123456789abc";
+  expect(artifactUrl(changesetId, check, "a.png")).toBe(
+    `/api/studio/api/v1/changesets/${changesetId}/checks/${check}/artifacts/a.png`,
+  );
+  expect(artifactUrl(changesetId, check, "../a.png")).toBeNull();
+  expect(artifactUrl("bad", check, "a.png")).toBeNull();
+  const review = fixture().review;
+  expect(() =>
+    validateReview(
+      {
+        ...review,
+        checks: [{ id: "bad", stage: "visual", status: "queued", blocking: false, details: {} }],
+      },
+      changesetId,
+    ),
+  ).toThrow(StudioError);
 });

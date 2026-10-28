@@ -128,7 +128,7 @@ func Register(bus *commandbus.Bus) {
 		Validate: validatePolicy,
 		Handle:   handleSetPolicy,
 	})
-	// STU-485/486: the check runner leases and completes stage 8–9 checks.
+	// STU-485/486: the check runner leases and completes stage 8–11 checks.
 	commandbus.Register(bus, commandbus.Command[struct{}, ClaimedCheck]{
 		Name:   "claim-check",
 		Right:  auth.ChecksRun,
@@ -139,6 +139,18 @@ func Register(bus *commandbus.Bus) {
 		Right:  auth.ChecksRun,
 		Handle: handleCompleteCheck,
 	})
+	// STU-585: long stage 10–11 checks extend their lease.
+	commandbus.Register(bus, commandbus.Command[extendPayload, ExtendedLease]{
+		Name:   "extend-check-lease",
+		Right:  auth.ChecksRun,
+		Handle: handleExtendLease,
+	})
+	commandbus.Register(bus, commandbus.Command[CheckPolicy, CheckPolicy]{
+		Name:     "set-check-policy",
+		Right:    auth.ProjectAdmin,
+		Validate: validateCheckPolicy,
+		Handle:   handleSetCheckPolicy,
+	})
 }
 
 type changesetRef struct {
@@ -148,6 +160,8 @@ type changesetRef struct {
 
 // Check — результат этапа проверки.
 type Check struct {
+	// ID addresses the artifacts of stage 10–11 checks (STU-575); empty before storage.
+	ID       uuid.UUID       `json:"id,omitzero"`
 	Stage    string          `json:"stage"`
 	Status   string          `json:"status"`
 	Blocking bool            `json:"blocking"`
@@ -736,7 +750,7 @@ func ListChecks(ctx context.Context, q *store.Queries, cs store.Changeset) ([]Ch
 	}
 	out := make([]Check, len(rows))
 	for i, r := range rows {
-		out[i] = Check{Stage: r.Stage, Status: r.Status, Blocking: r.Blocking, Details: r.Details, Environment: r.Environment,
+		out[i] = Check{ID: r.ID, Stage: r.Stage, Status: r.Status, Blocking: r.Blocking, Details: r.Details, Environment: r.Environment,
 			Stale: r.Status == "queued" && time.Since(r.CreatedAt) > renderStaleAfter}
 	}
 	return out, nil

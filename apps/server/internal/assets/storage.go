@@ -52,3 +52,8 @@ func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64, mime 
 	_, err := s.client.PutObject(ctx, s.bucket, key, r, size, minio.PutObjectOptions{ContentType: mime})
 	return err
 }
+
+// Remove deletes an object; a missing object is not an error (S3 semantics).
+func (s *S3) Remove(ctx context.Context, key string) error {
+	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+}

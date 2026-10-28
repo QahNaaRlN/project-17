@@ -491,6 +491,38 @@ it("STU-070/071/072/073/074: review and workflow stay within the configured adap
     ).status,
   ).toBe(404);
 });
+it("STU-575/584: check artifacts pass through as PNG or a sandboxed HTML download", async () => {
+  const { origin, fetcher } = await setup();
+  const check = "0193a5d6-7a8b-7c9d-8e0f-123456789abc";
+  const base = `/api/studio/api/v1/changesets/${changesetId}/checks/${check}/artifacts/`;
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } }),
+  );
+  const png = await fetch(origin + base + "00-shop-375-diff.png");
+  expect(png.status).toBe(200);
+  expect(png.headers.get("content-type")).toBe("image/png");
+  expect(png.headers.get("cache-control")).toBe("private, max-age=3600");
+  expect([...new Uint8Array(await png.arrayBuffer())]).toEqual([137, 80, 78, 71]);
+  expect(String(fetcher.mock.calls.at(-1)![0])).toBe(
+    `${config.baseUrl}/api/v1/changesets/${changesetId}/checks/${check}/artifacts/00-shop-375-diff.png`,
+  );
+  fetcher.mockImplementationOnce(
+    async () => new Response("<html>", { headers: { "Content-Type": "text/html" } }),
+  );
+  const html = await fetch(origin + base + "00-shop-lighthouse.html");
+  // A local HTML filter (AdGuard) may append to the policy; the adapter sends "sandbox".
+  expect(html.headers.get("content-security-policy")).toMatch(/^sandbox/);
+  expect(html.headers.get("content-disposition")).toBe(
+    'attachment; filename="00-shop-lighthouse.html"',
+  );
+  fetcher.mockImplementationOnce(
+    async () => new Response("x", { headers: { "Content-Type": "text/javascript" } }),
+  );
+  expect((await fetch(origin + base + "evil.js")).status).toBe(502);
+  for (const bad of [base + "A.png", base + "a.png?x=1", base.replace(check, "bad") + "a.png"])
+    expect((await fetch(origin + bad)).status).not.toBe(200);
+});
 it("STU-071: adapter forwards only narrow validation diagnostics from rejected commands", async () => {
   const { post, fetcher } = await setup();
   fetcher.mockResolvedValueOnce(

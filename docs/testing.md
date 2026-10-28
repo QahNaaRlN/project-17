@@ -67,12 +67,14 @@
 - Сценарий §2 ([e2e-scenario.md](e2e-scenario.md)) идёт против стенда
   [`scripts/e2e-stand.mjs`](../scripts/e2e-stand.mjs): CMS с тегом сборки `e2e`,
   PostgreSQL, Studio, витрины staging и production, локальный OIDC (Alice, Bob,
-  Erin), приёмник CDN purge, сервер фактов GitHub и исполнитель проверок этапов 8–9
-  (`apps/check-runner`). Повторов проверок нет (`retries: 0`); незавершённые части —
+  Erin), приёмник CDN purge, сервер фактов GitHub и исполнитель проверок этапов 8–11
+  (`apps/check-runner`); артефакты этапов 10–11 e2e-сборка CMS пишет в каталог стенда
+  (`CMS_E2E_ARTIFACTS_DIR`). Повторов проверок нет (`retries: 0`); незавершённые части —
   только через реестр `e2e/scenario/pending.ts` (с этапами 8–9 он пуст).
   Измерения времени — в `e2e-metrics.json`.
 - Тесты исполнителя проверок (`apps/check-runner`) рендерят фикстурное приложение
-  в настоящем Chromium; в CI браузер ставится до `pnpm test`.
+  в настоящем Chromium, включая сравнение скриншотов и Lighthouse; в CI браузер ставится
+  до `pnpm test`.
 - Командные тесты Go (`cmstest`) выключают этапы 8–9 строкой таблицы `project_render_checks`;
   тесты этапов включают его, задают адрес приложения и выступают исполнителем.
 
@@ -137,7 +139,7 @@ CMS_DATABASE_URL=postgres://postgres:local@127.0.0.1:5432/e2e pnpm e2e:scenario
 |---|---|---|
 | `CI` | каждый PR, пуш в `main` и `dev` | TS и Go: формат (Prettier, gofmt), линтеры (ESLint, `go vet`), типы, тесты с порогами покрытия, сборка, актуальность сгенерированных файлов |
 | `CI` → `Security` | каждый PR, пуш в `main` и `dev` | `pnpm audit` с исключениями (`scripts/security-audit.mjs`, `security/exceptions.json`), `govulncheck` тулчейном модуля, Trivy для образа сервера; high/critical не исключаются ([STU-500](security-hardening.md)); обязательная проверка для PR в `dev` и `main` |
-| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL и Redis как `services`, исполнитель проверок этапов 8–9 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
+| `CI` → `E2E scenario (§2)` | каждый PR, пуш в `main` и `dev` | Сценарий §2 против настоящего стенда (PostgreSQL и Redis как `services`, исполнитель проверок этапов 8–11 `apps/check-runner`), артефакт `e2e-scenario`: журналы, трассы, видео, скриншоты шагов, `e2e-metrics.json`; обязательная проверка для PR в `dev` и `main` |
 | `Load` | еженедельно (среда), вручную, метка `load` на PR | `pnpm load`: профиль 01 §5, k6 и сценарий §2 под нагрузкой, пороги NFR-001…007 ([спецификация](load-tests.md), [отчёт](load-test-report.md)); артефакт `load-results`; не обязательная проверка |
 | `Mutation` | еженедельно (понедельник), вручную | Stryker и Gremlins во всех пакетах со скриптом `test:mutation`; отчёты — артефакт запуска; падение при оценке ниже порога |
 

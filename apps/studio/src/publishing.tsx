@@ -1,3 +1,4 @@
+import { LighthouseCheck, VisualCheck } from "./check-artifacts.js";
 import { ReviewDiff } from "./review-diff-panel.js";
 import type { Api } from "./types.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -74,6 +75,8 @@ const copy = {
       policy: "Права и правила проекта",
       preview: "Сборка страниц (этап 8)",
       axe: "Доступность axe (этап 9)",
+      visual: "Сравнение скриншотов (этап 10)",
+      lighthouse: "Lighthouse (этап 11)",
     },
     renderStale: "Исполнитель проверок не забирает проверку больше 15 минут.",
     checkingHint: "Согласование станет доступно, когда проверки страниц завершатся.",
@@ -162,6 +165,8 @@ const copy = {
       policy: "Permissions and project rules",
       preview: "Page render (stage 8)",
       axe: "Accessibility axe (stage 9)",
+      visual: "Screenshot comparison (stage 10)",
+      lighthouse: "Lighthouse (stage 11)",
     },
     renderStale: "No check runner has taken this check for over 15 minutes.",
     checkingHint: "Approval becomes available when page checks finish.",
@@ -203,7 +208,10 @@ export function PublishingPanel({
   const state = useStore(editor.store),
     session = state.session,
     t = copy[state.locale];
-  const checking = session?.changeset.state === "checking";
+  // STU-571: a non-blocking stage 10 check may finish after review began.
+  const checking =
+    session?.changeset.state === "checking" ||
+    !!session?.review?.checks.some((c) => c.status === "queued" || c.status === "running");
   // STU-494: the check runner decides stages 8–9 in the background; the work view has no
   // event stream, so the review is reread while the draft is being checked.
   useEffect(() => {
@@ -512,11 +520,28 @@ export function PublishingPanel({
               {(t.status as Record<string, string>)[c.status] ?? c.status}
               {renderCheckReason(c.details) && <code> {renderCheckReason(c.details)}</code>}
               {c.stale && <span role="status"> {t.renderStale}</span>}
-              {renderCheckPages(c.details).map((p) => (
-                <div key={p.path}>
-                  <code>{p.path}</code>: {p.problems.join(", ")}
-                </div>
-              ))}
+              {c.stage === "visual" ? (
+                <VisualCheck
+                  locale={state.locale}
+                  changesetId={review.changeset.id}
+                  checkId={c.id}
+                  details={c.details}
+                  status={c.status}
+                />
+              ) : c.stage === "lighthouse" ? (
+                <LighthouseCheck
+                  locale={state.locale}
+                  changesetId={review.changeset.id}
+                  checkId={c.id}
+                  details={c.details}
+                />
+              ) : (
+                renderCheckPages(c.details).map((p) => (
+                  <div key={p.path}>
+                    <code>{p.path}</code>: {p.problems.join(", ")}
+                  </div>
+                ))
+              )}
             </li>
           ))}
         </ul>

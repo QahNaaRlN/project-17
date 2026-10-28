@@ -525,6 +525,10 @@ projects/{projectId}/context-packs/{capabilityRequestId}.json
 ```
 
 Бакеты закрыты; доступ — через pre-signed URL (загрузка) и CDN с подписанными URL (выдача ассетов).
+Артефакты проверок (`checks/…`, этапы 10–11) загружает исполнитель и читает Studio только через
+CMS; записи — в `check_artifacts`; через 90 дней после финального состояния CS или замены
+проверки объекты удаляются, у проверки остаётся `artifacts_expired_at`
+([STU-572…575, 583](../pipeline-visual-lighthouse.md)).
 
 ## 6. Резервное копирование
 

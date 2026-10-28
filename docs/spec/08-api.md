@@ -146,7 +146,9 @@ X-CMS-Project: store
 | `create-environment` / `delete-environment` | `name`, `kind`, `appUrl` | `project.admin`; для `preview` — `manifest.register` |
 | `set-environment-app-url` | `environment`, `appUrl` | `project.admin`; адрес приложения стандартного окружения для этапов 8–9 ([STU-481](../pipeline-render-checks.md)) |
 | `claim-check` | — | `checks.run`, только сервисный актор исполнителя; аренда проверки этапа 8–9 на 5 мин, страницы и preview-токен; пустая очередь — `check: null` ([STU-485](../pipeline-render-checks.md)) |
-| `complete-check` | `checkId`, `leaseId`, `status`, `details` | `checks.run`; результат по действующей аренде, затем пересчёт состояния CS ([STU-486](../pipeline-render-checks.md)) |
+| `complete-check` | `checkId`, `leaseId`, `status`, `details` | `checks.run`; результат по действующей аренде, затем пересчёт состояния CS ([STU-486](../pipeline-render-checks.md)); для этапов 10–11 все названные в `details` артефакты должны быть загружены, иначе `422 CHECK_ARTIFACT_MISSING` ([STU-574](../pipeline-visual-lighthouse.md)) |
+| `extend-check-lease` | `checkId`, `leaseId` | `checks.run`; продление аренды на 5 мин, не дольше лимита этапа (8–9 — 10 мин, 10–11 — 15 мин) ([STU-585](../pipeline-visual-lighthouse.md)) |
+| `set-check-policy` | `lighthouse: {performance, accessibility: {min, blocking}}` | `project.admin`; пороги этапа 11, `min` ∈ [0, 1]; действуют для следующих подач ([STU-582](../pipeline-visual-lighthouse.md)) |
 | `set-policy` | `body` | `project.admin` |
 
 ## 4. Query API
@@ -171,6 +173,8 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/history?beforeSeq=` | Метаданные 20 целых действий CS и canUndo/canRedo в одном снимке; design.read (STU-050) |
 | `GET /api/v1/changesets/{id}/impact` | Анализ влияния |
 | `GET /api/v1/changesets/{id}/review` | Состояние, риск, проверки, роли/счётчики/история согласований, needsAttention, краткие objects без тел и actions для текущего актора; согласованный снимок без блокировок записи (STU-070) |
+| `GET /api/v1/changesets/{id}/checks/{checkId}/artifacts/{name}` | Скриншот (`image/png`) или отчёт Lighthouse (`text/html`, только скачивание: `Content-Disposition: attachment`, `CSP: sandbox`) проверки CS; право чтения CS; `410 CHECK_ARTIFACT_EXPIRED` после срока хранения ([STU-575](../pipeline-visual-lighthouse.md)) |
+| `PUT /api/v1/checks/{checkId}/artifacts/{name}` | Загрузка артефакта исполнителем: `checks.run`, заголовок `X-CMS-Check-Lease`, `image/png` или `text/html` до 8 МиБ, не больше 400 файлов и 256 МиБ на проверку ([STU-573](../pipeline-visual-lighthouse.md)) |
 | `GET /api/v1/changesets/{id}/diff?environment=` | Реализован: полный индекс сравнения standard CS, база/публикация → рабочие версии, snapshot; [STU-149…161](../studio-review-diff.md) |
 | `GET /api/v1/changesets/{id}/diff/{objectId}?environment=&baseline=&snapshot=&after=&limit=` | Реализован: детали объекта из того же снимка, безопасные значения и курсорная пагинация; [контракт](../studio-review-diff.md#52-детали-объекта) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
@@ -287,9 +291,11 @@ Authorization: Preview eyJhbGciOi…
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` |
 | 403 | `FORBIDDEN`, `POLICY_DENIED`, `APPROVAL_SELF`, `APPROVAL_FORBIDDEN_ACTOR`, `AGENT_QUOTA_EXCEEDED` |
 | 404 | `NOT_FOUND` |
+| 410 | `CHECK_ARTIFACT_EXPIRED` |
 | 409 | `MANIFEST_NOT_READY`, `MANIFEST_BASE_CHANGED`, `CHANGESET_SEQ_CONFLICT`, `CHANGESET_STATE_INVALID`, `CHANGESET_EMPTY`, `CHANGESET_HAS_CONFLICTS`, `REBASE_REQUIRED`, `ROLLBACK_SUPERSEDED`, `PROMOTE_OUTDATED`, `PROMOTE_NOTHING`, `PROMOTE_SNAPSHOT_STALE`, `CHECKS_PENDING`, `CHECK_LEASE_LOST`, `CHECK_APP_URL_MISSING`, `UNIQUE_VIOLATION`, `PATH_TAKEN` |
-| 413 | `LIMIT_EXCEEDED` |
-| 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED`, `CHECKS_FAILED` |
+| 413 | `LIMIT_EXCEEDED`, `CHECK_ARTIFACTS_LIMIT` |
+| 422 | `VALIDATION_FAILED` (с `diagnostics`), `ENVIRONMENT_NOT_PUBLISHABLE`, `PROMOTE_SAME_ENVIRONMENT`, `PROMOTE_NOT_SUPPORTED`, `MANIFEST_BREAKING_IN_USE`, `SCHEMA_VERSION_AHEAD`, `REFERENCE_UNPUBLISHED`, `CHECKS_FAILED`, `CHECK_ARTIFACT_MISSING` |
+| 503 | `CHECK_ARTIFACTS_UNAVAILABLE` |
 | 429 | `RATE_LIMITED` (с `Retry-After`) |
 
 ## 7. Ограничения частоты
