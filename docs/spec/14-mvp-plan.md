@@ -19,7 +19,7 @@
 
 ### Текущее состояние и приоритет — 2026-10-28
 
-Интеграционная база: `dev`, merge `6d49aaa` после PR #96. Выпуск из `main` ещё не отражает реализованный объём `dev`.
+Интеграционная база: `dev`, merge `6f370c2` после PR #101. Выпуск из `main` ещё не отражает реализованный объём `dev`.
 Наличие отдельных пакетов не означает завершение M0…M6: итоговые критерии
 MVP и сквозная автоматическая приёмка ниже остаются обязательными.
 
@@ -31,7 +31,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044 (правка сущности в preview < 1 с: под нагрузкой 0,9–1,9 с) |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81, #87, #90, #93, #96) | Этапы pipeline 10–11, наблюдаемость, ADR, эксперимент |
+| M6. Укрепление | Начат (PR #81, #87, #90, #93, #96, #101) | Наблюдаемость, ADR, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -50,7 +50,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | 2 | [Кэш Delivery на origin (Redis) и лимиты запросов](../delivery-cache-limits.md), STU-520…539 | Выполнено ([PR #93](https://github.com/QahNaaRlN/project-17/pull/93), слит в dev 2026-10-27, merge `9f9a825`): [приёмка](../delivery-cache-limits-acceptance.md), CI итогового SHA пройден (Go coverage 95.0%); сценарий §2 в CI идёт с Redis; измерение NFR-002 — следующий пакет |
 | 3 | [Нагрузочные тесты NFR-001…007 по профилю 01 §5](../load-tests.md), STU-540…559 | Выполнено ([PR #96](https://github.com/QahNaaRlN/project-17/pull/96), слит в dev 2026-10-28, merge `6d49aaa`): `pnpm load`, workflow `Load`, [отчёт](../load-test-report.md); [инкрементальная проверка публикации](../incremental-validation.md); [прогон полного профиля на ветке](https://github.com/QahNaaRlN/project-17/actions/runs/40586196727) подтвердил NFR-001…007, NFR-005 под нагрузкой p95 268 мс. Критерий готовности 2 — после трёх зелёных прогонов `Load` подряд на `dev` |
 | 4 | Три зелёных прогона `Load` подряд на `dev` | Выполнено 2026-10-28 на `ae8cffa`: [1](https://github.com/QahNaaRlN/project-17/actions/runs/40662235558), [2](https://github.com/QahNaaRlN/project-17/actions/runs/40668518655), [3](https://github.com/QahNaaRlN/project-17/actions/runs/40673615041) ([отчёт](../load-test-report.md)); критерий готовности 2 выполнен. Еженедельный прогон по средам остаётся |
-| 5 | [Этапы pipeline 10–11: visual regression и Lighthouse](../pipeline-visual-lighthouse.md), STU-570…589 | Спецификация одобрена 2026-10-28; реализовано в ветке `feature/pipeline-visual-lighthouse` ([PR #101](https://github.com/QahNaaRlN/project-17/pull/101)): сервер, исполнитель, Studio, сценарий §2; CI пройден, [отчёт](../pipeline-visual-lighthouse-acceptance.md); ожидает слияния в dev |
+| 5 | [Этапы pipeline 10–11: visual regression и Lighthouse](../pipeline-visual-lighthouse.md), STU-570…589 | Выполнено ([PR #101](https://github.com/QahNaaRlN/project-17/pull/101), слит в dev 2026-10-28, merge `6f370c2`): сервер, исполнитель, Studio, сценарий §2; [отчёт](../pipeline-visual-lighthouse-acceptance.md), CI итогового SHA пройден (Go coverage 95%) |
 | 6 | Наблюдаемость OPS-020…023 | Нет спецификации; включена в M6 решением 2026-10-27 |
 | 7 | Спецификация по итогам реализации и ADR отступлений | Нет спецификации; критерий готовности 5 |
 | 8 | Набор для эксперимента и пороги Q-08 на утверждение | Нет спецификации; эксперимент проводится после M6 |
@@ -59,7 +59,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 требования есть только у пакетов со спецификацией. Автоматическое выполнение проверяет manifest, а не только
 зелёный CI.
 До полного M4 также остаются каталог и вставка компонентов (решение Q-1
-пакета component.extract), advanced bindings, буфер обмена и wrap. Перед готовностью к эксперименту M6: этапы pipeline 10–11.
+пакета component.extract), advanced bindings, буфер обмена и wrap. Этапы pipeline 8–11 реализованы; этап 12 (внешние проверки приложения) вне MVP-плана M6.
 Внешние OIDC/production endpoints и Figma не считаются настроенными из-за локальной
 приёмки. Оптимизация CI — сопутствующая работа: сохранить исправления registry/CPU,
 затем измерить время и добавить Docker cache без ослабления проверок.
@@ -297,6 +297,14 @@ PostgreSQL, River и Studio (`pnpm e2e:scenario`, стенд `scripts/e2e-stand.
 компонентов. [Локальная приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699)
 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены. После пяти зелёных прогонов подряд (PR #81…#84 и слияния)
 job `E2E scenario (§2)` 2026-10-26 включён обязательной проверкой для PR в `dev` и `main` (решение §11.1).
+
+Пакет M6 — [этапы pipeline 10–11](../pipeline-visual-lighthouse.md),
+STU-570…589: **реализован и слит в dev 2026-10-28 в [PR #101](https://github.com/QahNaaRlN/project-17/pull/101)**, merge `6f370c2`.
+Исполнитель проверок снимает затронутые страницы на 375, 768 и 1440 px против опубликованной
+версии и сравнивает их попиксельно (этап 10, не блокирует); для риска `high` запускает
+Lighthouse с порогами проекта (этап 11). Скриншоты и отчёты — в объектном хранилище
+90 дней, читаются через CMS; в ревью Studio — «до / после / разница» и баллы.
+[Отчёт о приёмке](../pipeline-visual-lighthouse-acceptance.md); CI итогового SHA пройден.
 
 Пакет M6 — [нагрузочные тесты NFR-001…007](../load-tests.md),
 STU-540…559: **реализован и слит в dev 2026-10-28 в [PR #96](https://github.com/QahNaaRlN/project-17/pull/96)**, merge `6d49aaa`.
