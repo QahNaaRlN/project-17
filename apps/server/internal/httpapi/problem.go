@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -21,6 +22,7 @@ type problem struct {
 	Detail    string         `json:"detail,omitempty"`
 	Instance  string         `json:"instance"`
 	RequestID string         `json:"requestId,omitempty"`
+	TraceID   string         `json:"traceId,omitempty"` // STU-595
 	Params    map[string]any `json:"params,omitempty"`
 }
 
@@ -44,6 +46,7 @@ func writeError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err er
 		Detail:    cerr.Detail,
 		Instance:  r.URL.Path,
 		RequestID: middleware.GetReqID(r.Context()),
+		TraceID:   telemetry.TraceID(r.Context()),
 		Params:    cerr.Params,
 	}
 	w.Header().Set("Content-Type", "application/problem+json")

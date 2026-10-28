@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { githubCommands } from "./capability-github.js";
 import { fulfillmentCommands } from "./capability-fulfillment.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -96,6 +97,10 @@ function promotionTargetsValid(config: ServerConfig, local: (url: URL) => boolea
     }
   }
   return true;
+}
+/** A fresh W3C traceparent (sampled) for a call to the CMS. */
+export function traceparent(): string {
+  return `00-${randomBytes(16).toString("hex")}-${randomBytes(8).toString("hex")}-01`;
 }
 export function createStudioHandler(
   input: ServerConfig,
@@ -252,6 +257,8 @@ export function createStudioHandler(
               }
             : { Authorization: "Bearer " + config.credential }),
           "X-CMS-Project": config.project,
+          // STU-606: each proxied call starts a trace the CMS continues.
+          traceparent: traceparent(),
         };
         if (req.method === "GET") {
           if (capabilityRoute || deliveryRoute || githubRoute) {
@@ -835,6 +842,16 @@ export function createStudioHandler(
             const problem = await result.json();
             if (/^[A-Z0-9_]{1,80}$/.test(problem.code)) code = problem.code;
             diagnostics = problemDiagnostics(problem.params);
+            // STU-606: the log line finds the CMS trace; no body, path parameters or secrets.
+            if (result.status >= 500 && /^[a-f0-9]{32}$/.test(String(problem.traceId)))
+              console.warn(
+                JSON.stringify({
+                  msg: "cms request failed",
+                  status: result.status,
+                  code,
+                  traceId: problem.traceId,
+                }),
+              );
           } catch {
             /* safe generic code */
           }

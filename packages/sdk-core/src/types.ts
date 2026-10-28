@@ -38,6 +38,16 @@ export interface ClientOptions {
   timeoutMs?: number;
   maxResponseBytes?: number;
   now?: () => number;
+  /**
+   * OPS-023, STU-605: sampled runtime diagnostics sent with the delivery key; `false`
+   * or `sampleRate: 0` turns it off. Defaults: 10 % of reports, at most every 30 s.
+   */
+  telemetry?: false | { sampleRate?: number; intervalMs?: number; random?: () => number };
+}
+/** A runtime diagnostic for telemetry: its code and where it came from. */
+export interface TelemetryDiagnostic {
+  code: string;
+  source?: "render" | "source" | "action";
 }
 export interface DocumentResponse {
   objectId: string;
@@ -88,4 +98,8 @@ export interface CmsClient {
   getRoutes(options?: ReadOptions): Promise<{ items: Route[] }>;
   getImage(id: string, options?: ImageOptions): Promise<ImageModel | null>;
   clearCache(): void;
+  /** Counts runtime diagnostics for telemetry; never throws and never blocks rendering. */
+  report(diagnostics: readonly TelemetryDiagnostic[]): void;
+  /** Sends the pending diagnostics now (e.g. before the process exits). */
+  flushTelemetry(): Promise<void>;
 }

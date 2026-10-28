@@ -16,6 +16,9 @@
 | `CMS_DATABASE_URL` | — (обязательна) | Строка подключения PostgreSQL 16+ |
 | `CMS_HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
 | `CMS_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; журнал — JSON в stdout |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Адрес OTLP/HTTP (Collector); без него трассировки и метрики выключены ([наблюдаемость](../../docs/observability.md)) |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | все трассы | В production — `parentbased_traceidratio` и `0.1` |
+| `OTEL_SERVICE_NAME`, `CMS_DEPLOYMENT_ENV` | `cms`, — | Ресурс трасс и метрик |
 | `CMS_SHUTDOWN_TIMEOUT` | `15s` | Время на завершение запросов и фоновых задач при остановке |
 | `CMS_CDN_PURGE_URL` | — | Вебхук purge CDN: `POST {"keys": [...]}`; не задан — purge только пишется в журнал |
 | `CMS_CDN_PURGE_TOKEN` | — | Токен вебхука (`Authorization: Bearer`) |

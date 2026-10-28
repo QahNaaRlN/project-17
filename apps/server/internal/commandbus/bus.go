@@ -12,10 +12,17 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -165,8 +172,31 @@ var audited = map[string]string{
 // Dispatch исполняет команду от имени actor. Отказы доступа любого актора пишутся в
 // журнал SEC-005 (STU-505), для агентов — и исчерпание квоты (STU-426).
 func (b *Bus) Dispatch(ctx context.Context, actor auth.Actor, req Request) (Response, error) {
+	// STU-592, 597: a span and the duration per command; the payload never becomes an attribute.
+	start := time.Now()
+	name := req.Name
+	if _, ok := b.handlers[name]; !ok {
+		name = "unknown"
+	}
+	ctx, span := telemetry.Tracer().Start(ctx, "command "+name, trace.WithAttributes(
+		attribute.String("cms.command", name), attribute.String("cms.project_id", actor.ProjectID.String()),
+		attribute.String("cms.actor_kind", string(actor.Kind))))
 	resp, err := b.dispatch(ctx, actor, req)
+	outcome := "ok"
 	var ce *Error
+	if errors.As(err, &ce) {
+		outcome = ce.Code
+	} else if err != nil {
+		outcome = "INTERNAL"
+	}
+	if outcome != "ok" {
+		span.SetStatus(codes.Error, outcome)
+	}
+	span.SetAttributes(attribute.String("cms.outcome", outcome))
+	span.End()
+	commandDuration().Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(
+		attribute.String("cms.command", name), attribute.String("cms.outcome", outcome)))
+	ce = nil
 	if err != nil && errors.As(err, &ce) && (ce.Status == 401 || ce.Status == 403 || actor.Kind == auth.ActorAgent && ce.Status == 429) {
 		data := map[string]any{"code": ce.Code, "command": req.Name}
 		if actor.Kind == auth.ActorAgent {
@@ -311,4 +341,18 @@ func requestHash(req Request) []byte {
 	h.Write([]byte{0})
 	h.Write(compact.Bytes())
 	return h.Sum(nil)
+}
+
+var commandHistogram struct {
+	sync.Once
+	h metric.Float64Histogram
+}
+
+// commandDuration — cms.command.duration (STU-597), created once on first use.
+func commandDuration() metric.Float64Histogram {
+	commandHistogram.Do(func() {
+		commandHistogram.h, _ = telemetry.Meter().Float64Histogram("cms.command.duration",
+			metric.WithUnit("s"), metric.WithDescription("Command duration by type and outcome"))
+	})
+	return commandHistogram.h
 }

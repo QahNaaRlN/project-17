@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"strings"
 	"time"
 
@@ -357,6 +360,7 @@ func (s *Service) Execute(ctx context.Context, id uuid.UUID) error {
 		}
 		answer, providerErr := s.Provider.Complete(ctx, r.Model, messages, Tools())
 		unknown := errors.Is(providerErr, ErrUsageUnknown)
+		recordLLM(ctx, r.Model, answer.Usage, providerErr, unknown)
 		endCtx, endCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		err = s.mutate(endCtx, r, update{UsageID: usageID, Usage: &answer.Usage, Unknown: unknown})
 		endCancel()
@@ -428,3 +432,25 @@ func (s *Service) Execute(ctx context.Context, id uuid.UUID) error {
 	return finish("failed", "AGENT_STEP_LIMIT")
 }
 func mustJSON(v any) json.RawMessage { raw, _ := json.Marshal(v); return raw }
+
+// STU-600: LLM requests and token use by model (models come from configuration).
+var (
+	llmTokens, _   = telemetry.Meter().Int64Counter("cms.llm.tokens", metric.WithDescription("LLM tokens by model and type"))
+	llmRequests, _ = telemetry.Meter().Int64Counter("cms.llm.requests", metric.WithDescription("LLM requests by model and outcome"))
+)
+
+func recordLLM(ctx context.Context, model string, usage Usage, err error, unknown bool) {
+	outcome := "ok"
+	switch {
+	case unknown:
+		outcome = "usage_unknown"
+	case err != nil:
+		outcome = "provider_error"
+	}
+	m := attribute.String("gen_ai.request.model", model)
+	llmRequests.Add(ctx, 1, metric.WithAttributes(m, attribute.String("cms.outcome", outcome)))
+	if !unknown {
+		llmTokens.Add(ctx, int64(usage.Prompt), metric.WithAttributes(m, attribute.String("gen_ai.token.type", "input")))
+		llmTokens.Add(ctx, int64(usage.Completion), metric.WithAttributes(m, attribute.String("gen_ai.token.type", "output")))
+	}
+}

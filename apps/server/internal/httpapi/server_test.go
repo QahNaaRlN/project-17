@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
 	"io"
 	"log/slog"
 	"net/http"
@@ -91,7 +92,7 @@ func setup(t *testing.T, opts ...func(*httpapi.Deps)) env {
 		Handle: func(context.Context, pgx.Tx, auth.Actor, panicPayload) (string, error) { panic("boom") },
 	})
 	logs := &bytes.Buffer{}
-	deps := httpapi.Deps{Pool: pool, Bus: bus, Log: slog.New(slog.NewJSONHandler(logs, nil)), Version: "test", CapabilityDelivery: capDelivery}
+	deps := httpapi.Deps{Pool: pool, Bus: bus, Log: slog.New(telemetry.LogHandler{Handler: slog.NewJSONHandler(logs, nil)}), Version: "test", CapabilityDelivery: capDelivery}
 	for _, opt := range opts {
 		opt(&deps)
 	}

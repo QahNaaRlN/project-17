@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"github.com/riverqueue/river/rivertype"
 	"log/slog"
 	"net/http"
 	"time"
@@ -130,7 +132,7 @@ type Client = river.Client[pgx.Tx]
 
 // NewInserter — клиент, который только ставит задачи (без обработчиков).
 func NewInserter(pool *pgxpool.Pool) (*Client, error) {
-	return river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	return river.NewClient(riverpgxv5.New(pool), &river.Config{Middleware: []rivertype.Middleware{&telemetry.JobInsertMiddleware{}}})
 }
 
 // NewProcessor — клиент, который ставит и исполняет задачи; запускается Start.
@@ -151,6 +153,8 @@ func NewProcessor(pool *pgxpool.Pool, purger Purger, cache Invalidator, log *slo
 		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}, "capability_delivery": {MaxWorkers: 2}, "capability_github": {MaxWorkers: 2}},
 		Workers: workers,
 		Logger:  log,
+		// STU-593: jobs remember the inserting trace; a span per worked job links to it.
+		Middleware: []rivertype.Middleware{&telemetry.JobInsertMiddleware{}, &telemetry.WorkerMiddleware{}},
 	})
 }
 

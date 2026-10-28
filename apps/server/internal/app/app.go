@@ -7,11 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"github.com/qahnaarln/project-17/apps/server/internal/assets"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
 	"github.com/riverqueue/river"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"time"
 
@@ -74,7 +76,8 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout 
 	if err != nil {
 		return err
 	}
-	log := slog.New(slog.NewJSONHandler(stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	// STU-602: records logged with a context carry its trace, project and actor.
+	log := slog.New(telemetry.LogHandler{Handler: slog.NewJSONHandler(stdout, &slog.HandlerOptions{Level: cfg.LogLevel})})
 
 	switch args[0] {
 	case "serve":
@@ -105,6 +108,15 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout 
 var e2eArtifacts func() workflow.ArtifactStore
 
 func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(string)) error {
+	shutdownTelemetry, err := telemetry.Setup(ctx, os.Getenv, Version)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTelemetry(stopCtx)
+	}()
 	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
@@ -171,6 +183,9 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, ready func(
 		return river.AddWorkerSafely(w, &workflow.ArtifactRetentionWorker{Pool: pool, Store: artifacts})
 	})
 	if err != nil {
+		return err
+	}
+	if err := jobs.ObserveQueues(pool); err != nil {
 		return err
 	}
 	githubRecovery.Queue = queue

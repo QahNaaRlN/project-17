@@ -62,5 +62,7 @@ export function cms(): CmsClient {
     getRoutes: vi.fn(),
     getImage: vi.fn().mockResolvedValue(image()),
     clearCache: vi.fn(),
+    report: vi.fn(),
+    flushTelemetry: vi.fn(),
   };
 }

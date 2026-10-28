@@ -141,6 +141,8 @@ cms/
 | OPS-022 | Логи — структурированный JSON с `traceId`, `projectId`, `actorId`; без содержимого контента и секретов. |
 | OPS-023 | SDK отправляет диагностику runtime (неизвестные типы, ошибки источников, ошибки действий) на `POST /delivery/v1/{project}/{env}/telemetry` с семплированием. |
 
+Реализация ([STU-590…609](../observability.md), [локальный запуск](../observability-local.md)): `cms` поднимает OpenTelemetry SDK при `OTEL_EXPORTER_OTLP_ENDPOINT` (OTLP/HTTP, семплер из `OTEL_TRACES_SAMPLER`, в production — 10 %), иначе провайдеры no-op. Спаны: HTTP-запрос с маршрутом-шаблоном, команда Command Bus, SQL-запрос по имени запроса sqlc (без текста и параметров), задача River со ссылкой на поставивший её запрос. Метрики OPS-021 с метками только из фиксированных наборов (без ID проектов и акторов). Логи остаются JSON в stdout и получают `traceId`, `spanId`, `projectId`, `actorId`; экспорт логов по OTLP отложен до выбора хостинга (отступление от NFR-018). Studio BFF и исполнитель проверок передают `traceparent` и пишут `traceId` ошибки CMS в свой журнал. Локальный бэкенд — `grafana/otel-lgtm` (`deploy/compose/docker-compose.observability.yml`).
+
 ## 5. Инфраструктура
 
 ### 5.1. Локальная и первая серверная конфигурация

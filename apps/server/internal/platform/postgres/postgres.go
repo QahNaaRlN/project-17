@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
 	"io/fs"
 	"log/slog"
 	"runtime"
@@ -32,6 +33,8 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: %w", err)
 	}
+	// STU-594: SQL spans inside a trace.
+	cfg.ConnConfig.Tracer = telemetry.QueryTracer{}
 	if !strings.Contains(url, "pool_max_conns") {
 		cfg.MaxConns = int32(max(MinPoolConns, 4*runtime.NumCPU()))
 	}

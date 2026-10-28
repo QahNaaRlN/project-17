@@ -213,8 +213,62 @@ export function createCmsClient(options: ClientOptions): CmsClient {
       controller.abort();
     }
   }
+  // OPS-023, STU-605: diagnostics are aggregated by code and source and sent with the
+  // delivery key at most every intervalMs; sending failures are ignored.
+  const telemetry = options.telemetry === false ? undefined : (options.telemetry ?? {});
+  const sampleRate = telemetry?.sampleRate ?? 0.1;
+  const interval = telemetry?.intervalMs ?? 30_000;
+  input(sampleRate >= 0 && sampleRate <= 1 && positive(interval));
+  const random = telemetry?.random ?? Math.random;
+  const weight = sampleRate > 0 ? Math.max(1, Math.round(1 / sampleRate)) : 0;
+  const pending = new Map<string, { code: string; source: string; count: number }>();
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
+  async function flushTelemetry() {
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+    if (!pending.size || !key) return;
+    const diagnostics = [...pending.values()].slice(0, 50);
+    pending.clear();
+    try {
+      await fetcher(prefix + "telemetry", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ diagnostics }),
+        credentials: "omit",
+        redirect: "error",
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeout),
+      });
+    } catch {
+      /* Telemetry never affects rendering. */
+    }
+  }
   const empty = () => new URLSearchParams();
   return {
+    report(diagnostics) {
+      if (
+        !telemetry ||
+        !key ||
+        weight === 0 ||
+        !Array.isArray(diagnostics) ||
+        random() >= sampleRate
+      )
+        return;
+      for (const d of diagnostics.slice(0, 200)) {
+        if (!d || typeof d.code !== "string" || !/^[A-Z0-9_]{1,64}$/.test(d.code)) continue;
+        const source = ["render", "source", "action"].includes(d.source ?? "")
+          ? d.source!
+          : "render";
+        const entry = pending.get(d.code + " " + source) ?? { code: d.code, source, count: 0 };
+        entry.count = Math.min(10_000, entry.count + weight);
+        pending.set(d.code + " " + source, entry);
+      }
+      if (pending.size && !flushTimer) {
+        flushTimer = setTimeout(() => void flushTelemetry(), interval);
+        (flushTimer as { unref?: () => void }).unref?.();
+      }
+    },
+    flushTelemetry,
     getPage(path, opts = {}) {
       input(
         typeof path === "string" &&

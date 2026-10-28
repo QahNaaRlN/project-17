@@ -6,6 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qahnaarln/project-17/apps/server/internal/platform/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"log/slog"
 	"net/http"
@@ -310,7 +315,41 @@ func NewRouter(d Deps) http.Handler {
 		writeError(w, r, d.Log, commandbus.NewError(http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED",
 			"Метод не поддерживается", fmt.Sprintf("Метод %s недоступен для %s", r.Method, r.URL.Path)))
 	})
-	return r
+	return traced(r)
+}
+
+// tracedRouter serves through the tracing handler and still exposes the chi routes
+// (route walks in tests and tooling).
+type tracedRouter struct {
+	*chi.Mux
+	traced http.Handler
+}
+
+func (t tracedRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) { t.traced.ServeHTTP(w, r) }
+
+// traced — STU-591: a span and the HTTP metrics per request. A traceparent is taken only
+// from authenticated API clients (Studio BFF, the check runner, CI); Delivery and other
+// public routes start a new trace (decision §11.5).
+func traced(next *chi.Mux) http.Handler {
+	h := otelhttp.NewHandler(next, "http",
+		otelhttp.WithPropagators(telemetry.Propagator),
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }))
+	return tracedRouter{Mux: next, traced: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api := strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp"
+		if !api || (r.Header.Get("Authorization") == "" && r.Header.Get("Cookie") == "") {
+			r.Header.Del("traceparent")
+			r.Header.Del("tracestate")
+		}
+		h.ServeHTTP(w, r)
+	})}
+}
+
+// routePattern — the chi route template after routing (`/delivery/v1/{project}/{env}/page`).
+func routePattern(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
+		return rc.RoutePattern()
+	}
+	return "unmatched"
 }
 
 func respond(w http.ResponseWriter, r *http.Request, d Deps, v any, err error) {
@@ -439,7 +478,12 @@ func authenticate(d Deps) func(http.Handler) http.Handler {
 					fmt.Sprintf("Заголовок X-CMS-Project (%q) не совпадает с проектом токена", project)))
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
+			// STU-602: log records of the request carry its project and actor.
+			ctx := telemetry.WithScope(context.WithValue(r.Context(), actorKey{}, actor),
+				telemetry.LogScope{ProjectID: actor.ProjectID.String(), ActorID: actor.ID.String()})
+			trace.SpanFromContext(ctx).SetAttributes(attribute.String("cms.project_id", actor.ProjectID.String()),
+				attribute.String("cms.actor_kind", string(actor.Kind)))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -479,9 +523,19 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
+			// Authentication fills this scope; the summary line below then carries it.
+			r = r.WithContext(telemetry.WithScope(r.Context(), telemetry.LogScope{}))
 			next.ServeHTTP(ww, r)
+			// STU-591, 596: the span and the duration metric carry the route template.
+			route := routePattern(r)
+			span := trace.SpanFromContext(r.Context())
+			span.SetName(r.Method + " " + route)
+			span.SetAttributes(semconv.HTTPRoute(route))
+			if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+				labeler.Add(semconv.HTTPRoute(route))
+			}
 			log.InfoContext(r.Context(), "http request",
-				"method", r.Method, "path", r.URL.Path, "status", ww.Status(),
+				"method", r.Method, "path", r.URL.Path, "route", route, "status", ww.Status(),
 				"bytes", ww.BytesWritten(), "duration", time.Since(start),
 				"requestId", middleware.GetReqID(r.Context()))
 		})
