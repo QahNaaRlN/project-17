@@ -37,6 +37,7 @@ func staged(e *cmstest.Env) (doc uuid.UUID, p1, p2 publishing.Publication) {
 	return doc, p1, p2
 }
 
+// FR-004: production changes pass a Change Set, checks and policy.
 func TestPromoteToProduction(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()

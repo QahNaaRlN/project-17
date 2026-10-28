@@ -18,6 +18,8 @@ func img(t *testing.T, raw string, deleted bool) *Image {
 	}
 	return &Image{Body: v, Meta: map[string]any{"deleted": deleted}, Deleted: deleted}
 }
+
+// CHG-050: structural diff of object versions.
 func TestExactDiffAndValues(t *testing.T) {
 	a := img(t, `{"x":null,"n":1,"big":9007199254740993,"arr":[1,2],"empty":"","zero":0,"flag":false}`, false)
 	b := img(t, `{"n":1.0,"big":9007199254740994,"arr":[2,1],"empty":null,"zero":null,"flag":null}`, false)
@@ -45,6 +47,9 @@ func TestExactDiffAndValues(t *testing.T) {
 		t.Fatal("safe number")
 	}
 }
+
+// FR-022: localized fields in the data model.
+// CNT-032: localization is in the data model from MVP.
 func TestStructureLocalesAndAssetPrivacy(t *testing.T) {
 	a := img(t, `{"root":"r","nodes":{"r":{"id":"r","children":["a","b"]},"a":{"id":"a","type":"Text","props":{"text":"a"}},"b":{"id":"b","type":"Box","slots":{"footer":[]}}},"localContent":{"t_x":{"value":{"ru":"old","en":"same"}}}}`, false)
 	b := img(t, `{"root":"r","nodes":{"r":{"id":"r","children":["b"]},"a":{"id":"a","type":"Text","props":{"text":"changed"},"design":{"gap":2},"bindings":{"text":"$local.x"},"when":true,"behavior":{"click":[]}},"b":{"id":"b","type":"Box","slots":{"footer":["a"]}},"new":{"id":"new","type":"Box"}},"localContent":{"t_x":{"value":{"ru":"new","en":"same"}}}}`, false)

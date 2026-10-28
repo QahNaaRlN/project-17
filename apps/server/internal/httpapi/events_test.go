@@ -61,6 +61,8 @@ func nextEvent(t *testing.T, s *bufio.Scanner, want string) map[string]any {
 	t.Fatalf("missing %s: %v", want, s.Err())
 	return nil
 }
+
+// CHG-042: presence of other users on the document.
 func TestEventsCatchupAndPresence(t *testing.T) {
 	e := setup(t)
 	doc, cs, scope := eventScope(t, e)

@@ -212,6 +212,7 @@ func (f *fixture) grant(t *testing.T, user uuid.UUID, name string, rights ...aut
 }
 
 // STU-080/081/082/084: signed OIDC creates a stable, unprivileged human; sessions are revocable.
+// SEC-001: people sign in only through OIDC; no passwords.
 func TestOIDCSessionLifecycle(t *testing.T) {
 	f := setup(t)
 	cookies, info := f.login(t, "alice")

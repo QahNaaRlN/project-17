@@ -84,6 +84,7 @@ it("STU-102: списки/quote/break/divider, все marks, безопасны�
     ),
   ).toContain('role="img"');
 });
+// SDK-016: rich text renders without dangerouslySetInnerHTML.
 it("STU-102: malformed/HTML отклоняются; page resolver проверяется; anchor учитывает instance", () => {
   for (const value of [
     "<p>html</p>",

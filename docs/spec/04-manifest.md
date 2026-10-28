@@ -181,16 +181,16 @@ export default createRegistry({
 
 ## 4. Система типов
 
-Первый пакет registry реализован в `packages/component-registry`: общие
+Registry — пакет `packages/component-registry`: общие
 объявления native-компонентов, снимок JSON-контрактов, manifest с валидацией и
 каноническим хэшем, runtime-описания и React helper с выводом типов свойств.
 Витрина использует один объект для всех этих путей (MF-010).
-Следующий пакет добавил все типы `t.*`, общий `cms manifest build|push`,
+Он поддерживает все типы `t.*`, общий `cms manifest build|push`,
 автоматический sourceRef и индекс native-компонентов (MF-011), проверку props
 обычных функций и React-компонентов (MF-012), ожидание deployment hash (MF-005).
 `defineAction`/`defineDataSource` используют ту же DSL и входят в manifest/sourceRef
 и индекс. Их контракты проверяются до исполнения в приложении.
-Серверная загрузка code-index реализована через upload-code-index и атомарную
+Серверная загрузка code-index выполняется через upload-code-index и атомарную
 связь при register-manifest. Подтверждение возвращается как codeIndexAvailable
 в Query; исходное uploaded в immutable body/hash не меняется. Границы описаны
 [в контракте CLI](../registry-dsl-cli.md) и [Missing Capability](../studio-missing-capability.md).
@@ -254,9 +254,9 @@ export default createRegistry({
 | Изменён тип результата источника данных (удалено поле) | несовместимое |
 | Удалена поддерживаемая версия IR | несовместимое |
 
-### 5.1.1. Состояние реализации
+### 5.1.1. Уточнения реализации
 
-В Go-пакете `internal/composition/manifest` реализован чистый анализ `Diff` над валидными manifest: JSON Pointer, значения до/после, признаки добавления/удаления и классы `compatible`, `breaking`, `visual`. Изменения значений токенов и breakpoint выделяются как `visual` и не входят в `BreakingChanges`; признак `Schema` и `SchemasChanged` не зависит от совместимости и нужен для MF-025. Пустые и отсутствующие необязательные разделы эквивалентны; результат отсортирован по кодовым единицам UTF-16. Метаданные и имена свойств различаются по структуре формата: свойство с именем `description` не считается описанием компонента.
+В Go-пакете `internal/composition/manifest` выполняется чистый анализ `Diff` над валидными manifest: JSON Pointer, значения до/после, признаки добавления/удаления и классы `compatible`, `breaking`, `visual`. Изменения значений токенов и breakpoint выделяются как `visual` и не входят в `BreakingChanges`; признак `Schema` и `SchemasChanged` не зависит от совместимости и нужен для MF-025. Пустые и отсутствующие необязательные разделы эквивалентны; результат отсортирован по кодовым единицам UTF-16. Метаданные и имена свойств различаются по структуре формата: свойство с именем `description` не считается описанием компонента.
 
 Миграция `00008_manifest_storage.sql` и SQL-запросы добавляют неизменяемое хранение manifest, общий реестр версий standard и отдельные снимки preview. Ограничения БД защищают монотонность версий standard и принадлежность manifest проекту окружения. Слой подключён к `register-manifest`; граница реализации описана в [регистрации manifest](../manifest-registration.md).
 

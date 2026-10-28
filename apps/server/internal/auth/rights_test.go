@@ -40,6 +40,7 @@ func TestAllRightsAreUnique(t *testing.T) {
 	}
 }
 
+// SEC-002: token secrets are stored as SHA-256 only.
 func TestTokens(t *testing.T) {
 	a, hashA := NewToken(ServiceTokenPrefix)
 	b, _ := NewToken(ServiceTokenPrefix)

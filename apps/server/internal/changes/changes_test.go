@@ -129,6 +129,7 @@ func (e *env) body(doc, cs uuid.UUID) string {
 	return string(b)
 }
 
+// IR-001: the IR document is the page; there is no other representation.
 func TestCreateDocumentAndApply(t *testing.T) {
 	e := setup(t)
 	cs := e.createCS("Страница")
@@ -199,6 +200,7 @@ func TestBatchAcrossDocuments(t *testing.T) {
 	}
 }
 
+// IR-003: documents change only through logged operations.
 func TestOperationsAreLoggedWithReason(t *testing.T) {
 	e := setup(t)
 	cs := e.createCS("x")
@@ -248,6 +250,7 @@ func TestBatchIsAtomic(t *testing.T) {
 	}
 }
 
+// CHG-012: every operation is validated over its result.
 func TestOperationInvalidDiagnostics(t *testing.T) {
 	e := setup(t)
 	cs := e.createCS("x")
@@ -308,6 +311,7 @@ func TestApplyErrors(t *testing.T) {
 	}
 }
 
+// CHG-002: working versions are visible only within their Change Set.
 func TestDocumentOfOtherOpenChangesetIsInvisible(t *testing.T) {
 	e := setup(t)
 	a := e.createCS("A")
@@ -565,6 +569,8 @@ func (e *env) commitHead(body string) uuid.UUID {
 	return obj
 }
 
+// CHG-001: committed versions never change.
+// CHG-003: head moves only on merge or rollback.
 func TestChangesOnExistingDocumentDoNotTouchHead(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()

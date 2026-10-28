@@ -30,6 +30,7 @@ func has(r Result, code string) bool {
 }
 
 // DS-020/IR-063: modes are inherited and capped, not supplied by the client per node.
+// FR-013: modes at project, page and zone level.
 func TestModesTypesAndComponents(t *testing.T) {
 	for _, tt := range []struct {
 		policy, zone, typ, code string

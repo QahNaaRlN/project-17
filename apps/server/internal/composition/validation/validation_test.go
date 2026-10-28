@@ -171,6 +171,8 @@ func marshal(node map[string]any, root bool) []byte {
 }
 
 // PUB-010/MF-023: consumers are checked transitively; repairs in the publication batch count.
+// PUB-011: live consumers are rechecked with the new component version.
+// PUB-012: removing a used input needs repairing operations.
 func TestLiveConsumerAndBatchRepair(t *testing.T) {
 	e := setup(t)
 	cs := newCS(e)
@@ -195,7 +197,41 @@ func TestLiveConsumerAndBatchRepair(t *testing.T) {
 	publish(e, edit)
 }
 
+// PUB-032: rolling back a component publication returns its previous version to every live
+// instance — they resolve the component through the environment's published pointer.
+func TestComponentRollbackReachesLiveInstances(t *testing.T) {
+	e := setup(t)
+	cs := newCS(e)
+	component := create(e, cs, 0, "component", map[string]any{"type": "Box"})
+	page := create(e, cs, 1, "page", ref(component, "live"))
+	submit(e, cs, 2, "staging")
+	publish(e, cs)
+	pointer := func() (version uuid.UUID) {
+		if err := e.Pool.QueryRow(context.Background(), `SELECT p.version_id FROM published_pointers p JOIN environments v ON v.id=p.environment_id WHERE v.name='staging' AND p.object_id=$1`, component).Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		return version
+	}
+	first := pointer()
+	edit := e.Edit(e.Admin, component, "v2")
+	submit(e, edit, 1, "staging")
+	var second publishing.Publication
+	e.Must(e.Admin, "publish", map[string]any{"changesetId": edit, "environment": "staging"}, &second)
+	if pointer() == first {
+		t.Fatal("the new component version was not published")
+	}
+	e.Must(e.Admin, "rollback", map[string]any{"publicationId": second.ID}, nil)
+	if pointer() != first {
+		t.Fatal("rollback kept the new component version")
+	}
+	published, err := publishing.GetPublishedDocument(context.Background(), e.Q, e.Admin.ProjectID, page, "staging")
+	if err != nil || !strings.Contains(string(published.Body), `"version": "live"`) {
+		t.Fatal(string(published.Body), err)
+	}
+}
+
 // MF-020/023: manifest impact includes a native use behind two Composed instances.
+// PUB-013: the same impact analysis for schemas and the manifest.
 func TestTransitiveManifestImpact(t *testing.T) {
 	e := setup(t)
 	e.ActivateManifest("staging", []byte(contract))

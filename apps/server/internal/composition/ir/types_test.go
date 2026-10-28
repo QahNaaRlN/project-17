@@ -9,6 +9,7 @@ import (
 
 // Сгенерированные типы описывают все поля валидных документов: строгий разбор фикстур
 // ловит расхождение types_gen.go со схемой (кроме фикстуры с намеренно неизвестными полями).
+// IR-023: unknown node fields are ignored by readers.
 func TestGeneratedTypesDecodeValidFixtures(t *testing.T) {
 	for _, path := range fixtureFiles(t, "valid") {
 		name := fixtureName(path)

@@ -29,6 +29,7 @@ var checkoutPolicy = agentpolicy.Document{Version: 1,
 }
 
 // STU-431/432/433: versions, conflicts, idempotent retry, the legacy payload and the dry run.
+// AGT-013: set-policy creates a new policy version for later actions.
 func TestSTU431PolicyVersionsAndExplain(t *testing.T) {
 	e, s, h, _, _ := setupAgent(t)
 	ctx := context.Background()

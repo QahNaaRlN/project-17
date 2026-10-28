@@ -33,6 +33,7 @@ func purges(t *testing.T, e *cmstest.Env) [][]string {
 	return out
 }
 
+// SDK-022: CDN purge by Surrogate-Key after publication.
 func TestPublicationsEnqueuePurge(t *testing.T) {
 	e := setup(t)
 	doc, p1, p2 := staged(e)

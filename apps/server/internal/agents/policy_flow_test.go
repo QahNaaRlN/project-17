@@ -188,6 +188,7 @@ func setPropsAt(target uuid.UUID) map[string]any {
 
 // STU-434: the built-in Agent records the refusal in its step and gives the
 // model only the rule and the condition.
+// AGT-012: refusals carry POLICY_DENIED with the right and rule.
 func TestSTU434BuiltInAgentSeesTheRefusal(t *testing.T) {
 	e, s, h, cs, doc := setupAgent(t)
 	policyFixture(e, 1, `{"version":1,"rules":[{"id":"no-agent-page","subject":{"agent":"*"},"deny":["design.compose"],"when":{"pathPrefix":["/agent"]}}],"risk":[],"approvals":[]}`)

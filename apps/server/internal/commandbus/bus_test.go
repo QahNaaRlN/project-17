@@ -108,6 +108,7 @@ func code(t *testing.T, err error) string {
 	return cerr.Code
 }
 
+// FR-001: all state changes go through the Command Bus.
 func TestDispatchCommits(t *testing.T) {
 	e := setup(t)
 	resp, err := e.bus.Dispatch(context.Background(), e.actor, req("k1", `{"text":"Новое имя"}`))

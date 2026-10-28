@@ -18,6 +18,7 @@ import (
 )
 
 // STU-431/433/434: policy Query routes and the refusal an MCP client receives.
+// AGT-042: agent steps are streamed over SSE.
 func TestSTU431AgentPolicyHTTP(t *testing.T) {
 	service := &agents.Service{DefaultModel: "test/model"}
 	e := cmstest.New(t, service.Register)

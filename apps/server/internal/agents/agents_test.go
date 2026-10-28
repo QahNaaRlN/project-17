@@ -81,6 +81,8 @@ func runStart(t *testing.T, e *cmstest.Env, h auth.Actor, cs, doc uuid.UUID) uui
 	return out.ID
 }
 
+// AGT-003: agent changes are operations with actor.kind = agent in a Change Set.
+// AGT-004: the agent reads structure through deterministic tools.
 func TestDelegationInvariants(t *testing.T) { // AGT-001/020…024, STU-120/121.
 	e, s, h, cs, doc := setupAgent(t)
 	id := registered(t, e)
@@ -232,6 +234,8 @@ func TestSessionPolicyAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// AGT-041: the orchestrator writes into the user's open Change Set.
 func TestRunLifecycle(t *testing.T) { // STU-123…125: outbox, usage, persistence, cancellation.
 	e, s, h, cs, doc := setupAgent(t)
 	if err := e.Do(h, "set-agent-config", Settings{"test/model", 100000, 10000}, nil); cmstest.Code(err) != "FORBIDDEN" {

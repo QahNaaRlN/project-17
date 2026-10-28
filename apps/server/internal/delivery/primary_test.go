@@ -31,6 +31,7 @@ func TestPrimaryAssetTypesSTU212215(t *testing.T) {
 	}
 }
 
+// IR-044: only the paths the document uses are resolved and serialized.
 func TestPrimaryProjectionSTU210211216(t *testing.T) {
 	field := func(kind string, localized bool) map[string]any {
 		return map[string]any{"type": kind, "localized": localized}

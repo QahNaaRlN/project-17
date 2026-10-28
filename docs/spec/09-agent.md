@@ -170,35 +170,20 @@ MCP-сервер встроен в CMS (`/mcp`, транспорт Streamable HT
 
 ## 5. Missing Capability
 
-Реализованный первый пакет описан отдельно:
-[Studio: Missing Capability и context pack](../studio-missing-capability.md),
-STU-255…274 слиты в dev в [PR #60](https://github.com/QahNaaRlN/project-17/pull/60),
-merge `9259d6272471cba057c0625bd554bb730ae64660`; CI merge пройден.
-Реализованы scoped draft/read tools, неизменяемые версии context pack и индекс
-кода. Встроенный Agent после создания draft останавливается для проверки человеком.
-Первый срез ограничен action-запросами, ручной передачей и явным применением;
-автоматическое fulfillment и preview/<ref> ниже остаются целевой архитектурой
-последующих пакетов.
+Контракты Missing Capability описаны в документах пакетов:
 
-Пакет [подписанной доставки context pack](../studio-capability-delivery.md),
-STU-275…294 слит в dev в [PR #61](https://github.com/QahNaaRlN/project-17/pull/61),
-merge `cf59c4568cf276800922d80ee73e9c15650d25d7`; локальная приёмка и CI merge пройдены.
-Пакет [проверенных фактов GitHub PR/CI](../studio-capability-github.md),
-STU-295…314, слит в dev 2026-10-19 в [PR #62](https://github.com/QahNaaRlN/project-17/pull/62), merge `359981e31c188d02a28a0bafa26ed418f2235ecb`.
-Пакет [preview/<ref>](../studio-capability-preview.md), STU-315…334, слит в dev
-2026-10-20 в [PR #68](https://github.com/QahNaaRlN/project-17/pull/68), merge `59ce50f6ab7ca3d5faf9f2de1fe501273f550270`.
-Пакет [автоматического fulfillment и групп requiredBy](../studio-capability-fulfillment.md),
-STU-335…354, слит в dev 2026-10-20 в [PR #71](https://github.com/QahNaaRlN/project-17/pull/71), merge `4a76e82`: строка
-«Выполнение» ниже реализована для `kind: action`.
-Пакет [запросов недостающих компонентов](../studio-capability-component.md),
-STU-355…374, слит в dev 2026-10-21 в [PR #73](https://github.com/QahNaaRlN/project-17/pull/73), merge `4262d93`: вид
-`component` с заглушкой-узлом и тем же автоматическим выполнением.
-Пакет [запросов источников данных и токенов](../studio-capability-data-token.md),
-STU-375…394, слит в dev 2026-10-21 в [PR #75](https://github.com/QahNaaRlN/project-17/pull/75), merge `ad1e7c6`: все четыре
-вида формализации запроса реализованы.
-Доставка с отдельным
-согласием, HMAC и повторами не присваивает request.accepted/fulfilled;
-автоматические шаги жизненного цикла ниже по-прежнему целевые.
+| Часть | Контракт |
+|---|---|
+| Запрос, черновые инструменты, context pack, индекс кода | [Missing Capability и context pack](../studio-missing-capability.md) |
+| Подписанная доставка pack с согласием, HMAC и повторами | [Доставка](../studio-capability-delivery.md) |
+| Проверенные факты GitHub PR/CI | [Факты GitHub](../studio-capability-github.md), [GitHub App](../studio-capability-github-app.md) |
+| Окружение `preview/<ref>` | [preview/<ref>](../studio-capability-preview.md) |
+| Автоматическое выполнение и группы `requiredBy` | [Выполнение](../studio-capability-fulfillment.md) |
+| Виды `component`, `dataSource`, `token` | [Компоненты](../studio-capability-component.md), [источники данных и токены](../studio-capability-data-token.md) |
+
+Встроенный агент после создания черновика запроса останавливается для проверки
+человеком. Доставка pack не переводит запрос в `accepted` или `fulfilled`: эти
+состояния выставляют факты GitHub и выполнение по manifest (§5.1).
 
 ### 5.1. Жизненный цикл
 

@@ -20,6 +20,7 @@ import (
 )
 
 // CNT-043/050/051, API-033/040: browser image URLs respect publication, preview and cache boundaries.
+// SEC-004: assets from a separate cookie-less origin with nosniff.
 func TestImageHTTP(t *testing.T) {
 	e := setup(t)
 	actor, err := auth.Authenticate(context.Background(), store.New(e.pool), "Bearer "+e.token)

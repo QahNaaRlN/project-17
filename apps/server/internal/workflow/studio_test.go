@@ -17,6 +17,7 @@ import (
 )
 
 // STU-070/072: actions reflect state, actual actor rights, authorship and human identity.
+// PUB-005: the reviewer sees diff, checks, reason and source.
 func TestStudioReviewActionsAndObjects(t *testing.T) {
 	e := setup(t)
 	cs, doc := e.Draft(e.Admin, "v1")

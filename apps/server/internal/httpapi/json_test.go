@@ -14,6 +14,7 @@ import (
 )
 
 // STU-091/093/094: TS diff fixture runs on the public Command API, real PostgreSQL and history.
+// STU-011: a JSON edit becomes the minimal set of operations.
 func TestStudioJSONDiffContract(t *testing.T) {
 	raw, err := os.ReadFile("../../../studio/test/fixtures/json-diff.json")
 	if err != nil {

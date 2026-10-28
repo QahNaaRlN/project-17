@@ -78,6 +78,7 @@ func TestDraftReadsWorkingVersions(t *testing.T) {
 	}
 }
 
+// API-042: draft responses carry the Change Set diagnostics.
 func TestDraftDiagnostics(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()

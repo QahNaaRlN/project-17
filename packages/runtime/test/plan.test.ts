@@ -110,6 +110,7 @@ describe("SDK-001/013, IR-040/045: render plan", () => {
       ),
     ).toBe("CMS_NODE_INVALID");
   });
+  // MF-024: unknown node types are skipped with a diagnostic.
   it("rejects invalid nodes, props, actions, unsupported slots and leaf children", () => {
     expect(invalid({ type: "Unknown" })).toBe("CMS_NODE_UNKNOWN");
     expect(invalid({ type: "constructor" })).toBe("CMS_NODE_UNKNOWN");

@@ -16,6 +16,7 @@
     "gen": "turbo run gen",
     "e2e:scenario": "node scripts/e2e-scenario.mjs",
     "load": "node perf/run.mjs",
+    "spec:check": "node scripts/spec-trace.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {

@@ -88,6 +88,7 @@ func has(m map[string]float64, parts ...string) bool {
 
 // STU-591, 592, 594, 595, 596, 597: an API request is one trace — HTTP, command, SQL —
 // continuing an authenticated caller's traceparent; errors carry the trace ID.
+// OPS-020: traces for requests, commands, jobs and SQL; traceId in errors; OPS-021: metrics with bounded labels.
 func TestTracesAndMetrics(t *testing.T) {
 	rec, _ := observed()
 	e := setup(t)

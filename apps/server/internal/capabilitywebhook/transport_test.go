@@ -119,6 +119,8 @@ func TestURLAndAddressBoundary(t *testing.T) {
 		t.Fatal("public boundary")
 	}
 }
+
+// SEC-006: webhooks are HMAC-SHA256 signed with a timestamp.
 func TestSignedDeliveryAndReceipts(t *testing.T) {
 	var mu sync.Mutex
 	var mode string

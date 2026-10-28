@@ -33,6 +33,8 @@ func indexFixture(t *testing.T) (map[string]any, map[string]any, string, string)
 	hash, _ := manifest.Hash(app)
 	return index, app, hash, indexHash
 }
+
+// FR-053: the code index carries no file contents.
 func TestCodeIndexPairingImmutabilityAndIsolation(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()

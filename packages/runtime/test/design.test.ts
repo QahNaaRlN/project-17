@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
 import { atom, designDeclarations, responsive } from "../src/design.js";
+// DS-002: tokens are CSS custom properties --cms-*.
+// DS-032: token values are emitted through var(--cms-*).
 it("compiles spacing, color, radius, container tokens and explicit raw values", () => {
   const tokens = {
     spacing: { small: "4px" },

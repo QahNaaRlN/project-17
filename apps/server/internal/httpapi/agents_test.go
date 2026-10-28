@@ -19,6 +19,10 @@ import (
 	"testing"
 )
 
+// FR-012: agent operations change the same IR document as Studio.
+// API-002: MCP and Studio call the same Command Bus handlers.
+// AGT-032: tools refuse operations invalid in the effective mode.
+// OPS-011: HTTP, MCP and the orchestrator call the Command Bus the same way.
 func TestMCPDelegatedHTTP(t *testing.T) { // AGT-010/011/030/051/052.
 	service := &agents.Service{DefaultModel: "test/model"}
 	e := cmstest.New(t, service.Register)

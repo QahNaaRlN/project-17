@@ -71,6 +71,7 @@ it("STU-288: signed-delivery routes pin environment, require human mode and pref
       .status,
   ).toBe(403);
 });
+// FR-002: Studio writes only through the public Command API.
 it("STU-266: capability proxy pins environment and checks request scope before writes", async () => {
   const { origin, post, fetcher } = await setup();
   const root = "/api/studio/api/v1/capability-requests";

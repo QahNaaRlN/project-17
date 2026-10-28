@@ -16,6 +16,8 @@ import (
 // STU-514: every Query API route with an identifier in its path refuses objects of
 // another project; commands on them are refused too. The route list comes from the
 // router itself, so a new route joins the sweep automatically.
+// FR-006: projects are isolated.
+// ST-002: every project query filters by project_id.
 func TestProjectIsolationSweep(t *testing.T) {
 	e := setup(t)
 	e.command(t, "set-approval-policy", `{"low":0,"medium":0,"high":0}`)

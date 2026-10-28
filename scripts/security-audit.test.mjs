@@ -19,6 +19,7 @@ const exception = (over = {}) => ({
   ...over,
 });
 
+// SEC-007: dependencies and images are scanned in CI.
 test("STU-500: high and critical always fail, even when excepted", () => {
   for (const severity of ["high", "critical"])
     assert.equal(

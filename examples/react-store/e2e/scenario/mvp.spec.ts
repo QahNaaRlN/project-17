@@ -398,7 +398,7 @@ test("§2: MVP acceptance scenario", async () => {
       frame.getByRole("heading", { name: "Коллекция недели", exact: true }),
     ).toBeVisible();
     await expect.poll(() => frame.locator("[data-cms-node='n_card']").count()).toBe(3);
-    // IR-044: an entity field edit is visible in the preview; measured, fails only at 2x (§6).
+    // §2 step 4: an entity field edit is visible in the preview within 2 s (ADR-0020).
     for (let i = 1; i <= 10; i++) {
       const title = "Коллекция " + i;
       await command(stand, alice, "apply-operations", {

@@ -151,6 +151,7 @@ async function type(label: string, value: string) {
   await flush();
 }
 
+// STU-024: the save-as-component wizard.
 it("STU-400/413/416: wizard saves one group with inputs, a slot and the component name", async () => {
   const { api, session } = await setup();
   vi.mocked(api.apply).mockImplementation(async (_s, operations) => extracted(session, operations));
