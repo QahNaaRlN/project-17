@@ -19,7 +19,7 @@
 
 ### Текущее состояние и приоритет — 2026-10-28
 
-Интеграционная база: `dev`, merge `6f370c2` после PR #101. Выпуск из `main` ещё не отражает реализованный объём `dev`.
+Интеграционная база: `dev`, merge `331f534` после PR #104. Выпуск из `main` ещё не отражает реализованный объём `dev`.
 Наличие отдельных пакетов не означает завершение M0…M6: итоговые критерии
 MVP и сквозная автоматическая приёмка ниже остаются обязательными.
 
@@ -31,7 +31,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | M3. Runtime и React | Готов (PR #32…#34, #37…#38) | — |
 | M4. Studio | Частично (PR #39…#59, #67, #84) | Каталог и вставка компонентов, advanced bindings, буфер/wrap, IR-044 (правка сущности в preview < 1 с: под нагрузкой 0,9–1,9 с) |
 | M5. Агент | Готов по очереди пакетов (PR #48, #60…#62, #68, #71, #73, #75, #78) | Приёмки шли без реального GitHub и живой LLM; сквозной сценарий §2 в CI — M6 |
-| M6. Укрепление | Начат (PR #81, #87, #90, #93, #96, #101) | Наблюдаемость, ADR, эксперимент |
+| M6. Укрепление | Начат (PR #81, #87, #90, #93, #96, #101, #104) | Спецификация по итогам реализации и ADR, эксперимент |
 
 | Порядок | Пакет | Статус и условие перехода |
 |---|---|---|
@@ -51,7 +51,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | 3 | [Нагрузочные тесты NFR-001…007 по профилю 01 §5](../load-tests.md), STU-540…559 | Выполнено ([PR #96](https://github.com/QahNaaRlN/project-17/pull/96), слит в dev 2026-10-28, merge `6d49aaa`): `pnpm load`, workflow `Load`, [отчёт](../load-test-report.md); [инкрементальная проверка публикации](../incremental-validation.md); [прогон полного профиля на ветке](https://github.com/QahNaaRlN/project-17/actions/runs/40586196727) подтвердил NFR-001…007, NFR-005 под нагрузкой p95 268 мс. Критерий готовности 2 — после трёх зелёных прогонов `Load` подряд на `dev` |
 | 4 | Три зелёных прогона `Load` подряд на `dev` | Выполнено 2026-10-28 на `ae8cffa`: [1](https://github.com/QahNaaRlN/project-17/actions/runs/40662235558), [2](https://github.com/QahNaaRlN/project-17/actions/runs/40668518655), [3](https://github.com/QahNaaRlN/project-17/actions/runs/40673615041) ([отчёт](../load-test-report.md)); критерий готовности 2 выполнен. Еженедельный прогон по средам остаётся |
 | 5 | [Этапы pipeline 10–11: visual regression и Lighthouse](../pipeline-visual-lighthouse.md), STU-570…589 | Выполнено ([PR #101](https://github.com/QahNaaRlN/project-17/pull/101), слит в dev 2026-10-28, merge `6f370c2`): сервер, исполнитель, Studio, сценарий §2; [отчёт](../pipeline-visual-lighthouse-acceptance.md), CI итогового SHA пройден (Go coverage 95%) |
-| 6 | [Наблюдаемость OPS-020…023](../observability.md), STU-590…609 | Спецификация одобрена 2026-10-28; реализовано в ветке `feature/observability` ([PR #104](https://github.com/QahNaaRlN/project-17/pull/104)): сервер, SDK, Studio BFF, исполнитель, профиль Compose; CI и Load пройдены, [отчёт](../observability-acceptance.md); ожидает слияния в dev |
+| 6 | [Наблюдаемость OPS-020…023](../observability.md), STU-590…609 | Выполнено ([PR #104](https://github.com/QahNaaRlN/project-17/pull/104), слит в dev 2026-10-28, merge `331f534`): сервер, SDK, Studio BFF, исполнитель, профиль Compose; [отчёт](../observability-acceptance.md), CI итогового SHA (Go coverage 95%) и Load на ветке пройдены |
 | 7 | Спецификация по итогам реализации и ADR отступлений | Нет спецификации; критерий готовности 5 |
 | 8 | Набор для эксперимента и пороги Q-08 на утверждение | Нет спецификации; эксперимент проводится после M6 |
 
@@ -297,6 +297,14 @@ PostgreSQL, River и Studio (`pnpm e2e:scenario`, стенд `scripts/e2e-stand.
 компонентов. [Локальная приёмка](../e2e-scenario-acceptance.md), [CI итогового SHA](https://github.com/QahNaaRlN/project-17/actions/runs/40288321699)
 и [CI merge-коммита](https://github.com/QahNaaRlN/project-17/actions/runs/40294758824) пройдены. После пяти зелёных прогонов подряд (PR #81…#84 и слияния)
 job `E2E scenario (§2)` 2026-10-26 включён обязательной проверкой для PR в `dev` и `main` (решение §11.1).
+
+Пакет M6 — [наблюдаемость OPS-020…023](../observability.md),
+STU-590…609: **реализован и слит в dev 2026-10-28 в [PR #104](https://github.com/QahNaaRlN/project-17/pull/104)**, merge `331f534`.
+OpenTelemetry в `cms` при `OTEL_EXPORTER_OTLP_ENDPOINT`: трассы HTTP, команд, SQL и задач
+River со ссылкой на запрос; `traceId` в ошибках; метрики OPS-021 с ограниченными метками;
+логи с `traceId`, `projectId`, `actorId`; приём диагностик runtime от сервера приложения
+(`@cms/core` `report()`); локальный бэкенд `grafana/otel-lgtm`. Логи по OTLP — после выбора
+хостинга (отступление от NFR-018). [Отчёт о приёмке](../observability-acceptance.md).
 
 Пакет M6 — [этапы pipeline 10–11](../pipeline-visual-lighthouse.md),
 STU-570…589: **реализован и слит в dev 2026-10-28 в [PR #101](https://github.com/QahNaaRlN/project-17/pull/101)**, merge `6f370c2`.

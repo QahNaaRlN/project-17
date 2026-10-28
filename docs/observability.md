@@ -1,6 +1,6 @@
 # Наблюдаемость: трассировки, метрики, логи и телеметрия SDK (OPS-020…023)
 
-Статус: **одобрена пользователем 2026-10-28; решения §11 приняты; реализована в ветке `feature/observability`, см. [отчёт](observability-acceptance.md)**.
+Статус: **одобрена пользователем 2026-10-28; решения §11 приняты; реализована и слита в dev 2026-10-28 в [PR #104](https://github.com/QahNaaRlN/project-17/pull/104), merge `331f534`; см. [отчёт](observability-acceptance.md)**.
 Дата: 2026-10-28. Требования: STU-590…609 (STU-570…589 заняты
 [этапами pipeline 10–11](pipeline-visual-lighthouse.md)).
 Основа: `origin/dev` на `107db06` (после [PR #102](https://github.com/QahNaaRlN/project-17/pull/102)).
