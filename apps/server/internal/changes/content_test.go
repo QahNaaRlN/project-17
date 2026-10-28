@@ -306,6 +306,7 @@ func cntRead(e *cmstest.Env, id uuid.UUID, env string, cs *uuid.UUID) changes.Co
 }
 
 // CNT-010/011/013/024: drafts preserve missing required fields; only same-env prospective references publish.
+// FR-021: entities are created, edited and published.
 func TestContentDraftAndAtomicPublication(t *testing.T) {
 	e := cntSetup(t)
 	cs := cntCS(e)

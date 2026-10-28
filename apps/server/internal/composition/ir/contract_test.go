@@ -115,6 +115,7 @@ func TestOrphanReportedOnTopOfSubtreeOnly(t *testing.T) {
 	}
 }
 
+// NFR-013: nesting depth is at most 32.
 func TestDepthReportedOnce(t *testing.T) {
 	var parts []string
 	n := MaxDepth + 10
@@ -167,6 +168,8 @@ func TestPredicateDepth(t *testing.T) {
 	}
 }
 
+// NFR-011: document body is at most 2 MiB.
+// IR-014: node count, depth and body size limits.
 func TestSizeLimit(t *testing.T) {
 	big := strings.Repeat("x", MaxBodyBytes)
 	res := validate(t, doc(box("n_root"), fmt.Sprintf(`"meta":{"description":%q}`, big)))

@@ -15,6 +15,7 @@ async function setup() {
   await editor.open(documentId, changesetId);
   return { api, session, editor };
 }
+// STU-022: undo/redo run the undo/redo commands.
 it("STU-051/053: отмена перечитывает документ, историю и сбрасывает исчезнувшее выделение", async () => {
   const { api, session, editor } = await setup();
   editor.select("n_heading", "one");

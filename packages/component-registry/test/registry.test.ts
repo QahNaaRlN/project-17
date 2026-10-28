@@ -190,6 +190,7 @@ it("MF-001: validates reserved names, invalid constraints, slots and unsupported
     buildManifest(createRegistry({ components: [definition()] }), { app, irVersions: ["99.0"] }),
   ).toThrow("MANIFEST_IR_VERSION_UNSUPPORTED");
 });
+// FR-005: no executable code leaves the CMS.
 it("MF-002: returns deterministic canonical JSON and SHA-256 without executable values", async () => {
   const a = await manifestArtifact(createRegistry({ components: [definition()] }), { app });
   const b = await manifestArtifact(createRegistry({ components: [definition()] }), {

@@ -45,6 +45,7 @@ func requireCode(t *testing.T, r ir.Result, code, pointer string) {
 }
 
 // MF-003, IR-020/021/031/032/041/051/061, MF-023: validate affected documents before activation.
+// FR-014: responsive values only for breakpoints declared in the manifest.
 func TestDocumentContracts(t *testing.T) {
 	t.Run("valid builtins", func(t *testing.T) {
 		d, m := fixture(t)

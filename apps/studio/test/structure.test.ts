@@ -119,6 +119,7 @@ it("STU-061: только контейнеры/объявленные слоты
   ).toBe(false);
   expect(destinations(doc, s.manifest, text).some((p) => p.parentId === "n_heading")).toBe(false);
 });
+// DS-022: the palette offers only what the effective mode allows.
 it("STU-061: пересечение политик, STRICT, zones, unknown/Composed и циклы", () => {
   const s = fixture(),
     doc = s.record.body;

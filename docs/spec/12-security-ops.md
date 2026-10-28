@@ -2,14 +2,14 @@
 
 ## 1. Серверная архитектура
 
-Реализован [универсальный OIDC-вход Studio](../studio-identity.md): проверяемые
+[Вход в Studio](../studio-identity.md) — универсальный OIDC: проверяемые
 подписанные ID tokens, PKCE S256, nonce и одноразовый browser-bound state;
 host-only `__Host-` HttpOnly/Secure cookies для HTTPS, PostgreSQL-сессии на 8 часов,
 серверный logout и CSRF/Origin для команд. Новый человек не получает ролей.
 OIDC-режим Studio запрещает service credential и перечитывает текущего человека
 перед запросами; смена/отзыв сессии уничтожают состояние предыдущего пользователя.
-Настройка реального IdP, TLS ingress, секретов и production-проверка — отдельная
-эксплуатационная работа, она этим пакетом не выполнялась.
+Настройка реального IdP, TLS ingress, секретов и production — эксплуатационная
+работа ([ADR-0001](../adr/0001-production-ops.md)).
 
 ### 1.1. Стек
 
@@ -27,7 +27,7 @@ OIDC-режим Studio запрещает service credential и перечиты
 
 ### 1.2. Модули
 
-Модульный монолит: один бинарник `cms` с режимами `serve`, `worker`, `migrate`. Модули общаются только через публичные интерфейсы пакетов (в `internal/<module>/api.go`); прямой доступ к таблицам чужого модуля запрещён и проверяется линтером (`depguard`).
+Модульный монолит: один бинарник `cms` с режимами `serve` (API и фоновые задачи River), `migrate`, `bootstrap`, `version` и служебными командами. Пакеты `internal/*` разделены по функциям; запросы к БД идут через общий слой sqlc (`internal/store`), границы держатся ревью и тестами пакетов ([ADR-0017](../adr/0017-single-process.md)). Таблица ниже — функциональные области, а не обязательные имена пакетов.
 
 | Модуль | Ответственность |
 |---|---|
@@ -139,7 +139,7 @@ cms/
 | OPS-020 | Трассировки OpenTelemetry для каждого HTTP-запроса, команды, задачи и SQL-запроса; `traceId` возвращается в ошибках. |
 | OPS-021 | Метрики: задержки и коды по эндпоинтам; длительность команд по типам; длина очередей и возраст задач; длительность этапов pipeline; hit ratio кэша Delivery; число диагностик runtime по кодам (из SDK); расход токенов LLM. |
 | OPS-022 | Логи — структурированный JSON с `traceId`, `projectId`, `actorId`; без содержимого контента и секретов. |
-| OPS-023 | SDK отправляет диагностику runtime (неизвестные типы, ошибки источников, ошибки действий) на `POST /delivery/v1/{project}/{env}/telemetry` с семплированием. |
+| OPS-023 | Серверная часть приложения отправляет диагностику runtime (неизвестные типы, ошибки источников) на `POST /delivery/v1/{project}/{env}/telemetry` с семплированием; ошибки действий в браузере не отправляются ([ADR-0002](../adr/0002-observability-scope.md)). |
 
 Реализация ([STU-590…609](../observability.md), [локальный запуск](../observability-local.md)): `cms` поднимает OpenTelemetry SDK при `OTEL_EXPORTER_OTLP_ENDPOINT` (OTLP/HTTP, семплер из `OTEL_TRACES_SAMPLER`, в production — 10 %), иначе провайдеры no-op. Спаны: HTTP-запрос с маршрутом-шаблоном, команда Command Bus, SQL-запрос по имени запроса sqlc (без текста и параметров), задача River со ссылкой на поставивший её запрос. Метрики OPS-021 с метками только из фиксированных наборов (без ID проектов и акторов). Логи остаются JSON в stdout и получают `traceId`, `spanId`, `projectId`, `actorId`; экспорт логов по OTLP отложен до выбора хостинга (отступление от NFR-018). Studio BFF и исполнитель проверок передают `traceparent` и пишут `traceId` ошибки CMS в свой журнал. Локальный бэкенд — `grafana/otel-lgtm` (`deploy/compose/docker-compose.observability.yml`).
 
@@ -155,9 +155,6 @@ services:
     command: ["serve"]
     environment: [DATABASE_URL, REDIS_URL, S3_ENDPOINT, S3_BUCKET, OIDC_ISSUER, PUBLIC_URL]
     depends_on: [postgres, redis, minio]
-  cms-worker:
-    image: cms/server
-    command: ["worker"]
   studio:
     image: cms/studio            # статика за тем же доменом, что и API
   postgres:
@@ -170,7 +167,7 @@ services:
     image: darthsim/imgproxy
 ```
 
-Реализованный compose (`deploy/compose/docker-compose.yml`) содержит PostgreSQL,
+Compose разработки (`deploy/compose/docker-compose.yml`) содержит PostgreSQL,
 Redis 7 без персистентности (кэш Delivery и лимиты, `CMS_REDIS_URL`), миграцию и
 `cms serve`; MinIO, imgproxy и Studio подключаются отдельно.
 
@@ -178,8 +175,7 @@ Redis 7 без персистентности (кэш Delivery и лимиты, 
 
 | Компонент | Размещение |
 |---|---|
-| CMS API (`serve`) | ≥ 2 экземпляра за балансировщиком, без состояния |
-| Worker | ≥ 1 экземпляр; масштабируется по длине очереди |
+| CMS (`serve`: API и задачи) | ≥ 2 экземпляра за балансировщиком, без состояния; масштабируется по задержкам API и длине очереди ([ADR-0017](../adr/0017-single-process.md)) |
 | PostgreSQL | Управляемый или с репликой и PITR (OPS-001) |
 | Redis | Управляемый, без требования персистентности |
 | Объектное хранилище | S3-совместимое с версионированием |

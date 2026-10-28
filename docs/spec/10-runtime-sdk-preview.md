@@ -2,18 +2,14 @@
 
 ## 1. Пакеты
 
-Первый framework-neutral `@cms/runtime` реализован для Image CNT-052:
-signed variants → src/srcset/sizes и focalPoint. Первый пакет `@cms/core`
-подключает клиент Delivery API, проверку IR, published LRU/ETag и preview
-без кэша. Теперь реализованы безопасные привязки/условия, форматтеры,
-план IR со стилями, Repeat/Composed/Slot и React-адаптер.
-Единый native component registry генерирует manifest и runtime-описания;
-CLI/DSL/sourceRef, действия registry и загрузчики до SSR теперь реализованы.
-Сторона приложения preview bridge реализована: cookie entry, postMessage, атрибуты,
-выбор, patch/reload и layout. [Первый Studio](../studio-editor.md) подключает
-дерево, iframe, рамки выбора и сохранение черновика; полный M4 впереди.
-Streaming/selective hydration и полная
-изоляция native-ошибок ещё не реализованы.
+`@cms/core` — клиент Delivery API с проверкой IR, LRU/ETag для published и
+preview без кэша. `@cms/runtime` (framework-neutral) — безопасные привязки и
+условия, форматтеры, план IR со стилями, Repeat/Composed/Slot, Image (CNT-052).
+`@cms/react` — React-адаптер, загрузка страницы до SSR, сторона приложения preview
+bridge (cookie entry, postMessage, атрибуты, выбор, patch/reload, layout). Единый
+native component registry генерирует manifest и runtime-описания (CLI, DSL,
+`sourceRef`, действия, загрузчики). Гидратацию и обработку ошибок native-компонентов
+выполняет приложение ([ADR-0009](../adr/0009-app-owned-hydration.md)).
 [Действия и данные](../runtime-actions-data.md) фиксирует текущий срез SDK-014/033.
 [Preview bridge](../preview-bridge.md) описывает SDK-030…042 и границы интеграции.
 [Границы renderer](../react-ir-renderer.md), [границы registry](../component-registry.md).
@@ -88,9 +84,9 @@ export default async function Route({ params }: { params: { path: string[] } }) 
 
 | ID | Требование |
 |---|---|
-| SDK-010 | Рендеринг ДОЛЖЕН работать при SSR и потоковой отдаче. Гидратируются только узлы с обработчиками событий или состоянием (`Modal`, `Video`, интерактивные компоненты). |
+| SDK-010 | Рендеринг ДОЛЖЕН работать при SSR; способ гидратации (вся страница или её части) выбирает приложение ([ADR-0009](../adr/0009-app-owned-hydration.md)). |
 | SDK-011 | Ключ React-элемента — ID узла; для экземпляров `Repeat` — `<nodeId>:<key элемента или индекс>`. |
-| SDK-012 | Ошибка рендеринга экземпляра Composed-компонента или native-компонента ДОЛЖНА изолироваться (error boundary) и не ломать страницу. |
+| SDK-012 | Ошибка рендеринга native-компонента при SSR передаётся обработчику ошибок приложения; неизвестные типы и ошибки источников не ломают страницу (SDK-013, SDK-014) ([ADR-0009](../adr/0009-app-owned-hydration.md)). |
 | SDK-013 | Неизвестный тип или действие — узел не рендерится, отправляется диагностика (MF-024). |
 | SDK-014 | Ошибка источника данных: `$data.<key>` получает `{ "error": { "code" } }`, условия `exists` по его полям ложны, `Repeat` рендерит `empty`. |
 | SDK-015 | Значения `url`/`link` ДОЛЖНЫ проверяться по белому списку схем перед выводом в `href`/`src` (IR-045). |
@@ -113,7 +109,7 @@ defineAction({
 | ID | Требование |
 |---|---|
 | SDK-020 | Клиент `@cms/core` ДОЛЖЕН использовать `ETag`/`If-None-Match` и in-memory LRU (по умолчанию 500 записей, 60 с) для published-ответов. В черновом режиме кэш не используется. |
-| SDK-021 | После публикации CMS отправляет подписанный (HMAC-SHA256) webhook `publication.created` на `revalidateUrl` окружения: `{ publicationId, environment, paths[], objectIds[] }`. `@cms/react` предоставляет обработчик для фреймворков с серверным кэшем страниц. |
+| SDK-021 | После публикации CMS отправляет подписанный (HMAC-SHA256) webhook `publication.created` на `revalidateUrl` окружения: `{ publicationId, environment, paths[], objectIds[] }`. `@cms/react` предоставляет обработчик для фреймворков с серверным кэшем страниц. **Отложено:** [ADR-0010](../adr/0010-no-revalidate-webhook.md). |
 | SDK-022 | CDN-инвалидация Delivery API выполняется CMS по `Surrogate-Key` (API-033) из задачи после публикации. |
 
 ## 5. Preview

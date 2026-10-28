@@ -31,6 +31,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Local development OIDC fixture
         run: node --test scripts/dev-oidc.test.mjs
+      # STU-623/624: every requirement of chapters 00–12 has a status and evidence.
+      - name: Specification traceability
+        run: |
+          node --test scripts/spec-trace.test.mjs
+          pnpm spec:check
       - name: Generated files are up to date
         run: |
           pnpm gen
@@ -48,6 +53,9 @@ jobs:
       - run: pnpm --filter @cms/store-example exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm build
+      # NFR-017: the SDK bundle size is measured on the built packages.
+      - name: SDK bundle size
+        run: node --test scripts/bundle-size.test.mjs
       - name: Storefront browser scenarios
         run: pnpm --filter @cms/store-example test:e2e
       - name: Browser failure context

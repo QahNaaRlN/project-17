@@ -155,6 +155,7 @@ func clickAction(doc object) any {
 	return obj(arr(obj(obj(obj(doc["nodes"])["n_root"])["on"])["click"])[0])["action"]
 }
 
+// MF-030: preview builds register a manifest in an ephemeral environment.
 func TestSTU315_317PreviewEnvironmentAndRegistrationJournal(t *testing.T) {
 	f := previewSetup(t)
 	before := f.request
@@ -359,6 +360,7 @@ func TestSTU318_323PreviewMatchingArgsAndProjection(t *testing.T) {
 	}
 }
 
+// MF-032: ephemeral environments are deleted by command or after 14 days.
 func TestSTU324_326ArchiveDeleteTTLAndClosedPR(t *testing.T) {
 	f := previewSetup(t)
 	ctx := context.Background()

@@ -125,6 +125,7 @@ func routesOf(body map[string]any) string {
 }
 
 // STU-522, 528: without a reachable Redis every answer is still correct.
+// ST-001: PostgreSQL is the source of truth; Redis holds derived data.
 func TestDeliveryWithoutRedis(t *testing.T) {
 	cache := deliverycache.New(redistest.Down(t, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	e := setup(t, func(d *httpapi.Deps) { d.Cache = cache })

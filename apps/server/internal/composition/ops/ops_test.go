@@ -133,6 +133,8 @@ func TestSetProps(t *testing.T) {
 	}
 }
 
+// IR-030: any design property can be responsive.
+// CHG-013: setDesign with a breakpoint changes only that key.
 func TestSetDesign(t *testing.T) {
 	after, _ := roundTrip(t, base, op(NodeSetDesign, `{"nodeId":"n_root","set":{"gap":{"base":"md","lg":"xl"},"padding":{"raw":"12px"}}}`), nil)
 	if toJSON(t, after["nodes"].(map[string]any)["n_root"].(map[string]any)["design"]) != `{"gap":{"base":"md","lg":"xl"},"padding":{"raw":"12px"}}` {

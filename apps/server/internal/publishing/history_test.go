@@ -245,6 +245,8 @@ func TestHistoryPreviewStalePolicyRoutesAndUnsupported(t *testing.T) {
 	}
 }
 
+// FR-033: history gives diff, reason, author and approvals.
+// CHG-051: operations, Change Set, approvals and publications chain.
 func TestHistoryDetailsCursorsAndGuards(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()

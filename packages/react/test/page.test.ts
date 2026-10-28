@@ -16,6 +16,8 @@ function plan(
     diagnostics: [],
   };
 }
+// DS-010: every primitive has a runtime and React implementation.
+// DS-011: primitives render semantic markup by as/level.
 it("renders all supported primitive semantics with escaped text and generated CSS", () => {
   for (const [type, props, tag] of [
     ["Heading", { text: "<script>x</script>", level: 1 }, "h1"],
@@ -37,6 +39,7 @@ it("renders all supported primitive semantics with escaped text and generated CS
     if (type === "Heading" && props.text.startsWith("<")) expect(html).toContain("&lt;script&gt;");
   }
 });
+// SDK-015: url/link values pass the scheme allow-list.
 it("renders links and native registry components without arbitrary DOM prop spreading", () => {
   const html = renderToString(
     createElement(CmsPage, {

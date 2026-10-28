@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// CHG-052: environment publication history with rollback.
 func TestPublicationHistoryQueriesAndGuardedRollback(t *testing.T) {
 	e := setup(t)
 	e.command(t, "set-approval-policy", `{"low":0,"medium":0,"high":0}`)

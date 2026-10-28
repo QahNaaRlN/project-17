@@ -85,6 +85,7 @@ func TestBindings(t *testing.T) {
 }
 
 // IR-020/042/050: scopes follow children and slots; paginated results have typed items.
+// FR-015: collections (Repeat) and conditional display.
 func TestRepeatsDataAndProvides(t *testing.T) {
 	a := app(t)
 	d := document(object{"type": "Repeat", "bindings": object{"items": "$data.products.items"}, "props": object{"as": "outer", "key": "id"}, "children": []any{"n_inner"}, "slots": object{"empty": []any{"n_empty"}}})

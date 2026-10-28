@@ -110,6 +110,8 @@ func TestStudioPublishExpectedSeq(t *testing.T) {
 	}
 }
 
+// MF-031: no content, changesets or promotion into preview environments.
+// PUB-022: publishing needs content.publish for the environment.
 func TestPublishErrors(t *testing.T) {
 	e := setup(t)
 	e.Must(e.Admin, "create-environment", map[string]any{"name": "pr-1", "kind": "preview"}, nil)

@@ -14,14 +14,13 @@
 
 | ID | Требование |
 |---|---|
-| API-001 | Все интерфейсы ДОЛЖНЫ быть описаны в OpenAPI 3.1 (`apps/server/api/openapi.yaml`); клиент `@cms/core` и серверные заглушки генерируются из описания. |
+| API-001 | Query API пакетов описаны в OpenAPI 3.1 (`apps/server/api/*.openapi.json`), команды — единым конвертом Command API (§2) и реестром Command Bus; единый документ и генерация клиента — перед публичным API ([ADR-0011](../adr/0011-openapi-per-package.md)). |
 | API-002 | Бизнес-правила НЕ ДОЛЖНЫ дублироваться между интерфейсами: MCP и Studio вызывают те же обработчики Command Bus. |
 
 Пакет [полной очереди работ](../studio-work-queue.md) описан отдельным
 [контрактом OpenAPI 3.1](../../apps/server/api/work-queue.openapi.json):
 `GET /api/v1/work-queue` и `/work-queue/{changesetId}`. Параметры поиска,
 фильтров и cursor проверяются сервером и Studio BFF. Legacy `/work-items` сохранён.
-Это описание реализованного пакета; общий контракт API-001 остаётся отдельной задачей.
 
 Пакет [привязок контента](../studio-content-bindings.md), STU-203…218,
 добавляет `document.setContent` внутри `apply-operations` и ограниченное разрешение
@@ -29,18 +28,14 @@ by:entity в `data.content` Delivery page. Параметр `locale` выбир�
 проекта; неизвестная локаль даёт `400 PARAM_INVALID`. `contentContext` отдельно
 содержит локаль и версии сущности/использованных файлов, участвующие в ETag.
 Каталог Studio поддерживает `q` (до 200 символов), schema и cursor.
-Реализовано и слито в dev в [PR #57](https://github.com/QahNaaRlN/project-17/pull/57);
-локальная приёмка и CI конечного SHA PR пройдены.
 
 Пакет [источников данных](../studio-data-sources.md), STU-219…236,
-реализует `document.setDataSource` внутри `apply-operations`, inverse/rebase
-по ключу подключения и формы параметров. Он слит в dev в
-[PR #58](https://github.com/QahNaaRlN/project-17/pull/58); CI PR и merge-коммита пройдены. Исполнение loader остаётся
-на серверной стороне приложения; новый CMS endpoint исполнения не вводится.
+описывает `document.setDataSource` внутри `apply-operations`, inverse/rebase
+по ключу подключения и формы параметров. Loader исполняется на серверной
+стороне приложения; endpoint исполнения в CMS нет.
 
 Пакет [действий и условий](../studio-behavior-conditions.md), STU-237…254,
-реализован и слит в dev в [PR #59](https://github.com/QahNaaRlN/project-17/pull/59), merge `35ccee4`.
-Он использует node.setBehavior/node.setCondition, отдельные advisory-права,
+использует node.setBehavior/node.setCondition, отдельные advisory-права,
 строгие аргументы и повторные проверки доступа. Нового endpoint исполнения нет.
 
 Ответ `GET /api/v1/changesets/{id}/review` сохраняет `canEdit` и добавляет
@@ -61,7 +56,7 @@ by:entity в `data.content` Delivery page. Параметр `locale` выбир�
 
 ## 3. Command API
 
-Реализованный вход описан в [STU-080…084](../studio-identity.md): CMS обслуживает
+Вход описан в [STU-080…084](../studio-identity.md): CMS обслуживает
 `GET /auth/login`, `/auth/callback`, `/auth/session` и `POST /auth/logout`.
 Studio проксирует их как `/api/studio/auth/{action}`; callback регистрируется у IdP
 на публичном origin Studio. Cookie-команды требуют `Origin`, `X-CSRF-Token`;
@@ -106,7 +101,7 @@ X-CMS-Project: store
 | ID | Требование |
 |---|---|
 | API-010 | Каждая команда ДОЛЖНА принимать `Idempotency-Key`; повтор с тем же ключом в течение 24 ч возвращает сохранённый ответ без повторного исполнения. |
-| API-011 | Команды, создающие операции, ДОЛЖНЫ принимать `reason` (обязательно для агентов и для риска `high`). |
+| API-011 | Команды, создающие операции, ДОЛЖНЫ принимать `reason`; он обязателен для агентов и для `promote` ([ADR-0012](../adr/0012-reason-for-agents.md)). |
 | API-012 | Обработка команды в Command Bus: аутентификация → определение актора → авторизация (права + ABAC) → валидация payload → исполнение в транзакции → запись операций → outbox → ответ. |
 
 ### 3.2. Каталог команд
@@ -175,8 +170,8 @@ X-CMS-Project: store
 | `GET /api/v1/changesets/{id}/review` | Состояние, риск, проверки, роли/счётчики/история согласований, needsAttention, краткие objects без тел и actions для текущего актора; согласованный снимок без блокировок записи (STU-070) |
 | `GET /api/v1/changesets/{id}/checks/{checkId}/artifacts/{name}` | Скриншот (`image/png`) или отчёт Lighthouse (`text/html`, только скачивание: `Content-Disposition: attachment`, `CSP: sandbox`) проверки CS; право чтения CS; `410 CHECK_ARTIFACT_EXPIRED` после срока хранения ([STU-575](../pipeline-visual-lighthouse.md)) |
 | `PUT /api/v1/checks/{checkId}/artifacts/{name}` | Загрузка артефакта исполнителем: `checks.run`, заголовок `X-CMS-Check-Lease`, `image/png` или `text/html` до 8 МиБ, не больше 400 файлов и 256 МиБ на проверку ([STU-573](../pipeline-visual-lighthouse.md)) |
-| `GET /api/v1/changesets/{id}/diff?environment=` | Реализован: полный индекс сравнения standard CS, база/публикация → рабочие версии, snapshot; [STU-149…161](../studio-review-diff.md) |
-| `GET /api/v1/changesets/{id}/diff/{objectId}?environment=&baseline=&snapshot=&after=&limit=` | Реализован: детали объекта из того же снимка, безопасные значения и курсорная пагинация; [контракт](../studio-review-diff.md#52-детали-объекта) |
+| `GET /api/v1/changesets/{id}/diff?environment=` | Полный индекс сравнения standard CS, база/публикация → рабочие версии, snapshot; [STU-149…161](../studio-review-diff.md) |
+| `GET /api/v1/changesets/{id}/diff/{objectId}?environment=&baseline=&snapshot=&after=&limit=` | Детали объекта из того же снимка, безопасные значения и курсорная пагинация; [контракт](../studio-review-diff.md#52-детали-объекта) |
 | `GET /api/v1/publications?environment=` | История публикаций; записи активации и rollback содержат `previousManifestId`, `currentManifestId` (PUB-033) |
 | `GET /api/v1/publication-history/{id}/promote-preview?toEnvironment=` | Предпросмотр переноса: объекты «сейчас в цели → версия публикации», блокеры, диагностики, зависимости и snapshot; [STU-462](../studio-promote.md) |
 | `GET /api/v1/publication-history/{id}/promote-preview/diff?toEnvironment=&objectId=&snapshot=&limit=&cursor=` | Детали предпросмотра переноса из того же снимка; [STU-463](../studio-promote.md) |
@@ -220,11 +215,11 @@ Authorization: Bearer cms_pub_…
 
 | ID | Требование |
 |---|---|
-| API-030 | Ответ ДОЛЖЕН содержать документ, транзитивно используемые Composed-компоненты (с версиями, разрешёнными для окружения), разрешённые сущности, ассеты и ссылки, необходимые привязкам. |
-| API-031 | Параметры источников данных, зависящие от `$content` и `$context.route`, ДОЛЖНЫ возвращаться вычисленными; исполнение источников — на стороне приложения. Параметры, зависящие от `$item`/`$props`, вычисляются SDK. |
-| API-032 | Значения выдаются в запрошенной локали с fallback (CNT-031); rich text — в формате RichText v1. |
+| API-030 | Ответ ДОЛЖЕН содержать документ страницы и разрешённый primary content (сущности, ассеты и ссылки, необходимые привязкам); Composed-компоненты SDK читает через `/document/{id}` в версиях окружения ([ADR-0016](../adr/0016-sdk-resolves-page-dependencies.md)). |
+| API-031 | Параметры источников данных вычисляет SDK перед вызовом загрузчиков приложения; исполнение источников — на стороне приложения ([ADR-0016](../adr/0016-sdk-resolves-page-dependencies.md)). |
+| API-032 | Значения выдаются в запрошенной локали без fallback (CNT-031); rich text — в формате RichText v1. |
 | API-033 | Ответ published ДОЛЖЕН содержать `ETag`, `Cache-Control: public, s-maxage=300, stale-while-revalidate=60, stale-if-error=86400` и `Surrogate-Key` со всеми ID объектов, от которых он зависит. |
-| API-034 | Если путь не найден — `404` с телом `{ "redirect"?: … }`. |
+| API-034 | Если путь не найден — `404` с телом `{ "redirect"?: … }`. **Отложено:** [ADR-0013](../adr/0013-not-found-redirect.md). |
 
 ### 5.2. Прочие ресурсы Delivery API
 
@@ -236,16 +231,16 @@ Authorization: Bearer cms_pub_…
 | `GET /delivery/v1/{project}/{env}/entities?schema=&filter[field]=&sort=&cursor=` | Простые выборки опубликованных сущностей (REST для простых ресурсов) |
 | `GET /delivery/v1/{project}/{env}/document/{id}` | Документ по ID (компоненты, фрагменты) |
 
-### 5.2.1. Реализация (этап M2, первая итерация)
+### 5.2.1. Уточнения реализации
 
 - Ключ доставки `cms_pub_<random>` выдаёт команда `create-delivery-key {environment, name}`; секрет показывается один раз, хранится SHA-256. `revoke-delivery-key {id}` отзывает ключ, `GET /api/v1/delivery-keys` — список ключей проекта (право `project.admin`). Ключ действует только для своего проекта и окружения: чужие `{project}/{env}` в пути — `403 FORBIDDEN`, неизвестный или отозванный ключ — `401 UNAUTHENTICATED`.
-- Реализованы `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`. Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
-- Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `components`, `data` и `dataSources` пока пустые — они появятся вместе с Composed-компонентами и контентом. 404 отдаётся как problem+json без `redirect` (редиректы — вместе с таблицей редиректов).
+- `GET …/page?path=`, `GET …/document/{id}` и `GET …/routes`: Путь страницы сопоставляется с таблицей маршрутов окружения по сегментам; при нескольких совпадениях выигрывает маршрут, у которого раньше встречается литеральный сегмент (`/products/sale` сильнее `/products/:slug`). Хвостовой `/` в запросе отбрасывается.
+- Ответ `/page` содержит `page {objectId, versionId, path, params}` и `document`; `data.content` — primary content страницы; `components` и `dataSources` пустые: компоненты и параметры источников разрешает SDK ([ADR-0016](../adr/0016-sdk-resolves-page-dependencies.md)). 404 отдаётся как problem+json без `redirect` ([ADR-0013](../adr/0013-not-found-redirect.md)).
 - Успешные ответы несут `ETag` (SHA-256 тела), `Cache-Control` по API-033 и `Surrogate-Key` вида `{project}:{env}:{objectId}`; `/page` и `/routes` зависят также от `{project}:{env}:routes`. Ключи включают проект и окружение, чтобы purge одного окружения не задевал другие; после публикации эти ключи сбрасываются задачей `cdn_purge` (06 §7.3.1). На совпавший `If-None-Match` — `304`. Ошибки отдаются с `Cache-Control: no-store`.
 - Чтение сущностей и метаданных ассетов подключено; загрузка и обработка файлов описаны в [пакете загрузки](../asset-upload-processing.md).
 - Выдача изображений CNT-050–052 подключена через подписанную модель и gateway; [контракт и конфигурация](../asset-delivery-images.md). Raw PDF/видео не выдаются этим endpoint.
 - Кэш published-ответов на origin (Redis) и лимиты запросов — [пакет M6](../delivery-cache-limits.md): `/page`, `/document`, `/routes`, `/entity`, `/asset` с ключом доставки отдаются из Redis с теми же телом, `ETag` и заголовками; заголовок `X-CMS-Cache: hit|miss|bypass`; черновые ответы и `/asset/{id}/image` не кэшируются. Публикация, откат и `promote` делают ответы свежими задачей `delivery_cache_invalidate` до purge CDN.
-- Пока не реализованы: локали и fallback (API-032).
+- Локаль — точная, без fallback (API-032, [ADR-0006](../adr/0006-exact-locale.md)).
 
 ### 5.3. Черновой режим
 
@@ -262,11 +257,11 @@ Authorization: Preview eyJhbGciOi…
 | API-041 | Preview-токен — JWT (HS256, ключ окружения), поля `prj`, `env`, `cs`, `sub`, `exp` (≤ 15 мин). Studio обновляет его до истечения. |
 | API-042 | Черновые ответы содержат `diagnostics` текущего состояния CS. |
 
-#### 5.3.1. Реализация (этап M2, вторая итерация Delivery API)
+#### 5.3.1. Уточнения реализации
 
 - `create-preview-token {environment, changesetId?}` (право `content.read`) выпускает JWT HS256 на 15 минут с полями `prj`, `env`, `cs`, `sub`, `exp`. Ключ подписи — `environments.preview_key` (32 случайных байта на окружение); смена ключа делает недействительными все токены окружения.
 - Запросы с `Authorization: Preview <JWT>` читают черновик: объекты Change Set `cs` — из рабочих версий (с их маршрутами), остальные — из head, а не из published (API-040). Токен без `cs` даёт чтение head. Параметр `changesetId` необязателен, но если передан — должен совпадать с `cs` токена (`403 FORBIDDEN`); с ключом доставки он запрещён (`400 PARAM_INVALID`).
-- Черновые `/page` и `/document` содержат `diagnostics` — результат валидации IR документа (пока уровень L1); ответы идут с `Cache-Control: no-store` без `ETag` и `Surrogate-Key`.
+- Черновые `/page` и `/document` содержат `diagnostics` — результат структурной валидации IR документа (L1; полные проверки — в pipeline подачи); ответы идут с `Cache-Control: no-store` без `ETag` и `Surrogate-Key`.
 - Таблица маршрутов черновика — маршруты head, переопределённые рабочими версиями Change Set (в том числе снятые маршруты и новые страницы).
 
 ## 6. Ошибки

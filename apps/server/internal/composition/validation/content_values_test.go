@@ -8,6 +8,7 @@ import (
 )
 
 // CNT-010/013: required is a draft warning at every depth; bad types/locales remain errors.
+// FR-020: typed content schema fields.
 func TestContentFieldContracts(t *testing.T) {
 	c := Context{project: map[string]any{"locales": []any{"ru", "en"}}}
 	schema := map[string]any{"fields": map[string]any{
