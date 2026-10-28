@@ -1,6 +1,6 @@
 # Pipeline: этапы 10–11 — visual regression и Lighthouse
 
-Статус: **одобрена пользователем 2026-10-28; решения §11 приняты; реализована в ветке `feature/pipeline-visual-lighthouse`**.
+Статус: **одобрена пользователем 2026-10-28; решения §11 приняты; реализована в ветке `feature/pipeline-visual-lighthouse`, см. [отчёт](pipeline-visual-lighthouse-acceptance.md)**.
 Дата: 2026-10-28. Требования: STU-570…589 (STU-560…569 заняты
 [инкрементальной проверкой публикации](incremental-validation.md)).
 Основа: `origin/dev` на `39ef20a` (после [PR #99](https://github.com/QahNaaRlN/project-17/pull/99)).
