@@ -200,3 +200,12 @@ func TestServeListenError(t *testing.T) {
 		t.Error("ожидалась ошибка прослушивания")
 	}
 }
+
+// STU-590: a broken telemetry configuration stops serve before it opens the database.
+func TestServeTelemetryError(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "broken")
+	if _, err := run(t, map[string]string{"CMS_DATABASE_URL": "postgres://127.0.0.1:1/x"}, "serve"); err == nil {
+		t.Error("ожидалась ошибка настройки телеметрии")
+	}
+}

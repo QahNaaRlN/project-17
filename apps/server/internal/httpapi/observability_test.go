@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"context"
+	"github.com/qahnaarln/project-17/apps/server/internal/httpapi"
+	"github.com/qahnaarln/project-17/apps/server/internal/ratelimit"
 	"strings"
 	"sync"
 	"testing"
@@ -185,5 +187,25 @@ func TestTelemetryIntakeAndCacheMetric(t *testing.T) {
 	e.do(t, "GET", "/delivery/v1/store/staging/routes", "", auth)
 	if !has(points(t, "cms.delivery.cache.requests"), "cms.delivery.kind=routes", "cms.cache.result=bypass") {
 		t.Fatal(points(t, "cms.delivery.cache.requests"))
+	}
+}
+
+// STU-604: telemetry is limited per delivery key; unmatched routes are labelled as such.
+func TestTelemetryLimitAndUnmatchedRoute(t *testing.T) {
+	observed()
+	e := setup(t, func(d *httpapi.Deps) { d.Limiter = ratelimit.New(nil) })
+	key := e.command(t, "create-delivery-key", `{"environment":"staging","name":"limit"}`)["key"].(string)
+	auth := map[string]string{"Authorization": "Bearer " + key, "Content-Type": "application/json"}
+	limited := false
+	for range 15 {
+		resp, _ := e.do(t, "POST", "/delivery/v1/store/staging/telemetry", `{"diagnostics":[{"code":"CMS_NODE_UNKNOWN","count":1}]}`, auth)
+		limited = limited || resp.StatusCode == 429
+	}
+	if !limited {
+		t.Fatal("no rate limit")
+	}
+	e.do(t, "GET", "/nowhere", "", nil)
+	if !has(points(t, "http.server.request.duration"), "http.route=unmatched") {
+		t.Fatal(points(t, "http.server.request.duration"))
 	}
 }

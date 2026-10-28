@@ -144,3 +144,28 @@ func TestLogHandler(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+// STU-590, 594, 602: edge cases — a bare sqlc name, a scope filled in place, a broken
+// resource configuration and the meter of the CMS.
+func TestTelemetryEdges(t *testing.T) {
+	if telemetry.QueryName("-- name: Bare") != "sql" {
+		t.Fatal("name without a kind")
+	}
+	ctx := telemetry.WithScope(context.Background(), telemetry.LogScope{})
+	if telemetry.WithScope(ctx, telemetry.LogScope{ProjectID: "p"}) != ctx {
+		t.Fatal("scope not filled in place")
+	}
+	var out bytes.Buffer
+	slog.New(telemetry.LogHandler{Handler: slog.NewJSONHandler(&out, nil)}).InfoContext(ctx, "x")
+	if !strings.Contains(out.String(), `"projectId":"p"`) || strings.Contains(out.String(), "actorId") {
+		t.Fatal(out.String())
+	}
+	if c, err := telemetry.Meter().Int64Counter("cms.test"); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "broken")
+	env := map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1", "OTEL_SERVICE_NAME": "svc"}
+	if _, err := telemetry.Setup(context.Background(), func(k string) string { return env[k] }, "v"); err == nil {
+		t.Fatal("broken resource attributes accepted")
+	}
+}
