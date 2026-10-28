@@ -29,6 +29,13 @@ func TestObserveQueues(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// A queued pipeline check of a submitted Change Set counts per stage.
+	if _, err := pool.Exec(ctx, `WITH p AS (INSERT INTO projects (id, slug, name) VALUES (gen_random_uuid(), 'metrics', 'M') RETURNING id),
+	  a AS (INSERT INTO actors (id, kind, display_name) VALUES (gen_random_uuid(), 'human', 'A') RETURNING id),
+	  c AS (INSERT INTO changesets (id, project_id, kind, title, owner_id, state) SELECT gen_random_uuid(), p.id, 'standard', 't', a.id, 'checking' FROM p, a RETURNING id)
+	  INSERT INTO checks (id, changeset_id, content_hash, stage, status, blocking) SELECT gen_random_uuid(), c.id, decode('00', 'hex'), 'visual', 'queued', false FROM c`); err != nil {
+		t.Fatal(err)
+	}
 	if err := jobs.ObserveQueues(pool); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +55,17 @@ func TestObserveQueues(t *testing.T) {
 			}
 		}
 	}
-	if depth != 1 {
+	queued := 0
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if g, ok := m.Data.(metricdata.Gauge[int64]); ok && m.Name == "cms.checks.queued" {
+				for _, p := range g.DataPoints {
+					queued += int(p.Value)
+				}
+			}
+		}
+	}
+	if depth != 1 || queued != 1 {
 		t.Fatal(rm.ScopeMetrics)
 	}
 	// A broken database surfaces as a collection error, not a panic.
