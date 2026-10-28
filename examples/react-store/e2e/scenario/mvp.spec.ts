@@ -563,13 +563,28 @@ test("§2: MVP acceptance scenario", async () => {
     const lead = bob.page.getByRole("region", { name: "Проверки и публикация", exact: true });
     await lead.getByRole("button", { name: "Согласовать", exact: true }).click();
     await expect(lead.getByText("Готов к публикации", { exact: true })).toBeVisible();
-    // Pipeline stages 1–9 and 13 pass; axe findings below serious only warn (STU-491).
+    // STU-571, 587: stage 10 does not hold the review; it finishes in the background.
+    await expect
+      .poll(
+        async () =>
+          (await read(stand, bob, `/changesets/${state.cs}/review`)).checks.find(
+            (c: any) => c.stage === "visual",
+          )?.status,
+        { timeout: 120_000 },
+      )
+      .not.toMatch(/^(queued|running)$/);
+    // Pipeline stages 1–10 and 13 pass; axe findings below serious only warn (STU-491);
+    // Lighthouse is for high risk only (STU-579).
     const review = await read(stand, bob, `/changesets/${state.cs}/review`);
-    for (const stage of ["ir", "policy", "preview", "axe"])
+    for (const stage of ["ir", "policy", "preview", "axe", "visual", "lighthouse"])
       expect(review.checks.map((c: any) => c.stage)).toContain(stage);
     for (const check of review.checks)
       expect(check.status, check.stage + " " + JSON.stringify(check.details)).toMatch(
-        check.stage === "axe" ? /^(passed|warning)$/ : /^passed$/,
+        check.stage === "axe"
+          ? /^(passed|warning)$/
+          : check.stage === "lighthouse"
+            ? /^skipped$/
+            : /^passed$/,
       );
     expect(
       review.checks.filter((c: any) => c.stage === "preview").map((c: any) => c.environment),
@@ -868,6 +883,93 @@ test("§2: a page with a nameless button fails the accessibility stage", async (
   await expect(
     command(stand, bob, "approve-changeset", { changesetId: cs.id, expectedSeq: seq }),
   ).rejects.toMatchObject({ status: 409 });
+});
+
+// STU-576…581, 587: a high-risk change of a published page gets screenshots against the
+// published version and Lighthouse scores with a report.
+test("§2: stages 10–11 compare screenshots and score the changed page", async () => {
+  const cs = await command(stand, alice, "create-changeset", {
+    title: "Строгая зона",
+    targets: ["staging"],
+  });
+  await command(stand, alice, "apply-operations", {
+    changesetId: cs.id,
+    expectedSeq: 0,
+    operations: [
+      // STRICT zones hold only application components (POLICY_TYPE_MODE_REQUIRED).
+      {
+        type: "node.insert",
+        target: state.page,
+        payload: {
+          parentId: "n_root",
+          index: 0,
+          subtree: {
+            id: "n_strict",
+            type: "StoreHero",
+            zone: { id: "z_strict", mode: "STRICT", requiredApprovalRole: "lead-designer" },
+            bindings: Object.fromEntries(
+              ["title", "subtitle", "description", "ctaLabel"].map((k) => [
+                k,
+                "$local.t_strict_" + k.toLowerCase(),
+              ]),
+            ),
+          },
+        },
+      },
+      ...["title", "subtitle", "description", "ctaLabel"].map((k) => ({
+        type: "localContent.set",
+        target: state.page,
+        payload: {
+          key: "t_strict_" + k.toLowerCase(),
+          type: "text",
+          value: { ru: "Строгий блок: " + k, en: "Strict block: " + k },
+        },
+      })),
+    ],
+  });
+  const seq = (await read(stand, alice, "/changesets/" + cs.id)).seq;
+  const submitted = await command(stand, alice, "submit-changeset", {
+    changesetId: cs.id,
+    expectedSeq: seq,
+  });
+  expect(submitted.risk).toBe("high");
+  const done = (c: any) => c && !["queued", "running"].includes(c.status);
+  await expect
+    .poll(
+      async () => {
+        const checks = (await read(stand, alice, `/changesets/${cs.id}/review`)).checks;
+        return ["visual", "lighthouse"].every((s) => done(checks.find((c: any) => c.stage === s)));
+      },
+      { timeout: 240_000, intervals: [2000] },
+    )
+    .toBe(true);
+  const review = await read(stand, alice, `/changesets/${cs.id}/review`);
+  const visual = review.checks.find((c: any) => c.stage === "visual");
+  expect(visual.status, JSON.stringify(visual.details)).toBe("passed");
+  const page = visual.details.pages.find((p: any) => p.objectId === state.page);
+  expect(page.widths.map((w: any) => w.width)).toEqual([375, 768, 1440]);
+  const changed = page.widths.find((w: any) => w.changedRatio > 0);
+  expect(changed, JSON.stringify(page)).toMatchObject({
+    baseline: "published",
+    artifacts: { before: expect.any(String), after: expect.any(String), diff: expect.any(String) },
+  });
+  // Read through the Studio adapter with the signed-in browser session (STU-575).
+  const diff = await alice.context.request.get(
+    `${stand.studioOrigin}/api/studio/api/v1/changesets/${cs.id}/checks/${visual.id}/artifacts/${changed.artifacts.diff}`,
+  );
+  expect(diff.status()).toBe(200);
+  expect(diff.headers()["content-type"]).toBe("image/png");
+  const lighthouse = review.checks.find((c: any) => c.stage === "lighthouse");
+  expect(lighthouse.blocking).toBe(true);
+  const scored = lighthouse.details.pages.find((p: any) => p.objectId === state.page);
+  expect(scored, JSON.stringify(lighthouse.details)).toMatchObject({
+    scores: { performance: expect.any(Number), accessibility: expect.any(Number) },
+    report: expect.stringMatching(/-lighthouse\.html$/),
+  });
+  expect(lighthouse.status).toMatch(
+    scored.scores.accessibility >= 0.9 ? /^(passed|warning)$/ : /^failed$/,
+  );
+  await command(stand, alice, "reopen-changeset", { changesetId: cs.id });
 });
 
 // SEC-005/OPS-022, STU-515: the stand's logs carry no tokens, preview JWTs or cookies.

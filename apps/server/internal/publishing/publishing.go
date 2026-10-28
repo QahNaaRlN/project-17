@@ -247,6 +247,10 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := q.MergeChangeset(ctx, cs.ID); err != nil {
 		return Publication{}, err
 	}
+	// STU-571: a non-blocking stage 10 check still queued has nothing left to compare.
+	if err := q.SkipOpenRenderChecks(ctx, store.SkipOpenRenderChecksParams{ChangesetID: cs.ID, Reason: "CHANGESET_MERGED"}); err != nil {
+		return Publication{}, err
+	}
 	if check.Candidate != nil {
 		if err := manifestregistry.Refresh(ctx, q, actor.ProjectID, env.Name); err != nil {
 			return Publication{}, err

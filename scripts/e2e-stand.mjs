@@ -64,6 +64,8 @@ export async function startStand({
     CMS_CDN_PURGE_URL: purgeOrigin + "/purge",
     CMS_CDN_PURGE_TOKEN: purgeToken,
     CMS_E2E_GITHUB_URL: githubOrigin,
+    // STU-587: screenshots and Lighthouse reports of stages 10–11 (e2e build only).
+    CMS_E2E_ARTIFACTS_DIR: join(local, "artifacts"),
   };
   const children = [];
   const stop = () => {

@@ -34,6 +34,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/ratelimit"
 	"github.com/qahnaarln/project-17/apps/server/internal/securityevents"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
+	"github.com/qahnaarln/project-17/apps/server/internal/workflow"
 )
 
 // MaxCommandBody — максимальный размер тела команды.
@@ -54,6 +55,7 @@ type Deps struct {
 	Cache              *deliverycache.Cache // nil — без кэша Delivery (STU-520)
 	Limiter            *ratelimit.Limiter   // nil — без лимитов
 	Limits             ratelimit.Limits
+	Artifacts          workflow.ArtifactStore // nil — без артефактов проверок (STU-572)
 }
 
 // NewRouter собирает маршруты сервера.
@@ -176,6 +178,8 @@ func NewRouter(d Deps) http.Handler {
 			respond(w, r, d, map[string]any{"items": items}, err)
 		})
 		r.Get("/changesets/{id}/review", reviewHandler(d))
+		r.Get("/changesets/{id}/checks/{checkId}/artifacts/{name}", artifactReadHandler(d))
+		r.Put("/checks/{checkId}/artifacts/{name}", artifactUploadHandler(d))
 		reviewDiffRoutes(r, d)
 		publicationHistoryRoutes(r, d)
 		r.Get("/delivery-keys", func(w http.ResponseWriter, r *http.Request) {

@@ -7,19 +7,44 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const checkArtifactTotals = `-- name: CheckArtifactTotals :one
+SELECT count(*)::int AS count, COALESCE(sum(size), 0)::bigint AS size FROM check_artifacts
+WHERE check_id = $1 AND name <> $2
+`
+
+type CheckArtifactTotalsParams struct {
+	CheckID uuid.UUID `json:"checkId"`
+	Name    string    `json:"name"`
+}
+
+type CheckArtifactTotalsRow struct {
+	Count int32 `json:"count"`
+	Size  int64 `json:"size"`
+}
+
+func (q *Queries) CheckArtifactTotals(ctx context.Context, arg CheckArtifactTotalsParams) (CheckArtifactTotalsRow, error) {
+	row := q.db.QueryRow(ctx, checkArtifactTotals, arg.CheckID, arg.Name)
+	var i CheckArtifactTotalsRow
+	err := row.Scan(&i.Count, &i.Size)
+	return i, err
+}
 
 const claimRenderCheck = `-- name: ClaimRenderCheck :one
 UPDATE checks SET status = 'running', lease_id = $1::uuid, lease_expires_at = now() + interval '5 minutes',
   started_at = COALESCE(started_at, now()), attempts = attempts + 1
 WHERE checks.id = (
   SELECT c.id FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
-  WHERE cs.project_id = $2 AND cs.state = 'checking' AND c.content_hash = cs.content_hash
-    AND c.status = 'queued' AND c.stage IN ('preview', 'axe')
-  ORDER BY c.created_at, c.id LIMIT 1 FOR UPDATE OF c SKIP LOCKED)
-RETURNING id, changeset_id, content_hash, environment, stage, status, blocking, details, artifacts, started_at, finished_at, created_at, lease_id, lease_expires_at, attempts
+  WHERE cs.project_id = $2 AND c.content_hash = cs.content_hash
+    AND c.status = 'queued' AND c.stage IN ('preview', 'axe', 'visual', 'lighthouse')
+    -- STU-571: non-blocking checks also run after the Change Set left checking.
+    AND (cs.state = 'checking' OR (NOT c.blocking AND cs.state IN ('in_review', 'approved', 'changes_requested')))
+  ORDER BY c.blocking DESC, c.created_at, c.id LIMIT 1 FOR UPDATE OF c SKIP LOCKED)
+RETURNING id, changeset_id, content_hash, environment, stage, status, blocking, details, artifacts, started_at, finished_at, created_at, lease_id, lease_expires_at, attempts, artifacts_expired_at
 `
 
 type ClaimRenderCheckParams struct {
@@ -46,13 +71,14 @@ func (q *Queries) ClaimRenderCheck(ctx context.Context, arg ClaimRenderCheckPara
 		&i.LeaseID,
 		&i.LeaseExpiresAt,
 		&i.Attempts,
+		&i.ArtifactsExpiredAt,
 	)
 	return i, err
 }
 
 const expiredRenderChecks = `-- name: ExpiredRenderChecks :many
 SELECT c.id, cs.id AS changeset_id, cs.project_id FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
-WHERE c.status = 'running' AND c.stage IN ('preview', 'axe') AND c.lease_expires_at < now()
+WHERE c.status = 'running' AND c.stage IN ('preview', 'axe', 'visual', 'lighthouse') AND c.lease_expires_at < now()
 ORDER BY c.lease_expires_at, c.id LIMIT 100
 `
 
@@ -82,6 +108,61 @@ func (q *Queries) ExpiredRenderChecks(ctx context.Context) ([]ExpiredRenderCheck
 	return items, nil
 }
 
+const expiringArtifactChecks = `-- name: ExpiringArtifactChecks :many
+SELECT c.id, c.changeset_id, cs.project_id FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
+WHERE c.artifacts_expired_at IS NULL AND c.finished_at < $1::timestamptz
+  AND (cs.state IN ('merged', 'abandoned') OR c.content_hash IS DISTINCT FROM cs.content_hash)
+  AND EXISTS (SELECT 1 FROM check_artifacts a WHERE a.check_id = c.id)
+ORDER BY c.finished_at, c.id LIMIT 100
+`
+
+type ExpiringArtifactChecksRow struct {
+	ID          uuid.UUID `json:"id"`
+	ChangesetID uuid.UUID `json:"changesetId"`
+	ProjectID   uuid.UUID `json:"projectId"`
+}
+
+// STU-583: checks of final Change Sets or of replaced content, finished long enough ago.
+func (q *Queries) ExpiringArtifactChecks(ctx context.Context, before time.Time) ([]ExpiringArtifactChecksRow, error) {
+	rows, err := q.db.Query(ctx, expiringArtifactChecks, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpiringArtifactChecksRow
+	for rows.Next() {
+		var i ExpiringArtifactChecksRow
+		if err := rows.Scan(&i.ID, &i.ChangesetID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const extendRenderLease = `-- name: ExtendRenderLease :one
+UPDATE checks SET lease_expires_at = LEAST(now() + interval '5 minutes', started_at + $1::int * interval '1 second')
+WHERE id = $2 AND status = 'running' AND lease_id = $3 AND lease_expires_at > now()
+RETURNING lease_expires_at
+`
+
+type ExtendRenderLeaseParams struct {
+	LimitSeconds int32      `json:"limitSeconds"`
+	ID           uuid.UUID  `json:"id"`
+	LeaseID      *uuid.UUID `json:"leaseId"`
+}
+
+// STU-585: the runner extends its lease by 5 minutes, never past the stage limit.
+func (q *Queries) ExtendRenderLease(ctx context.Context, arg ExtendRenderLeaseParams) (*time.Time, error) {
+	row := q.db.QueryRow(ctx, extendRenderLease, arg.LimitSeconds, arg.ID, arg.LeaseID)
+	var lease_expires_at *time.Time
+	err := row.Scan(&lease_expires_at)
+	return lease_expires_at, err
+}
+
 const finishRenderCheck = `-- name: FinishRenderCheck :exec
 UPDATE checks SET status = $2, details = $3, finished_at = now(), lease_id = NULL, lease_expires_at = NULL WHERE id = $1
 `
@@ -95,6 +176,53 @@ type FinishRenderCheckParams struct {
 func (q *Queries) FinishRenderCheck(ctx context.Context, arg FinishRenderCheckParams) error {
 	_, err := q.db.Exec(ctx, finishRenderCheck, arg.ID, arg.Status, arg.Details)
 	return err
+}
+
+const getCheckArtifact = `-- name: GetCheckArtifact :one
+SELECT a.check_id, a.name, a.content_type, a.size, a.sha256, a.created_at, c.changeset_id, c.artifacts_expired_at FROM check_artifacts a
+JOIN checks c ON c.id = a.check_id JOIN changesets cs ON cs.id = c.changeset_id
+WHERE a.check_id = $1 AND a.name = $2 AND c.changeset_id = $3
+  AND cs.project_id = $4
+`
+
+type GetCheckArtifactParams struct {
+	CheckID     uuid.UUID `json:"checkId"`
+	Name        string    `json:"name"`
+	ChangesetID uuid.UUID `json:"changesetId"`
+	ProjectID   uuid.UUID `json:"projectId"`
+}
+
+type GetCheckArtifactRow struct {
+	CheckID            uuid.UUID  `json:"checkId"`
+	Name               string     `json:"name"`
+	ContentType        string     `json:"contentType"`
+	Size               int64      `json:"size"`
+	Sha256             []byte     `json:"sha256"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	ChangesetID        uuid.UUID  `json:"changesetId"`
+	ArtifactsExpiredAt *time.Time `json:"artifactsExpiredAt"`
+}
+
+// STU-575: an artifact of a check of a Change Set in the project.
+func (q *Queries) GetCheckArtifact(ctx context.Context, arg GetCheckArtifactParams) (GetCheckArtifactRow, error) {
+	row := q.db.QueryRow(ctx, getCheckArtifact,
+		arg.CheckID,
+		arg.Name,
+		arg.ChangesetID,
+		arg.ProjectID,
+	)
+	var i GetCheckArtifactRow
+	err := row.Scan(
+		&i.CheckID,
+		&i.Name,
+		&i.ContentType,
+		&i.Size,
+		&i.Sha256,
+		&i.CreatedAt,
+		&i.ChangesetID,
+		&i.ArtifactsExpiredAt,
+	)
+	return i, err
 }
 
 const insertRenderCheck = `-- name: InsertRenderCheck :exec
@@ -130,9 +258,40 @@ func (q *Queries) InsertRenderCheck(ctx context.Context, arg InsertRenderCheckPa
 	return err
 }
 
+const listCheckArtifacts = `-- name: ListCheckArtifacts :many
+SELECT check_id, name, content_type, size, sha256, created_at FROM check_artifacts WHERE check_id = $1 ORDER BY name
+`
+
+func (q *Queries) ListCheckArtifacts(ctx context.Context, checkID uuid.UUID) ([]CheckArtifact, error) {
+	rows, err := q.db.Query(ctx, listCheckArtifacts, checkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CheckArtifact
+	for rows.Next() {
+		var i CheckArtifact
+		if err := rows.Scan(
+			&i.CheckID,
+			&i.Name,
+			&i.ContentType,
+			&i.Size,
+			&i.Sha256,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRenderCheck = `-- name: LockRenderCheck :one
-SELECT c.id, c.changeset_id, c.content_hash, c.environment, c.stage, c.status, c.blocking, c.details, c.artifacts, c.started_at, c.finished_at, c.created_at, c.lease_id, c.lease_expires_at, c.attempts FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
-WHERE c.id = $1 AND cs.project_id = $2 AND c.stage IN ('preview', 'axe') FOR UPDATE OF c
+SELECT c.id, c.changeset_id, c.content_hash, c.environment, c.stage, c.status, c.blocking, c.details, c.artifacts, c.started_at, c.finished_at, c.created_at, c.lease_id, c.lease_expires_at, c.attempts, c.artifacts_expired_at FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
+WHERE c.id = $1 AND cs.project_id = $2 AND c.stage IN ('preview', 'axe', 'visual', 'lighthouse') FOR UPDATE OF c
 `
 
 type LockRenderCheckParams struct {
@@ -159,8 +318,18 @@ func (q *Queries) LockRenderCheck(ctx context.Context, arg LockRenderCheckParams
 		&i.LeaseID,
 		&i.LeaseExpiresAt,
 		&i.Attempts,
+		&i.ArtifactsExpiredAt,
 	)
 	return i, err
+}
+
+const markArtifactsExpired = `-- name: MarkArtifactsExpired :exec
+UPDATE checks SET artifacts_expired_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkArtifactsExpired(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markArtifactsExpired, id)
+	return err
 }
 
 const projectRenderChecks = `-- name: ProjectRenderChecks :one
@@ -176,7 +345,7 @@ func (q *Queries) ProjectRenderChecks(ctx context.Context, projectID uuid.UUID) 
 
 const renderCheckChangeset = `-- name: RenderCheckChangeset :one
 SELECT c.changeset_id FROM checks c JOIN changesets cs ON cs.id = c.changeset_id
-WHERE c.id = $1 AND cs.project_id = $2 AND c.stage IN ('preview', 'axe')
+WHERE c.id = $1 AND cs.project_id = $2 AND c.stage IN ('preview', 'axe', 'visual', 'lighthouse')
 `
 
 type RenderCheckChangesetParams struct {
@@ -197,6 +366,20 @@ UPDATE checks SET status = 'queued', lease_id = NULL, lease_expires_at = NULL WH
 
 func (q *Queries) RequeueRenderCheck(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, requeueRenderCheck, id)
+	return err
+}
+
+const setCheckArtifacts = `-- name: SetCheckArtifacts :exec
+UPDATE checks SET artifacts = $2 WHERE id = $1
+`
+
+type SetCheckArtifactsParams struct {
+	ID        uuid.UUID `json:"id"`
+	Artifacts []byte    `json:"artifacts"`
+}
+
+func (q *Queries) SetCheckArtifacts(ctx context.Context, arg SetCheckArtifactsParams) error {
+	_, err := q.db.Exec(ctx, setCheckArtifacts, arg.ID, arg.Artifacts)
 	return err
 }
 
@@ -250,5 +433,31 @@ type SkipOpenRenderChecksParams struct {
 
 func (q *Queries) SkipOpenRenderChecks(ctx context.Context, arg SkipOpenRenderChecksParams) error {
 	_, err := q.db.Exec(ctx, skipOpenRenderChecks, arg.Reason, arg.ChangesetID)
+	return err
+}
+
+const upsertCheckArtifact = `-- name: UpsertCheckArtifact :exec
+INSERT INTO check_artifacts (check_id, name, content_type, size, sha256)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (check_id, name) DO UPDATE SET content_type = EXCLUDED.content_type, size = EXCLUDED.size,
+  sha256 = EXCLUDED.sha256, created_at = now()
+`
+
+type UpsertCheckArtifactParams struct {
+	CheckID     uuid.UUID `json:"checkId"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"contentType"`
+	Size        int64     `json:"size"`
+	Sha256      []byte    `json:"sha256"`
+}
+
+func (q *Queries) UpsertCheckArtifact(ctx context.Context, arg UpsertCheckArtifactParams) error {
+	_, err := q.db.Exec(ctx, upsertCheckArtifact,
+		arg.CheckID,
+		arg.Name,
+		arg.ContentType,
+		arg.Size,
+		arg.Sha256,
+	)
 	return err
 }

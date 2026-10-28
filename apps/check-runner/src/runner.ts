@@ -1,17 +1,29 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import type { Browser, Page } from "playwright";
+import { runLighthouse, runVisual } from "./stages.js";
 
-/** A leased stage 8–9 check (STU-485). */
+function requireIO(io: CheckIO | undefined): CheckIO {
+  if (!io) throw new Error("stages 10–11 need artifact uploads");
+  return io;
+}
+
+/** Lighthouse thresholds recorded at submission (STU-581). */
+export interface Thresholds {
+  performance: { min: number; blocking: boolean };
+  accessibility: { min: number; blocking: boolean };
+}
+/** A leased stage 8–11 check (STU-485). */
 export interface LeasedCheck {
   checkId: string;
   leaseId: string;
-  stage: "preview" | "axe";
+  stage: "preview" | "axe" | "visual" | "lighthouse";
   changesetId: string;
   environment: string;
   appUrl: string;
   pages: { objectId: string; path: string }[];
   previewToken: string;
+  thresholds?: Thresholds;
 }
 export interface RenderDiagnostic {
   code: string;
@@ -33,7 +45,12 @@ export interface AxeViolation {
 }
 export interface CheckResult {
   status: "passed" | "failed" | "warning";
-  details: { pages: Record<string, unknown>[]; truncated: boolean };
+  details: { pages: Record<string, unknown>[]; truncated: boolean; [key: string]: unknown };
+}
+/** Uploads and lease extension of stage 10–11 checks (STU-573, 585). */
+export interface CheckIO {
+  upload(check: LeasedCheck, name: string, contentType: string, body: Uint8Array): Promise<void>;
+  extend(check: LeasedCheck): Promise<void>;
 }
 export interface RunnerConfig {
   apiUrl: string;
@@ -50,28 +67,33 @@ const maxTargets = 20;
 
 /** Thin Command API client of the runner; no token or page body is ever logged. */
 export function createClient(config: RunnerConfig) {
-  const call = async <T>(name: string, payload: unknown): Promise<T> => {
-    const response = await (config.fetch ?? fetch)(
-      new URL("/api/v1/commands/" + name, config.apiUrl),
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + config.token,
-          "X-CMS-Project": config.project,
-          "Content-Type": "application/json",
-          "Idempotency-Key": randomUUID(),
-        },
-        body: JSON.stringify({ payload }),
-        signal: AbortSignal.timeout(30_000),
+  const send = async <T>(
+    name: string,
+    path: string,
+    init: { method: string; headers: Record<string, string>; body: BodyInit },
+  ): Promise<T | undefined> => {
+    const response = await (config.fetch ?? fetch)(new URL(path, config.apiUrl), {
+      ...init,
+      headers: {
+        Authorization: "Bearer " + config.token,
+        "X-CMS-Project": config.project,
+        ...init.headers,
       },
-    );
+      signal: AbortSignal.timeout(30_000),
+    });
     const body = (await response.json().catch(() => null)) as {
       result?: T;
       code?: string;
     } | null;
     if (!response.ok) throw new Error(`${name}: ${response.status} ${body?.code ?? "UNKNOWN"}`);
-    return body!.result as T;
+    return body?.result;
   };
+  const call = async <T>(name: string, payload: unknown): Promise<T> =>
+    (await send<T>(name, "/api/v1/commands/" + name, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ payload }),
+    })) as T;
   return {
     claim: async () => (await call<{ check: LeasedCheck | null }>("claim-check", {})).check,
     complete: (check: LeasedCheck, result: CheckResult) =>
@@ -81,10 +103,20 @@ export function createClient(config: RunnerConfig) {
         status: result.status,
         details: result.details,
       }),
+    upload: async (check: LeasedCheck, name: string, contentType: string, body: Uint8Array) => {
+      await send("upload " + name, `/api/v1/checks/${check.checkId}/artifacts/${name}`, {
+        method: "PUT",
+        headers: { "Content-Type": contentType, "X-CMS-Check-Lease": check.leaseId },
+        body: body as Uint8Array<ArrayBuffer>,
+      });
+    },
+    extend: async (check: LeasedCheck) => {
+      await call("extend-check-lease", { checkId: check.checkId, leaseId: check.leaseId });
+    },
   };
 }
 
-function previewUrl(check: LeasedCheck, path: string): string {
+export function previewUrl(check: LeasedCheck, path: string): string {
   const url = new URL("/api/cms/preview", check.appUrl);
   url.searchParams.set("token", check.previewToken);
   url.searchParams.set("path", path);
@@ -170,21 +202,35 @@ export function bounded(pages: Record<string, unknown>[]): CheckResult["details"
   return details;
 }
 
-/** Runs one check in an isolated browser context (STU-490…492). */
+/** A browser context whose navigation stays on the application of the check (STU-492). */
+export async function checkContext(
+  browser: Browser,
+  check: LeasedCheck,
+  options: Parameters<Browser["newContext"]>[0] = {},
+) {
+  const origin = new URL(check.appUrl).origin;
+  const context = await browser.newContext(options);
+  // Page resources load normally; navigation to another origin is blocked.
+  await context.route("**/*", (route) =>
+    route.request().isNavigationRequest() && new URL(route.request().url()).origin !== origin
+      ? route.abort("blockedbyclient")
+      : route.continue(),
+  );
+  return context;
+}
+
+/** Runs one check in an isolated browser context (STU-490…492, 576…580). */
 export async function runCheck(
   browser: Browser,
   check: LeasedCheck,
   timeout = 30_000,
+  io?: CheckIO,
 ): Promise<CheckResult> {
-  const origin = new URL(check.appUrl).origin;
-  const context = await browser.newContext();
+  if (check.stage === "visual") return runVisual(browser, check, requireIO(io), timeout);
+  if (check.stage === "lighthouse")
+    return runLighthouse(browser, check, requireIO(io), timeout * 2);
+  const context = await checkContext(browser, check);
   try {
-    // Navigation stays on the application of the check; page resources load normally.
-    await context.route("**/*", (route) =>
-      route.request().isNavigationRequest() && new URL(route.request().url()).origin !== origin
-        ? route.abort("blockedbyclient")
-        : route.continue(),
-    );
     const pages: Record<string, unknown>[] = [];
     let status: CheckResult["status"] = "passed";
     for (const target of check.pages) {
@@ -217,7 +263,7 @@ export async function step(
 ): Promise<boolean> {
   const check = await client.claim();
   if (!check) return false;
-  const result = await runCheck(browser, check, config.pageTimeoutMs);
+  const result = await runCheck(browser, check, config.pageTimeoutMs, client);
   const done = await client.complete(check, result);
   config.log?.(
     `check ${check.checkId} ${check.stage} ${check.environment}: ${result.status}, changeset ${done.changesetState}`,

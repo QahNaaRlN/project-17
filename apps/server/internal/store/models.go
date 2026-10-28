@@ -479,21 +479,31 @@ type ChangesetObject struct {
 }
 
 type Check struct {
-	ID             uuid.UUID  `json:"id"`
-	ChangesetID    uuid.UUID  `json:"changesetId"`
-	ContentHash    []byte     `json:"contentHash"`
-	Environment    string     `json:"environment"`
-	Stage          string     `json:"stage"`
-	Status         string     `json:"status"`
-	Blocking       bool       `json:"blocking"`
-	Details        []byte     `json:"details"`
-	Artifacts      []byte     `json:"artifacts"`
-	StartedAt      *time.Time `json:"startedAt"`
-	FinishedAt     *time.Time `json:"finishedAt"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	LeaseID        *uuid.UUID `json:"leaseId"`
-	LeaseExpiresAt *time.Time `json:"leaseExpiresAt"`
-	Attempts       int32      `json:"attempts"`
+	ID                 uuid.UUID  `json:"id"`
+	ChangesetID        uuid.UUID  `json:"changesetId"`
+	ContentHash        []byte     `json:"contentHash"`
+	Environment        string     `json:"environment"`
+	Stage              string     `json:"stage"`
+	Status             string     `json:"status"`
+	Blocking           bool       `json:"blocking"`
+	Details            []byte     `json:"details"`
+	Artifacts          []byte     `json:"artifacts"`
+	StartedAt          *time.Time `json:"startedAt"`
+	FinishedAt         *time.Time `json:"finishedAt"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	LeaseID            *uuid.UUID `json:"leaseId"`
+	LeaseExpiresAt     *time.Time `json:"leaseExpiresAt"`
+	Attempts           int32      `json:"attempts"`
+	ArtifactsExpiredAt *time.Time `json:"artifactsExpiredAt"`
+}
+
+type CheckArtifact struct {
+	CheckID     uuid.UUID `json:"checkId"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"contentType"`
+	Size        int64     `json:"size"`
+	Sha256      []byte    `json:"sha256"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type CodeIndexUpload struct {

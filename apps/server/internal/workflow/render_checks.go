@@ -23,18 +23,25 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
 )
 
-// Pipeline stages 8 and 9 (06 §5.1), run by the check runner (STU-480…499).
+// Pipeline stages 8–11 (06 §5.1), run by the check runner (STU-480…499, 570…589).
 const (
-	StagePreview = "preview"
-	StageAxe     = "axe"
+	StagePreview    = "preview"
+	StageAxe        = "axe"
+	StageVisual     = "visual"
+	StageLighthouse = "lighthouse"
 
-	maxRenderPages   = 50
-	maxCheckDetails  = 256 << 10
-	renderAttempts   = 3
-	renderStaleAfter = 15 * time.Minute
+	maxRenderPages     = 50
+	maxLighthousePages = 10
+	maxCheckDetails    = 256 << 10
+	renderAttempts     = 3
+	renderStaleAfter   = 15 * time.Minute
 )
 
-var renderStages = []string{StagePreview, StageAxe}
+// renderStages must pass for publication; every stage the runner leases is in leasedStages.
+var (
+	renderStages = []string{StagePreview, StageAxe}
+	leasedStages = []string{StagePreview, StageAxe, StageVisual, StageLighthouse}
+)
 
 // RenderPage — a page the runner renders for a check.
 type RenderPage struct {
@@ -150,22 +157,28 @@ func renderPagesFrom(ctx context.Context, q *store.Queries, project, env uuid.UU
 	return out, nil
 }
 
-// queueRenderChecks records stages 8–9 for the submitted content (STU-480…482) and
-// returns the state they impose: "checking", "failed" or "" (no asynchronous checks).
+// queueRenderChecks records stages 8–11 for the submitted content (STU-480…482, 570) and
+// returns the state they impose: "checking", "failed" or "" (no blocking asynchronous checks).
 func queueRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset, ev evaluation, versions []store.ChangesetWorkingVersionsRow) (string, []Check, error) {
 	if enabled, err := renderChecksEnabled(ctx, q, cs.ProjectID); err != nil || !enabled {
 		return "", nil, err
 	}
-	var out []Check
-	both := func(env, status string, blocking bool, details map[string]any) {
-		for _, stage := range renderStages {
-			out = append(out, Check{Stage: stage, Environment: env, Status: status, Blocking: blocking, Details: mustJSON(details)})
-		}
+	policy, err := LoadCheckPolicy(ctx, q, cs.ProjectID)
+	if err != nil {
+		return "", nil, err
 	}
+	artifacts := artifactsFrom(ctx) != nil
+	var out []Check
+	add := func(stage, env, status string, blocking bool, details map[string]any) {
+		out = append(out, Check{Stage: stage, Environment: env, Status: status, Blocking: blocking, Details: mustJSON(details)})
+	}
+	skip := func(stage, env, reason string) { add(stage, env, "skipped", false, map[string]any{"reason": reason}) }
 	state := ""
 	for _, name := range ev.targets {
 		if ev.risk == RiskLow {
-			both(name, "skipped", false, map[string]any{"reason": "RISK_LOW"})
+			for _, stage := range leasedStages {
+				skip(stage, name, "RISK_LOW")
+			}
 			continue
 		}
 		env, err := q.GetEnvironmentByName(ctx, store.GetEnvironmentByNameParams{ProjectID: cs.ProjectID, Name: name})
@@ -176,23 +189,56 @@ func queueRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset
 		if err != nil {
 			return "", nil, err
 		}
+		// Stages 10–11 render the same pages as stage 8; without them they have nothing to do.
+		later := ""
 		switch {
 		case env.AppUrl == nil:
-			state = "failed"
-			both(name, "failed", true, map[string]any{"reason": "CHECK_APP_URL_MISSING", "pages": pages})
+			state, later = "failed", "CHECK_APP_URL_MISSING"
+			for _, stage := range renderStages {
+				add(stage, name, "failed", true, map[string]any{"reason": "CHECK_APP_URL_MISSING", "pages": pages})
+			}
 		case len(pages) > maxRenderPages:
-			state = "failed"
-			out = append(out,
-				Check{Stage: StagePreview, Environment: name, Status: "failed", Blocking: true,
-					Details: mustJSON(map[string]any{"reason": "CHECK_PAGES_LIMIT", "pages": pages[:maxRenderPages], "total": len(pages), "truncated": true})},
-				Check{Stage: StageAxe, Environment: name, Status: "skipped", Blocking: true, Details: mustJSON(map[string]any{"reason": "PREVIEW_FAILED"})})
+			state, later = "failed", "PREVIEW_FAILED"
+			add(StagePreview, name, "failed", true, map[string]any{"reason": "CHECK_PAGES_LIMIT", "pages": pages[:maxRenderPages], "total": len(pages), "truncated": true})
+			add(StageAxe, name, "skipped", true, map[string]any{"reason": "PREVIEW_FAILED"})
 		case len(pages) == 0:
-			both(name, "skipped", false, map[string]any{"reason": "NO_PAGES", "pages": pages})
+			later = "NO_PAGES"
+			for _, stage := range renderStages {
+				add(stage, name, "skipped", false, map[string]any{"reason": "NO_PAGES", "pages": pages})
+			}
 		default:
 			if state == "" {
 				state = "checking"
 			}
-			both(name, "queued", true, map[string]any{"pages": pages})
+			for _, stage := range renderStages {
+				add(stage, name, "queued", true, map[string]any{"pages": pages})
+			}
+		}
+		// STU-570, 572: stage 10 needs storage for its screenshots and never blocks.
+		switch {
+		case later != "":
+			skip(StageVisual, name, later)
+		case !artifacts:
+			skip(StageVisual, name, "CHECK_ARTIFACTS_UNAVAILABLE")
+		default:
+			add(StageVisual, name, "queued", false, map[string]any{"pages": pages})
+		}
+		// STU-579, 581: stage 11 for high risk, at most 10 pages, blocking by the thresholds.
+		switch {
+		case ev.risk != RiskHigh:
+			skip(StageLighthouse, name, "RISK_LOW")
+		case later != "":
+			skip(StageLighthouse, name, later)
+		default:
+			blocking := policy.Lighthouse.Blocking()
+			if blocking && state == "" {
+				state = "checking"
+			}
+			details := map[string]any{"pages": pages, "thresholds": policy.Lighthouse}
+			if len(pages) > maxLighthousePages {
+				details["pages"], details["skipped"] = pages[:maxLighthousePages], pages[maxLighthousePages:]
+			}
+			add(StageLighthouse, name, "queued", blocking, details)
 		}
 	}
 	for _, c := range out {
@@ -204,8 +250,8 @@ func queueRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset
 	return state, out, nil
 }
 
-// advanceChecking moves a locked Change Set out of checking once its stage 8–9 checks
-// for the current content are decided (STU-483); it returns the resulting state.
+// advanceChecking moves a locked Change Set out of checking once its blocking checks
+// for the current content are decided (STU-483, 571); it returns the resulting state.
 func advanceChecking(ctx context.Context, q *store.Queries, cs store.Changeset) (string, error) {
 	if cs.State != "checking" {
 		return cs.State, nil
@@ -216,7 +262,7 @@ func advanceChecking(ctx context.Context, q *store.Queries, cs store.Changeset) 
 	}
 	state, pending := "", false
 	for _, c := range checks {
-		pending = pending || c.Status == "queued" || c.Status == "running"
+		pending = pending || c.Blocking && (c.Status == "queued" || c.Status == "running")
 		if c.Blocking && c.Status == "failed" {
 			state = "failed"
 		}
@@ -242,8 +288,9 @@ func advanceChecking(ctx context.Context, q *store.Queries, cs store.Changeset) 
 	return state, err
 }
 
-// RequireRenderChecks — STU-484: publishing into an environment needs its stage 8–9
-// checks of the current content to be decided without a blocking failure.
+// RequireRenderChecks — STU-484, 571: publishing into an environment needs its stage 8–9
+// checks and every blocking stage 10–11 check of the current content to be decided
+// without a blocking failure; non-blocking checks never hold publication.
 func RequireRenderChecks(ctx context.Context, q *store.Queries, cs store.Changeset, environment string) error {
 	if enabled, err := renderChecksEnabled(ctx, q, cs.ProjectID); err != nil || !enabled || cs.Kind == "schema" {
 		return err
@@ -255,17 +302,17 @@ func RequireRenderChecks(ctx context.Context, q *store.Queries, cs store.Changes
 	found := map[string]bool{}
 	pending := false
 	for _, c := range checks {
-		if c.Environment != environment || !slices.Contains(renderStages, c.Stage) {
+		if c.Environment != environment || !slices.Contains(leasedStages, c.Stage) {
 			continue
 		}
 		found[c.Stage] = true
 		if c.Blocking && c.Status == "failed" {
-			return checkProblem(http.StatusUnprocessableEntity, "CHECKS_FAILED", "Проверки этапов 8–9 не пройдены")
+			return checkProblem(http.StatusUnprocessableEntity, "CHECKS_FAILED", "Проверки этапов 8–11 не пройдены")
 		}
-		pending = pending || c.Status == "queued" || c.Status == "running"
+		pending = pending || c.Blocking && (c.Status == "queued" || c.Status == "running")
 	}
-	if pending || len(found) != len(renderStages) {
-		return checkProblem(http.StatusConflict, "CHECKS_PENDING", "Проверки этапов 8–9 не завершены или не выполнялись для окружения")
+	if pending || !found[StagePreview] || !found[StageAxe] {
+		return checkProblem(http.StatusConflict, "CHECKS_PENDING", "Проверки этапов 8–11 не завершены или не выполнялись для окружения")
 	}
 	return nil
 }
@@ -277,7 +324,7 @@ func requireRunner(actor auth.Actor) error {
 	return nil
 }
 
-// ClaimedCheck — a leased stage 8–9 check (STU-485); Check is nil for an empty queue.
+// ClaimedCheck — a leased stage 8–11 check (STU-485); Check is nil for an empty queue.
 type ClaimedCheck struct {
 	Check *LeasedCheck `json:"check"`
 }
@@ -293,6 +340,8 @@ type LeasedCheck struct {
 	AppURL         string       `json:"appUrl"`
 	Pages          []RenderPage `json:"pages"`
 	PreviewToken   string       `json:"previewToken"`
+	// Thresholds of stage 11 recorded at submission (STU-581).
+	Thresholds *LighthousePolicy `json:"thresholds,omitempty"`
 }
 
 func handleClaimCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, _ struct{}) (ClaimedCheck, error) {
@@ -312,7 +361,8 @@ func handleClaimCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, _ struct
 		return ClaimedCheck{}, err
 	}
 	var details struct {
-		Pages []RenderPage `json:"pages"`
+		Pages      []RenderPage      `json:"pages"`
+		Thresholds *LighthousePolicy `json:"thresholds"`
 	}
 	// The server wrote the queued details itself (queueRenderChecks).
 	_ = json.Unmarshal(row.Details, &details)
@@ -325,7 +375,7 @@ func handleClaimCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, _ struct
 		return ClaimedCheck{}, err
 	}
 	return ClaimedCheck{Check: &LeasedCheck{ID: row.ID, LeaseID: *row.LeaseID, LeaseExpiresAt: *row.LeaseExpiresAt, Stage: row.Stage, ChangesetID: row.ChangesetID,
-		Environment: row.Environment, AppURL: *env.AppUrl, Pages: details.Pages, PreviewToken: token}}, nil
+		Environment: row.Environment, AppURL: *env.AppUrl, Pages: details.Pages, PreviewToken: token, Thresholds: details.Thresholds}}, nil
 }
 
 type completePayload struct {
@@ -369,8 +419,13 @@ func handleCompleteCheck(ctx context.Context, tx pgx.Tx, actor auth.Actor, p com
 	if err != nil {
 		return CompletedCheck{}, err
 	}
-	if check.Status != "running" || check.LeaseID == nil || *check.LeaseID != p.LeaseID || check.LeaseExpiresAt == nil || !check.LeaseExpiresAt.After(time.Now()) {
+	if !leaseHeld(check, p.LeaseID) {
 		return CompletedCheck{}, checkProblem(http.StatusConflict, "CHECK_LEASE_LOST", "Аренда проверки потеряна")
+	}
+	if check.Stage == StageVisual || check.Stage == StageLighthouse {
+		if err := recordArtifacts(ctx, q, check, details); err != nil {
+			return CompletedCheck{}, err
+		}
 	}
 	if err := q.FinishRenderCheck(ctx, store.FinishRenderCheckParams{ID: check.ID, Status: p.Status, Details: p.Details}); err != nil {
 		return CompletedCheck{}, err

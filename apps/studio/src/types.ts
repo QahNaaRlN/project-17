@@ -461,6 +461,8 @@ export interface Review {
   requiredRoles?: string[];
   missingRequiredRoles?: string[];
   checks: {
+    /** Addresses stage 10–11 artifacts (STU-575). */
+    id?: string;
     stage: string;
     status: string;
     blocking: boolean;

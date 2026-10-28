@@ -173,6 +173,10 @@ export function createStudioHandler(
           `^/api/v1/publication-history(?:/${uuid}(?:/diff|/(?:rollback|promote)-preview(?:/diff)?)?)?$`,
         ).test(path);
         const queueRoute = new RegExp(`^/api/v1/work-queue(?:/${uuid})?$`).test(path);
+        // STU-575, 584: screenshots and Lighthouse reports of pipeline stages 10–11.
+        const artifactRoute = new RegExp(
+          `^/api/v1/changesets/${uuid}/checks/${uuid}/artifacts/[a-z0-9._-]{1,128}$`,
+        ).test(path);
         const capabilityRoute = new RegExp(
           `^/api/v1/capability-requests(?:/${uuid}(?:/context-preview|/context-pack)?)?$`,
         ).test(path);
@@ -185,6 +189,7 @@ export function createStudioHandler(
         // PR preview environments of this Studio's base environment (STU-327).
         const previewEnvironment = /^preview\/pr-[1-9][0-9]{0,18}$/;
         const allowedGet =
+          artifactRoute ||
           githubRoute ||
           queueRoute ||
           capabilityRoute ||
@@ -871,6 +876,24 @@ export function createStudioHandler(
             connection.abort();
             res.off("close", disconnect);
           }
+          return;
+        }
+        if (artifactRoute) {
+          // Only the two artifact types; an HTML report is a download in a sandbox.
+          const type = result.headers.get("content-type") ?? "";
+          if (type !== "image/png" && type !== "text/html") return error(502, "RESPONSE_INVALID");
+          const bytes = Buffer.from(await result.arrayBuffer());
+          if (bytes.length > 8 * 1024 * 1024) return error(502, "RESPONSE_INVALID");
+          res.setHeader("Cache-Control", "private, max-age=3600");
+          if (type === "text/html") {
+            res.setHeader("Content-Security-Policy", "sandbox");
+            res.setHeader(
+              "Content-Disposition",
+              `attachment; filename="${path.slice(path.lastIndexOf("/") + 1)}"`,
+            );
+          }
+          res.writeHead(200, { "Content-Type": type });
+          res.end(bytes);
           return;
         }
         res.writeHead(result.status, { "Content-Type": "application/json" });
