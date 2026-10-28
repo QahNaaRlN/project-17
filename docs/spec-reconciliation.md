@@ -1,6 +1,6 @@
 # Сверка спецификации с реализацией и ADR отступлений (критерий готовности 5)
 
-Статус: **одобрена пользователем 2026-10-29; решения §11 приняты; реализация — ветка `feature/spec-reconciliation`, см. [отчёт](spec-reconciliation-acceptance.md)**.
+Статус: **одобрена пользователем 2026-10-29; решения §11 приняты; реализована и слита в dev 2026-10-29 в [PR #107](https://github.com/QahNaaRlN/project-17/pull/107), merge `7c7d565`; см. [отчёт](spec-reconciliation-acceptance.md)**.
 Дата: 2026-10-29. Требования: STU-610…629 (STU-590…609 заняты
 [наблюдаемостью](observability.md)).
 Основа: `origin/dev` на `e52c104` (после [PR #105](https://github.com/QahNaaRlN/project-17/pull/105)).
