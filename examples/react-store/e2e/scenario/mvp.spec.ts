@@ -896,6 +896,7 @@ test("§2: stages 10–11 compare screenshots and score the changed page", async
     changesetId: cs.id,
     expectedSeq: 0,
     operations: [
+      // STRICT zones hold only application components (POLICY_TYPE_MODE_REQUIRED).
       {
         type: "node.insert",
         target: state.page,
@@ -904,17 +905,26 @@ test("§2: stages 10–11 compare screenshots and score the changed page", async
           index: 0,
           subtree: {
             id: "n_strict",
-            type: "Button",
+            type: "StoreHero",
             zone: { id: "z_strict", mode: "STRICT", requiredApprovalRole: "lead-designer" },
-            bindings: { label: "$local.t_strict" },
+            bindings: Object.fromEntries(
+              ["title", "subtitle", "description", "ctaLabel"].map((k) => [
+                k,
+                "$local.t_strict_" + k,
+              ]),
+            ),
           },
         },
       },
-      {
+      ...["title", "subtitle", "description", "ctaLabel"].map((k) => ({
         type: "localContent.set",
         target: state.page,
-        payload: { key: "t_strict", type: "text", value: { ru: "Строгая кнопка", en: "Strict" } },
-      },
+        payload: {
+          key: "t_strict_" + k,
+          type: "text",
+          value: { ru: "Строгий блок: " + k, en: "Strict block: " + k },
+        },
+      })),
     ],
   });
   const seq = (await read(stand, alice, "/changesets/" + cs.id)).seq;

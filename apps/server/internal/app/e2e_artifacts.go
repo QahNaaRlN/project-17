@@ -24,7 +24,9 @@ func init() {
 
 type dirArtifacts string
 
-func (d dirArtifacts) path(key string) string { return filepath.Join(string(d), filepath.FromSlash(key)) }
+func (d dirArtifacts) path(key string) string {
+	return filepath.Join(string(d), filepath.FromSlash(key))
+}
 
 func (d dirArtifacts) Put(_ context.Context, key string, r io.Reader, _ int64, _ string) error {
 	p := d.path(key)
