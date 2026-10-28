@@ -29,7 +29,10 @@ WHERE t.token_hash = $1
   AND a.disabled_at IS NULL;
 
 -- name: TouchToken :exec
-UPDATE api_tokens SET last_used_at = now() WHERE id = $1;
+-- At most once a minute per token: a write and a WAL flush on every request limited
+-- edits under load (docs/load-tests.md); a minute is precise enough for audit.
+UPDATE api_tokens SET last_used_at = now()
+WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute');
 
 -- name: ActorCapabilities :many
 SELECT DISTINCT unnest(r.capabilities)::text AS capability

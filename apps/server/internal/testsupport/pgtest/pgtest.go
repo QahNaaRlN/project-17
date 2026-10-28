@@ -34,6 +34,11 @@ var (
 
 // Main — TestMain для пакетов с интеграционными тестами.
 func Main(m *testing.M) {
+	// Every incremental publication check in the tests is compared with the full one
+	// (docs/incremental-validation.md, STU-568).
+	if os.Getenv("CMS_VALIDATION_CROSSCHECK") == "" {
+		_ = os.Setenv("CMS_VALIDATION_CROSSCHECK", "1")
+	}
 	code := m.Run()
 	mu.Lock()
 	for i := len(cleanup) - 1; i >= 0; i-- {

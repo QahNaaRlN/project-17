@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/qahnaarln/project-17/apps/server/internal/composition/ir"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
-	"reflect"
 )
 
 // PublishedConstraints evaluates singleton/unique against the hypothetical environment,
@@ -41,14 +40,7 @@ func (c *Context) PublishedConstraints(ctx context.Context, docs map[uuid.UUID]D
 				if f["unique"] != true || data[key] == nil {
 					continue
 				}
-				collision := reflect.DeepEqual(data[key], values[other][key])
-				if f["localized"] == true {
-					collision = false
-					for locale, v := range object(data[key]) {
-						collision = collision || (v != nil && reflect.DeepEqual(v, object(values[other][key])[locale]))
-					}
-				}
-				if collision {
+				if collides(f, data[key], values[other][key]) {
 					out[id.String()] = append(out[id.String()], problem("CONTENT_UNIQUE", ir.Pointer(key), "", nil).Diagnostics...)
 				}
 			}

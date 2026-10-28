@@ -106,6 +106,27 @@ func TestAuthenticateTouchesToken(t *testing.T) {
 	if err := pgxRow(t, f, "SELECT last_used_at FROM api_tokens WHERE id = $1", id).Scan(&used); err != nil || used == nil {
 		t.Errorf("last_used_at не обновлён: %v %v", used, err)
 	}
+	// At most once a minute: requests within the minute write nothing (load tests).
+	if _, err := f.pool.Exec(context.Background(), "UPDATE api_tokens SET last_used_at = now() - interval '30 seconds' WHERE id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	var recent, stale time.Time
+	_ = pgxRow(t, f, "SELECT last_used_at FROM api_tokens WHERE id = $1", id).Scan(&recent)
+	if _, err := auth.Authenticate(context.Background(), f.q, "Bearer "+secret); err != nil {
+		t.Fatal(err)
+	}
+	if _ = pgxRow(t, f, "SELECT last_used_at FROM api_tokens WHERE id = $1", id).Scan(&stale); !stale.Equal(recent) {
+		t.Errorf("обновлён раньше минуты: %v → %v", recent, stale)
+	}
+	if _, err := f.pool.Exec(context.Background(), "UPDATE api_tokens SET last_used_at = now() - interval '2 minutes' WHERE id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.Authenticate(context.Background(), f.q, "Bearer "+secret); err != nil {
+		t.Fatal(err)
+	}
+	if _ = pgxRow(t, f, "SELECT last_used_at FROM api_tokens WHERE id = $1", id).Scan(&stale); time.Since(stale) > time.Minute {
+		t.Errorf("не обновлён после минуты: %v", stale)
+	}
 }
 
 func TestAuthenticateRejects(t *testing.T) {

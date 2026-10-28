@@ -12,7 +12,7 @@ import (
 )
 
 const activePreviewBySource = `-- name: ActivePreviewBySource :many
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments
 WHERE project_id = $1 AND archived_at IS NULL AND source_config_id = $2 AND source_repository_id = $3 AND source_pull_number = $4
 ORDER BY name
 `
@@ -57,6 +57,7 @@ func (q *Queries) ActivePreviewBySource(ctx context.Context, arg ActivePreviewBy
 			&i.ArchivedAt,
 			&i.ArchivedName,
 			&i.ArchiveReason,
+			&i.ValidationBasis,
 		); err != nil {
 			return nil, err
 		}
@@ -72,7 +73,7 @@ const archiveEnvironment = `-- name: ArchiveEnvironment :one
 UPDATE environments SET archived_name = name, name = $3::text, archived_at = now(), archive_reason = $4::text,
   active_manifest_id = NULL, preview_key = (uuid_send(gen_random_uuid()) || uuid_send(gen_random_uuid()))
 WHERE project_id = $1 AND id = $2 AND kind = 'preview' AND archived_at IS NULL
-RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason
+RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis
 `
 
 type ArchiveEnvironmentParams struct {
@@ -109,6 +110,7 @@ func (q *Queries) ArchiveEnvironment(ctx context.Context, arg ArchiveEnvironment
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
@@ -116,7 +118,7 @@ func (q *Queries) ArchiveEnvironment(ctx context.Context, arg ArchiveEnvironment
 const createPreviewEnvironment = `-- name: CreatePreviewEnvironment :one
 INSERT INTO environments (id, project_id, name, kind, app_url, expires_at, source_base_environment_id, source_config_id, source_repository_id, source_pull_number)
 VALUES ($1, $2, $3, 'preview', $4, now() + interval '14 days', $5, $6, $7, $8)
-RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason
+RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis
 `
 
 type CreatePreviewEnvironmentParams struct {
@@ -161,6 +163,7 @@ func (q *Queries) CreatePreviewEnvironment(ctx context.Context, arg CreatePrevie
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
@@ -264,7 +267,7 @@ func (q *Queries) GetCapabilityPreviewArgs(ctx context.Context, arg GetCapabilit
 }
 
 const getEnvironmentByID = `-- name: GetEnvironmentByID :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND id = $2
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND id = $2
 `
 
 type GetEnvironmentByIDParams struct {
@@ -294,6 +297,7 @@ func (q *Queries) GetEnvironmentByID(ctx context.Context, arg GetEnvironmentByID
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
@@ -370,7 +374,7 @@ func (q *Queries) InsertPreviewRegistration(ctx context.Context, arg InsertPrevi
 }
 
 const latestArchivedEnvironment = `-- name: LatestArchivedEnvironment :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND archived_name = $2::text
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND archived_name = $2::text
 ORDER BY archived_at DESC, id DESC LIMIT 1
 `
 
@@ -401,12 +405,13 @@ func (q *Queries) LatestArchivedEnvironment(ctx context.Context, arg LatestArchi
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
 
 const lockEnvironmentByID = `-- name: LockEnvironmentByID :one
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments WHERE project_id = $1 AND id = $2 FOR UPDATE
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments WHERE project_id = $1 AND id = $2 FOR UPDATE
 `
 
 type LockEnvironmentByIDParams struct {
@@ -436,12 +441,13 @@ func (q *Queries) LockEnvironmentByID(ctx context.Context, arg LockEnvironmentBy
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }
 
 const previewEnvironmentsForSource = `-- name: PreviewEnvironmentsForSource :many
-SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason FROM environments
+SELECT id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis FROM environments
 WHERE project_id = $1 AND source_config_id = $2 AND source_pull_number = $3
   AND (archived_at IS NULL OR archived_at > now() - interval '14 days')
 ORDER BY archived_at NULLS FIRST, created_at DESC, id DESC LIMIT 10
@@ -481,6 +487,7 @@ func (q *Queries) PreviewEnvironmentsForSource(ctx context.Context, arg PreviewE
 			&i.ArchivedAt,
 			&i.ArchivedName,
 			&i.ArchiveReason,
+			&i.ValidationBasis,
 		); err != nil {
 			return nil, err
 		}
@@ -495,7 +502,7 @@ func (q *Queries) PreviewEnvironmentsForSource(ctx context.Context, arg PreviewE
 const recordPreviewRegistration = `-- name: RecordPreviewRegistration :one
 UPDATE environments SET registration_seq = registration_seq + 1, last_registered_at = now(), expires_at = now() + interval '14 days'
 WHERE project_id = $1 AND id = $2 AND archived_at IS NULL
-RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason
+RETURNING id, project_id, name, kind, active_manifest_id, app_url, expires_at, created_at, preview_key, source_base_environment_id, source_config_id, source_repository_id, source_pull_number, registration_seq, last_registered_at, archived_at, archived_name, archive_reason, validation_basis
 `
 
 type RecordPreviewRegistrationParams struct {
@@ -525,6 +532,7 @@ func (q *Queries) RecordPreviewRegistration(ctx context.Context, arg RecordPrevi
 		&i.ArchivedAt,
 		&i.ArchivedName,
 		&i.ArchiveReason,
+		&i.ValidationBasis,
 	)
 	return i, err
 }

@@ -226,7 +226,7 @@ func TestWorkQueueStorageFailuresAreNotEmptyResults(t *testing.T) {
 			case "summary":
 				workspaceExec(t, e, `ALTER TABLE object_versions RENAME TO versions_unavailable`)
 			case "objects":
-				workspaceExec(t, e, `ALTER TABLE object_versions DROP COLUMN body`)
+				workspaceExec(t, e, `ALTER TABLE object_versions DROP COLUMN body CASCADE`)
 			case "rights":
 				// Authentication succeeds, but the subsequent read-only rights refresh fails.
 				// The queue must never fall back to the initially authenticated capabilities.

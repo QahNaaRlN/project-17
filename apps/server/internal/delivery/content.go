@@ -110,11 +110,10 @@ func notFound(detail string) error {
 
 // GetPage возвращает опубликованную страницу по пути запроса.
 func GetPage(ctx context.Context, q *store.Queries, a Access, path string, locales ...string) (Page, error) {
-	routes, err := GetRoutes(ctx, q, a)
+	route, params, ok, err := resolveRoute(ctx, q, a, path)
 	if err != nil {
 		return Page{}, err
 	}
-	route, params, ok := Match(routes, path)
 	if !ok {
 		return Page{}, notFound(fmt.Sprintf("Страница по пути %q не опубликована в окружении %q", path, a.Environment))
 	}
@@ -135,6 +134,37 @@ func GetPage(ctx context.Context, q *store.Queries, a Access, path string, local
 		return Page{}, err
 	}
 	return p, nil
+}
+
+// resolveRoute finds the route of a request path. A published literal route is read by its
+// primary key, otherwise only parameterised routes are matched: the whole table of 10 000
+// routes per request limited Delivery on a cache miss (load tests). Drafts match all routes.
+func resolveRoute(ctx context.Context, q *store.Queries, a Access, path string) (publishing.Route, map[string]string, bool, error) {
+	if a.Draft {
+		routes, err := GetRoutes(ctx, q, a)
+		if err != nil {
+			return publishing.Route{}, nil, false, err
+		}
+		route, params, ok := Match(routes, path)
+		return route, params, ok, nil
+	}
+	literal, err := q.GetPublishedLiteralRoute(ctx, store.GetPublishedLiteralRouteParams{EnvironmentID: a.EnvironmentID, Path: path})
+	if err == nil {
+		return publishing.Route{Path: literal.Path, ObjectID: literal.ObjectID, VersionID: literal.VersionID}, map[string]string{}, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return publishing.Route{}, nil, false, err
+	}
+	rows, err := q.ListPublishedPatternRoutes(ctx, a.EnvironmentID)
+	if err != nil {
+		return publishing.Route{}, nil, false, err
+	}
+	routes := make([]publishing.Route, len(rows))
+	for i, r := range rows {
+		routes[i] = publishing.Route{Path: r.Path, ObjectID: r.ObjectID, VersionID: r.VersionID}
+	}
+	route, params, ok := Match(routes, path)
+	return route, params, ok, nil
 }
 
 // GetDocument возвращает опубликованный в окружении документ.

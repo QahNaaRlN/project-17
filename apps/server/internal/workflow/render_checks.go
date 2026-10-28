@@ -17,6 +17,7 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/internal/auth"
 	"github.com/qahnaarln/project-17/apps/server/internal/changes"
 	"github.com/qahnaarln/project-17/apps/server/internal/commandbus"
+	"github.com/qahnaarln/project-17/apps/server/internal/composition/validation"
 	"github.com/qahnaarln/project-17/apps/server/internal/platform/postgres"
 	"github.com/qahnaarln/project-17/apps/server/internal/previewtoken"
 	"github.com/qahnaarln/project-17/apps/server/internal/store"
@@ -54,12 +55,25 @@ func renderChecksEnabled(ctx context.Context, q *store.Queries, project uuid.UUI
 // renderPages — STU-482: pages of the Change Set with a route and published pages of the
 // environment that use a changed live component, transitively.
 func renderPages(ctx context.Context, q *store.Queries, project, env uuid.UUID, versions []store.ChangesetWorkingVersionsRow) ([]RenderPage, error) {
+	return validation.CrossChecked(func(all bool) ([]RenderPage, error) { return renderPagesFrom(ctx, q, project, env, versions, all) })
+}
+
+// renderPagesFrom reads only the published consumers of changed components through the
+// reference index (STU-567); all reads the whole environment for the cross-check.
+func renderPagesFrom(ctx context.Context, q *store.Queries, project, env uuid.UUID, versions []store.ChangesetWorkingVersionsRow, all bool) ([]RenderPage, error) {
 	type doc struct {
 		body map[string]any
 		path *string
 	}
+	var components []uuid.UUID
+	for _, v := range versions {
+		var body map[string]any
+		if !v.Deleted && json.Unmarshal(v.Body, &body) == nil && body["kind"] == "component" {
+			components = append(components, v.ObjectID)
+		}
+	}
 	docs := map[uuid.UUID]doc{}
-	rows, err := q.ValidationPublishedVersions(ctx, store.ValidationPublishedVersionsParams{ProjectID: project, ID: env})
+	rows, err := validation.PublishedDependents(ctx, q, project, env, nil, components, all)
 	if err != nil {
 		return nil, err
 	}

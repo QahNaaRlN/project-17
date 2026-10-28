@@ -1,0 +1,51 @@
+name: Load
+
+# STU-552, decision §11.2: load tests of NFR-001…007 (docs/load-tests.md), by hand and
+# weekly. Not a required check: a run takes ~45 min and shared runners are noisy.
+on:
+  schedule:
+    - cron: "41 2 * * 3" # среда, 02:41 UTC
+  workflow_dispatch:
+  # The `load` label on a PR runs the load test on its branch before the merge.
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: Load NFR-001…007
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'load')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - run: corepack enable
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cms/store-example exec playwright install --with-deps chromium
+      # PostgreSQL, Redis, nginx and k6 run in containers started by perf/run.mjs.
+      - name: Load run
+        run: pnpm load
+      - name: Load results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-results
+          path: |
+            perf/results/**
+            !perf/results/**/*.private.*
+          if-no-files-found: warn
+          retention-days: 30

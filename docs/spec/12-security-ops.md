@@ -198,4 +198,4 @@ Kubernetes, Kafka и микросервисы не вводятся до под�
 | Интеграционные (Go + PostgreSQL в testcontainers) | Публикация, откат, конкурентные CS, изоляция проектов |
 | Контрактные | OpenAPI ↔ обработчики; MCP-инструменты ↔ команды |
 | E2E (Playwright) | Сквозной сценарий MVP на `examples/react-store` ([14-mvp-plan.md](14-mvp-plan.md)) |
-| Нагрузочные (k6) | NFR-001…007 |
+| Нагрузочные (k6) | NFR-001…007 — [`perf/`](../../perf/README.md), workflow `Load`, [отчёт](../load-test-report.md) |

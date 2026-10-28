@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"runtime"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,9 +19,23 @@ import (
 	"github.com/qahnaarln/project-17/apps/server/db"
 )
 
-// Connect открывает пул соединений и проверяет доступность БД.
+// MinPoolConns — нижняя граница пула по умолчанию. Умолчание pgxpool, max(4, число
+// ядер), на машине с 4 vCPU даёт 4 соединения на все запросы и задачи River: каждый
+// запрос Delivery проверяет ключ в БД, и под нагрузкой запросы ждут соединения
+// десятки секунд (нагрузочные тесты, STU-554).
+const MinPoolConns = 16
+
+// Connect открывает пул соединений и проверяет доступность БД. Без pool_max_conns в
+// URL пул — max(MinPoolConns, 4 × число ядер).
 func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: %w", err)
+	}
+	if !strings.Contains(url, "pool_max_conns") {
+		cfg.MaxConns = int32(max(MinPoolConns, 4*runtime.NumCPU()))
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: %w", err)
 	}

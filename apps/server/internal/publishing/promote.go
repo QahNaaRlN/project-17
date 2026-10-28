@@ -139,6 +139,9 @@ func handlePromote(ctx context.Context, tx pgx.Tx, actor auth.Actor, p promotePa
 	if err := validation.RequireValid(problems); err != nil {
 		return Publication{}, err
 	}
+	if err := check.RecordBasis(ctx); err != nil {
+		return Publication{}, err
+	}
 
 	if src.ChangesetID != nil {
 		cs, err := q.GetChangeset(ctx, store.GetChangesetParams{ID: *src.ChangesetID, ProjectID: actor.ProjectID})

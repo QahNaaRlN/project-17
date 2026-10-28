@@ -35,6 +35,21 @@ SELECT e.id, e.name, e.preview_key, e.registration_seq, e.source_pull_number, CO
 FROM environments e JOIN projects p ON p.id = e.project_id
 WHERE p.slug = $1 AND e.name = $2;
 
+-- name: GetPublishedLiteralRoute :one
+-- A literal route equal to the request path is the strongest match (Match): primary key.
+SELECT r.path, r.object_id, pp.version_id
+FROM routes r
+JOIN published_pointers pp ON pp.environment_id = r.environment_id AND pp.object_id = r.object_id
+WHERE r.environment_id = $1 AND r.path = $2 AND strpos(r.path, ':') = 0;
+
+-- name: ListPublishedPatternRoutes :many
+-- Parameterised routes of the environment (index routes_patterns).
+SELECT r.path, r.object_id, pp.version_id
+FROM routes r
+JOIN published_pointers pp ON pp.environment_id = r.environment_id AND pp.object_id = r.object_id
+WHERE r.environment_id = $1 AND strpos(r.path, ':') > 0
+ORDER BY r.path;
+
 -- name: ListDraftRoutes :many
 -- Маршруты чернового режима (API-040): объекты Change Set — из рабочих версий, остальные — из head.
 WITH ws AS (

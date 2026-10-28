@@ -23,7 +23,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "perf/**/*.mjs"],
     languageOptions: { globals: { process: "readonly", console: "readonly" } },
+  },
+  {
+    // k6 scenarios run in the k6 runtime (docs/load-tests.md).
+    files: ["perf/k6/**/*.js"],
+    languageOptions: { globals: { __ENV: "readonly", open: "readonly" } },
   },
 );

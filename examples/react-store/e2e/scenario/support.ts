@@ -25,8 +25,11 @@ export async function signIn(
   const name = { alice: "Alice", bob: "Bob", erin: "Erin" }[user];
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
-    // STU-458: every person's session is recorded for the evidence artifact.
-    ...(process.env.E2E_DIR ? { recordVideo: { dir: join(process.env.E2E_DIR, "video") } } : {}),
+    // STU-458: every person's session is recorded for the evidence artifact. The load bench
+    // turns recording off (E2E_VIDEO=off): encoding video takes CPU from the measured stand.
+    ...(process.env.E2E_DIR && process.env.E2E_VIDEO !== "off"
+      ? { recordVideo: { dir: join(process.env.E2E_DIR, "video") } }
+      : {}),
   });
   const page = await context.newPage();
   page.on("pageerror", (error) => console.error(name, "page error:", error.message));

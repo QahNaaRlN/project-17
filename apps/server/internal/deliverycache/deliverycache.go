@@ -13,7 +13,7 @@ package deliverycache
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/binary"
 	"net/url"
 	"time"
 
@@ -27,16 +27,86 @@ const (
 	TTL = time.Hour
 	// tagTTL больше TTL записи: тег не истекает раньше записей, которые на него ссылаются.
 	tagTTL = 2 * TTL
-	// MaxEntry — больший ответ отдаётся без кэша (STU-529).
-	MaxEntry = 1 << 20
+	// MaxEntry — больший ответ отдаётся без кэша (STU-529). 4 МиБ вмещают таблицу маршрутов
+	// профиля 01 §5 (10 000 страниц, ~1,1 МБ): с пределом 1 МиБ /routes всегда шёл в БД
+	// (нагрузочные тесты).
+	MaxEntry = 4 << 20
 )
 
 // Entry — сохранённый ответ.
 type Entry struct {
-	Body          []byte            `json:"b"`
-	ETag          string            `json:"e"`
-	SurrogateKeys []string          `json:"k"`
-	Tags          map[string]string `json:"t"`
+	Body          []byte
+	ETag          string
+	SurrogateKeys []string
+	Tags          map[string]string
+}
+
+// format — первый байт записи. Запись двоичная: JSON с телом в base64 занимал ~40 % CPU
+// origin на попаданиях под нагрузкой (docs/load-test-report.md). Записи другого формата
+// (в том числе прежние JSON) читаются как промах.
+const format = 1
+
+// encode: format, ETag, число ключей, пары «ключ, версия тега» — строки с длиной uvarint,
+// затем тело до конца записи.
+func encode(e Entry) []byte {
+	n := 1 + binary.MaxVarintLen64*(2+2*len(e.SurrogateKeys)) + len(e.ETag) + len(e.Body)
+	for _, k := range e.SurrogateKeys {
+		n += len(k) + len(e.Tags[k])
+	}
+	b := append(make([]byte, 0, n), format)
+	str := func(s string) { b = append(binary.AppendUvarint(b, uint64(len(s))), s...) }
+	str(e.ETag)
+	b = binary.AppendUvarint(b, uint64(len(e.SurrogateKeys)))
+	for _, k := range e.SurrogateKeys {
+		str(k)
+		str(e.Tags[k])
+	}
+	return append(b, e.Body...)
+}
+
+// decode — обратное encode; false — запись другого формата или повреждена.
+func decode(raw []byte) (Entry, bool) {
+	if len(raw) == 0 || raw[0] != format {
+		return Entry{}, false
+	}
+	raw = raw[1:]
+	ok := true
+	num := func() uint64 {
+		v, n := binary.Uvarint(raw)
+		if n <= 0 || v > uint64(len(raw)) {
+			ok = false
+			return 0
+		}
+		raw = raw[n:]
+		return v
+	}
+	str := func() string {
+		n := num()
+		if !ok || n > uint64(len(raw)) {
+			ok = false
+			return ""
+		}
+		s := string(raw[:n])
+		raw = raw[n:]
+		return s
+	}
+	e := Entry{ETag: str()}
+	count := num()
+	if !ok {
+		return Entry{}, false
+	}
+	e.SurrogateKeys = make([]string, 0, count)
+	e.Tags = make(map[string]string, count)
+	for range count {
+		k, v := str(), str()
+		if !ok {
+			return Entry{}, false
+		}
+		e.SurrogateKeys = append(e.SurrogateKeys, k)
+		e.Tags[k] = v
+	}
+	e.Body = raw
+	return e, true
 }
 
 // Cache — кэш поверх Redis; nil — кэша нет.
@@ -63,8 +133,8 @@ func (c *Cache) Get(ctx context.Context, key string) *Entry {
 	if !c.redis.Observe(ctx, err) || err != nil {
 		return nil
 	}
-	var e Entry
-	if json.Unmarshal(raw, &e) != nil {
+	e, ok := decode(raw)
+	if !ok {
 		return nil
 	}
 	current, ok := c.versions(ctx, e.SurrogateKeys)
@@ -128,8 +198,7 @@ func (c *Cache) Put(ctx context.Context, key string, e Entry, pre map[string]str
 			e.Tags[k] = later[k]
 		}
 	}
-	raw, _ := json.Marshal(e)
-	return c.redis.Observe(ctx, c.redis.R.Set(ctx, key, raw, TTL).Err())
+	return c.redis.Observe(ctx, c.redis.R.Set(ctx, key, encode(e), TTL).Err())
 }
 
 // Invalidate меняет версии тегов: записи, зависящие от них, перестают отдаваться.

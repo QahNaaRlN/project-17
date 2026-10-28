@@ -179,6 +179,9 @@ func handlePublish(ctx context.Context, tx pgx.Tx, actor auth.Actor, p publishPa
 	if err := validation.RequireValid(problems); err != nil {
 		return Publication{}, err
 	}
+	if err := check.RecordBasis(ctx); err != nil {
+		return Publication{}, err
+	}
 
 	if err := check.RecordDiagnostics(ctx, cs, problems); err != nil {
 		return Publication{}, err
@@ -469,11 +472,17 @@ func handleRollback(ctx context.Context, tx pgx.Tx, actor auth.Actor, p rollback
 			return Publication{}, err
 		}
 		c.PublishedOnly = p.ExpectedRollbackSnapshot != nil
+		for _, it := range items {
+			c.Changed = append(c.Changed, it.ObjectID)
+		}
 		problems, err := c.CheckPublication(ctx, nil)
 		if err != nil {
 			return Publication{}, err
 		}
 		if err := validation.RequireValid(problems); err != nil {
+			return Publication{}, err
+		}
+		if err := c.RecordBasis(ctx); err != nil {
 			return Publication{}, err
 		}
 		if src.ManifestChanged {
