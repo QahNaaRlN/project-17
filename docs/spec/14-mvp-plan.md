@@ -52,7 +52,7 @@ MVP и сквозная автоматическая приёмка ниже о�
 | 4 | Три зелёных прогона `Load` подряд на `dev` | Выполнено 2026-10-28 на `ae8cffa`: [1](https://github.com/QahNaaRlN/project-17/actions/runs/40662235558), [2](https://github.com/QahNaaRlN/project-17/actions/runs/40668518655), [3](https://github.com/QahNaaRlN/project-17/actions/runs/40673615041) ([отчёт](../load-test-report.md)); критерий готовности 2 выполнен. Еженедельный прогон по средам остаётся |
 | 5 | [Этапы pipeline 10–11: visual regression и Lighthouse](../pipeline-visual-lighthouse.md), STU-570…589 | Выполнено ([PR #101](https://github.com/QahNaaRlN/project-17/pull/101), слит в dev 2026-10-28, merge `6f370c2`): сервер, исполнитель, Studio, сценарий §2; [отчёт](../pipeline-visual-lighthouse-acceptance.md), CI итогового SHA пройден (Go coverage 95%) |
 | 6 | [Наблюдаемость OPS-020…023](../observability.md), STU-590…609 | Выполнено ([PR #104](https://github.com/QahNaaRlN/project-17/pull/104), слит в dev 2026-10-28, merge `331f534`): сервер, SDK, Studio BFF, исполнитель, профиль Compose; [отчёт](../observability-acceptance.md), CI итогового SHA (Go coverage 95%) и Load на ветке пройдены |
-| 7 | [Сверка спецификации с реализацией и ADR отступлений](../spec-reconciliation.md), STU-610…629 | Спецификация на одобрении; критерий готовности 5 |
+| 7 | [Сверка спецификации с реализацией и ADR отступлений](../spec-reconciliation.md), STU-610…629 | Спецификация одобрена 2026-10-29, решения §11 приняты; критерий готовности 5 |
 | 8 | Набор для эксперимента и пороги Q-08 на утверждение | Нет спецификации; эксперимент проводится после M6 |
 
 Порядок — выбранная последовательность планирования; утверждённые
